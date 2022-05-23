@@ -1,0 +1,49 @@
+name: main
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/cache@v2
+        name: Cache ~/.cabal
+        with:
+          path: ~/.cabal
+          key: "cabal"
+
+      - name: Install linters
+        run: |
+          pushd ~
+          cabal update
+          cabal install --overwrite-policy=always --installdir=/usr/local/bin \
+            fourmolu stylish-haskell
+          popd
+
+      - name: Run stylish-haskell
+        run: |
+          sh ./scripts/check-stylish.sh
+
+      - name: Run fourmolu
+        run: |
+          find app src -name *.hs -exec fourmolu --mode 'check' {} +
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/cache@v2
+        name: Cache ~/.stack
+        with:
+          path: ~/.stack
+          key: "stack"
+
+      - run: stack build
