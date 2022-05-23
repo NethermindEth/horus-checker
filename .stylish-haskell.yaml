@@ -1,0 +1,23 @@
+steps:
+  - simple_align:
+      cases: false
+      top_level_patterns: false
+      records: false
+
+  - imports:
+      align: none
+      list_align: with_module_name
+      pad_module_names: false
+      long_list_align: inline
+      empty_list_align: inherit
+      list_padding: 4
+      separate_lists: true
+      space_surround: false
+
+  - language_pragmas:
+      style: vertical
+      remove_redundant: true
+
+  - trailing_whitespace: {}
+
+columns: 100
