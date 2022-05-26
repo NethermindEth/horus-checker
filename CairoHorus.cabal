@@ -6,6 +6,8 @@ category:           Language
 common deps
     build-depends:           aeson
                            , base
+                           , containers
+
     default-language:        Haskell2010
     ghc-options:             -Weverything -Werror
                              -Wno-safe -Wno-unsafe -Wno-implicit-prelude
@@ -31,7 +33,13 @@ library
     exposed-modules:         Horus.ContractDefinition
                            , Horus.Program
                            , Horus.Instruction
+                           , Horus.Starkware.CairoType
+                           , Horus.Starkware.IdentifierDefinition
+                           , Horus.Starkware.ScopedName
+                           , Horus.Starkware.Lexer
+                           , Horus.Starkware.Parser
     build-depends:           mtl
+                           , array
                            , simple-smt
                            , text
                            , containers
