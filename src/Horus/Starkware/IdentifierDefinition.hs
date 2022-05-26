@@ -2,10 +2,13 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Horus.Starkware.IdentifierDefinition where
+module Horus.Starkware.IdentifierDefinition (
+  IdentifierDefinition (..),
+  IdentifierDefinitionGADT (..),
+) where
 
 import Data.Aeson
-import Data.Aeson.Types (Parser, parseJSON)
+import Data.Aeson.Types (Parser)
 import Data.Map (Map)
 import Data.Text (Text)
 import Horus.Starkware.CairoType
@@ -23,65 +26,86 @@ data Function
 data Namespace
 data Scope
 
-data IdentifierDefinition a where
-  AliasDefinition :: ScopedName -> IdentifierDefinition Alias
-  ConstDefinition :: Integer -> IdentifierDefinition Const
-  MemberDefinition :: CairoType -> Int -> IdentifierDefinition Member
+data IdentifierDefinitionGADT a where
+  AliasDefinition :: ScopedName -> IdentifierDefinitionGADT Alias
+  ConstDefinition :: Integer -> IdentifierDefinitionGADT Const
+  MemberDefinition :: CairoType -> Int -> IdentifierDefinitionGADT Member
   StructDefinition ::
     ScopedName ->
-    Map String (IdentifierDefinition Member) ->
+    Map String (IdentifierDefinitionGADT Member) ->
     Int ->
-    IdentifierDefinition Struct
-  TypeDefinition :: CairoType -> IdentifierDefinition Typ
-  LabelDefinition :: Int -> IdentifierDefinition Label
-  FunctionDefinition :: Int -> [String] -> IdentifierDefinition Function
-  NamespaceDefinition :: IdentifierDefinition Namespace
-  ScopeDefinition :: IdentifierDefinition Scope
+    IdentifierDefinitionGADT Struct
+  TypeDefinition :: CairoType -> IdentifierDefinitionGADT Typ
+  LabelDefinition :: Int -> IdentifierDefinitionGADT Label
+  FunctionDefinition :: Int -> [String] -> IdentifierDefinitionGADT Function
+  NamespaceDefinition :: IdentifierDefinitionGADT Namespace
+  ScopeDefinition :: IdentifierDefinitionGADT Scope
 
-data IDef = forall a. IDef (IdentifierDefinition a)
+data IdentifierDefinition = forall a. IdentifierDefinition (IdentifierDefinitionGADT a)
 
-instance Show (IdentifierDefinition Member) where
+instance Show (IdentifierDefinitionGADT Member) where
   show (MemberDefinition typ offset) =
-    show typ
-      <> " "
+    "member(type="
+      <> show typ
+      <> "; offset="
       <> show offset
+      <> ")"
 
-instance Show IDef where
-  show (IDef (MemberDefinition typ offset)) = show (MemberDefinition typ offset)
-  show (IDef (ConstDefinition val)) = "const=" <> show val
-  show (IDef (StructDefinition name members size)) =
-    "struct="
+instance Show IdentifierDefinition where
+  show (IdentifierDefinition (AliasDefinition dest)) =
+    "alias(destination=" <> show dest <> ")"
+  show (IdentifierDefinition (MemberDefinition typ offset)) = show (MemberDefinition typ offset)
+  show (IdentifierDefinition (ConstDefinition val)) = "const=" <> show val
+  show (IdentifierDefinition (StructDefinition name members size)) =
+    "struct(name="
       <> show name
-      <> "size:"
+      <> "; size="
       <> show size
-      <> "members:"
+      <> "; members="
       <> show members
-  show _ = "test"
+      <> ")"
+  show (IdentifierDefinition (TypeDefinition typ)) =
+    "type(type="
+      <> show typ
+      <> ")"
+  show (IdentifierDefinition (LabelDefinition pc)) =
+    "label(pc=" <> show pc <> ")"
+  show (IdentifierDefinition (FunctionDefinition pc decorators)) =
+    "function(pc=" <> show pc <> "; decorators=" <> show decorators <> ")"
+  show (IdentifierDefinition NamespaceDefinition) = "namespace"
+  show (IdentifierDefinition ScopeDefinition) = "scope"
 
-instance FromJSON (IdentifierDefinition Member) where
+instance FromJSON (IdentifierDefinitionGADT Member) where
   parseJSON = withObject "IdentifierDefinition" $ \v ->
     MemberDefinition
       <$> (parseCairo . alexScanTokens <$> v .: "cairo_type")
       <*> v .: "offset"
 
-instance FromJSON IDef where
+instance FromJSON IdentifierDefinition where
   parseJSON = withObject "IdentifierDefinition" $ \v ->
     do
       typ <- v .: "type" :: Parser Text
       case typ of
-        "alias" -> IDef . AliasDefinition . fromString <$> v .: "destination"
-        "const" -> IDef . ConstDefinition <$> v .: "value"
-        "member" -> IDef <$> (MemberDefinition <$> (parseCairo . alexScanTokens <$> v .: "cairo_type") <*> v .: "offset")
+        "alias" -> IdentifierDefinition . AliasDefinition . fromString <$> v .: "destination"
+        "const" -> IdentifierDefinition . ConstDefinition <$> v .: "value"
+        "member" ->
+          IdentifierDefinition
+            <$> ( MemberDefinition
+                    <$> ( parseCairo . alexScanTokens
+                            <$> v .: "cairo_type"
+                        )
+                    <*> v .: "offset"
+                )
         "struct" ->
-          IDef
+          IdentifierDefinition
             <$> ( StructDefinition
                     <$> (fromString <$> v .: "full_name")
                     <*> (v .: "members")
                     <*> (v .: "size")
                 )
-        "label" -> IDef . LabelDefinition <$> v .: "pc"
-        "function" -> IDef <$> (FunctionDefinition <$> v .: "pc" <*> v .: "decorators")
-        "namespace" -> pure $ IDef NamespaceDefinition
+        "label" -> IdentifierDefinition . LabelDefinition <$> v .: "pc"
+        "function" -> IdentifierDefinition <$> (FunctionDefinition <$> v .: "pc" <*> v .: "decorators")
+        "namespace" -> pure $ IdentifierDefinition NamespaceDefinition
         "reference" -> fail "not implemented"
-        "scope" -> pure $ IDef NamespaceDefinition
+        "scope" -> pure $ IdentifierDefinition NamespaceDefinition
         _ -> fail "wrong type"

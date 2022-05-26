@@ -8,14 +8,14 @@ import Data.Aeson.Types (FromJSON (..), Parser)
 import Data.Map (Map)
 import Numeric (readHex)
 import Horus.Starkware.ScopedName (ScopedName)
-import Horus.Starkware.IdentifierDefinition (IDef)
+import Horus.Starkware.IdentifierDefinition (IdentifierDefinition)
 
 data Program = Program
   { p_attributes :: [String]
   , p_builtins :: [String]
   , p_code :: [Integer]
   , p_hints :: Map String String
-  , p_identifiers :: Map ScopedName IDef
+  , p_identifiers :: Map ScopedName IdentifierDefinition
   , p_mainScope :: String
   , p_prime :: Integer
   }

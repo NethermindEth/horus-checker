@@ -1,9 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Horus.Starkware.ScopedName where
+module Horus.Starkware.ScopedName (ScopedName (..), fromString, (.+)) where
 
 import Data.Aeson
-import Data.Aeson.Types (parseJSON)
 import Data.Hashable
 import Data.List (intercalate)
 import Data.List.Split

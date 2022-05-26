@@ -1,4 +1,4 @@
-module Horus.Starkware.CairoType where
+module Horus.Starkware.CairoType (CairoType (..)) where
 
 import Horus.Starkware.ScopedName
 
