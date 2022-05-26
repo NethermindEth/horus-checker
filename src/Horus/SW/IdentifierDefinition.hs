@@ -29,7 +29,6 @@ data IdentifierDefinitionKind
   | Namespace
   | Scope
 
-
 data IdentifierDefinitionGADT a where
   AliasDefinition :: ScopedName -> IdentifierDefinitionGADT Alias
   ConstDefinition :: Integer -> IdentifierDefinitionGADT Const
