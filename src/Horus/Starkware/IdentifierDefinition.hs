@@ -3,8 +3,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Horus.Starkware.IdentifierDefinition (
-  IdentifierDefinition (..),
-  IdentifierDefinitionGADT (..),
+  IdentifierDefinition (..)
+  , IdentifierDefinitionGADT (..)
 ) where
 
 import Data.Aeson

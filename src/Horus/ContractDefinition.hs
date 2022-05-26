@@ -14,7 +14,8 @@ data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_checks :: Checks
   }
-  -- deriving (Show)
+
+-- deriving (Show)
 
 data Checks = Checks
   { c_preConds :: Map Text SExpr
