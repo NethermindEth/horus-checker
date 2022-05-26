@@ -7,16 +7,18 @@ import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
 import Data.Map (Map)
 import Numeric (readHex)
+import Horus.Starkware.ScopedName (ScopedName)
+import Horus.Starkware.IdentifierDefinition (IDef)
 
 data Program = Program
   { p_attributes :: [String]
   , p_builtins :: [String]
   , p_code :: [Integer]
   , p_hints :: Map String String
+  , p_identifiers :: Map ScopedName IDef
   , p_mainScope :: String
   , p_prime :: Integer
   }
-  deriving (Show)
 
 instance FromJSON Program where
   parseJSON = withObject "Program" $ \v ->
@@ -25,6 +27,7 @@ instance FromJSON Program where
       <*> v .: "builtins"
       <*> (v .: "data" >>= traverse parseHexInteger)
       <*> v .: "hints"
+      <*> v .: "identifiers"
       <*> v .: "main_scope"
       <*> (v .: "prime" >>= parseHexInteger)
 
