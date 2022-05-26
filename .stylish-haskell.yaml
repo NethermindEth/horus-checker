@@ -15,9 +15,11 @@ steps:
       space_surround: false
 
   - language_pragmas:
+      align: false
       style: vertical
       remove_redundant: true
 
   - trailing_whitespace: {}
 
 columns: 100
+exit_code: error_on_format
