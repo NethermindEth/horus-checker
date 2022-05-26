@@ -1,10 +1,12 @@
 {
 {-# OPTIONS_GHC -w #-}
-module Horus.Starkware.Parser where
+module Horus.SW.Parser where
 
-import Horus.Starkware.Lexer
-import Horus.Starkware.ScopedName
-import Horus.Starkware.CairoType
+import Data.Text (pack)
+
+import Horus.SW.Lexer
+import Horus.SW.ScopedName
+import Horus.SW.CairoType
 
 }
 
@@ -25,12 +27,12 @@ import Horus.Starkware.CairoType
     identifier   {TokenIdentifier $$}
 %%
 
-Identifier : identifier                 { [$1] }
-           | Identifier '.' identifier  { $1 ++ [$3] }
+Identifier : identifier                 { ScopedName [pack $1] }
+           | Identifier '.' identifier  { $1 <> (ScopedName [pack $3]) }
 
 NamedType : NonIdentifierType       { (Nothing, Just $1) }
-          | Identifier              { (Just (ScopedName $1), Nothing) }
-          | Identifier ':' Type     { (Just (ScopedName $1), Just $3) }
+          | Identifier              { (Just $1, Nothing) }
+          | Identifier ':' Type     { (Just $1, Just $3) }
 
 CommaTypes : NamedType                {[$1]}
            | CommaTypes ',' NamedType { $1 ++ [$3]}
@@ -42,7 +44,7 @@ NonIdentifierType   : felt               { TypeFelt }
                     | '(' CommaTypes ')' { TypeTuple $2 }
 
 Type : NonIdentifierType    { $1 }
-     | Identifier           { TypeStruct (ScopedName $1) }
+     | Identifier           { TypeStruct $1 }
 
 {
 

@@ -1,6 +1,6 @@
-module Horus.Starkware.CairoType (CairoType (..)) where
+module Horus.SW.CairoType (CairoType (..)) where
 
-import Horus.Starkware.ScopedName
+import Horus.SW.ScopedName
 
 data CairoType
   = TypeFelt

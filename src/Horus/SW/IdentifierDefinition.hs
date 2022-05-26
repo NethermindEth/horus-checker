@@ -1,30 +1,34 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-module Horus.Starkware.IdentifierDefinition (
-  IdentifierDefinition (..)
+module Horus.SW.IdentifierDefinition
+  ( IdentifierDefinition (..)
   , IdentifierDefinitionGADT (..)
-) where
+  )
+where
 
 import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.Map (Map)
 import Data.Text (Text)
-import Horus.Starkware.CairoType
-import Horus.Starkware.Lexer
-import Horus.Starkware.Parser
-import Horus.Starkware.ScopedName (ScopedName, fromString)
+import Horus.SW.CairoType
+import Horus.SW.Lexer
+import Horus.SW.Parser
+import Horus.SW.ScopedName (ScopedName, fromText)
 
-data Alias
-data Const
-data Member
-data Struct
-data Typ
-data Label
-data Function
-data Namespace
-data Scope
+data IdentifierDefinitionKind
+  = Alias
+  | Const
+  | Member
+  | Struct
+  | Typ
+  | Label
+  | Function
+  | Namespace
+  | Scope
+
 
 data IdentifierDefinitionGADT a where
   AliasDefinition :: ScopedName -> IdentifierDefinitionGADT Alias
@@ -32,12 +36,12 @@ data IdentifierDefinitionGADT a where
   MemberDefinition :: CairoType -> Int -> IdentifierDefinitionGADT Member
   StructDefinition ::
     ScopedName ->
-    Map String (IdentifierDefinitionGADT Member) ->
+    Map Text (IdentifierDefinitionGADT Member) ->
     Int ->
     IdentifierDefinitionGADT Struct
   TypeDefinition :: CairoType -> IdentifierDefinitionGADT Typ
   LabelDefinition :: Int -> IdentifierDefinitionGADT Label
-  FunctionDefinition :: Int -> [String] -> IdentifierDefinitionGADT Function
+  FunctionDefinition :: Int -> [Text] -> IdentifierDefinitionGADT Function
   NamespaceDefinition :: IdentifierDefinitionGADT Namespace
   ScopeDefinition :: IdentifierDefinitionGADT Scope
 
@@ -86,7 +90,7 @@ instance FromJSON IdentifierDefinition where
     do
       typ <- v .: "type" :: Parser Text
       case typ of
-        "alias" -> IdentifierDefinition . AliasDefinition . fromString <$> v .: "destination"
+        "alias" -> IdentifierDefinition . AliasDefinition . fromText <$> v .: "destination"
         "const" -> IdentifierDefinition . ConstDefinition <$> v .: "value"
         "member" ->
           IdentifierDefinition
@@ -99,7 +103,7 @@ instance FromJSON IdentifierDefinition where
         "struct" ->
           IdentifierDefinition
             <$> ( StructDefinition
-                    <$> (fromString <$> v .: "full_name")
+                    <$> (fromText <$> v .: "full_name")
                     <*> (v .: "members")
                     <*> (v .: "size")
                 )

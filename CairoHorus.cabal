@@ -18,6 +18,7 @@ common deps
                              -Wno-missing-safe-haskell-mode
                              -Wno-prepositive-qualified-module
                              -Wno-unused-packages
+                             -Wno-unticked-promoted-constructors
 
 library typed-simple-smt
     import:                  deps
@@ -33,11 +34,11 @@ library
     exposed-modules:         Horus.ContractDefinition
                            , Horus.Program
                            , Horus.Instruction
-                           , Horus.Starkware.CairoType
-                           , Horus.Starkware.IdentifierDefinition
-                           , Horus.Starkware.ScopedName
-                           , Horus.Starkware.Lexer
-                           , Horus.Starkware.Parser
+                           , Horus.SW.CairoType
+                           , Horus.SW.IdentifierDefinition
+                           , Horus.SW.ScopedName
+                           , Horus.SW.Lexer
+                           , Horus.SW.Parser
     build-depends:           mtl
                            , array
                            , simple-smt

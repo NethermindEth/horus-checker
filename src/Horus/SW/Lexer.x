@@ -1,6 +1,6 @@
 {
 {-# OPTIONS_GHC -w #-}
-module Horus.Starkware.Lexer where
+module Horus.SW.Lexer where
 }
 
 %wrapper "basic"

@@ -6,8 +6,8 @@ module Horus.Program (Program (..)) where
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
 import Data.Map (Map)
-import Horus.Starkware.IdentifierDefinition (IdentifierDefinition)
-import Horus.Starkware.ScopedName (ScopedName)
+import Horus.SW.IdentifierDefinition (IdentifierDefinition)
+import Horus.SW.ScopedName (ScopedName)
 import Numeric (readHex)
 
 data Program = Program
@@ -19,6 +19,7 @@ data Program = Program
   , p_mainScope :: String
   , p_prime :: Integer
   }
+  deriving (Show)
 
 instance FromJSON Program where
   parseJSON = withObject "Program" $ \v ->
