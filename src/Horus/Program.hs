@@ -6,9 +6,9 @@ module Horus.Program (Program (..)) where
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
 import Data.Map (Map)
-import Numeric (readHex)
-import Horus.Starkware.ScopedName (ScopedName)
 import Horus.Starkware.IdentifierDefinition (IdentifierDefinition)
+import Horus.Starkware.ScopedName (ScopedName)
+import Numeric (readHex)
 
 data Program = Program
   { p_attributes :: [String]

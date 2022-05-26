@@ -28,8 +28,8 @@ Identifier : identifier                 { [$1] }
            | Identifier '.' identifier  { $1 ++ [$3] }
 
 NamedType : NonIdentifierType       { (Nothing, Just $1) }
-          | Identifier              { (Just $1, Nothing) }
-          | Identifier ':' Type     { (Just $1, Just $3) }
+          | Identifier              { (Just (ScopedName $1), Nothing) }
+          | Identifier ':' Type     { (Just (ScopedName $1), Just $3) }
 
 CommaTypes : NamedType                {[$1]}
            | CommaTypes ',' NamedType { $1 ++ [$3]}
