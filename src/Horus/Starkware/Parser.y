@@ -1,4 +1,5 @@
 {
+{-# OPTIONS_GHC -w #-}
 module Horus.Starkware.Parser where
 
 import Horus.Starkware.Lexer

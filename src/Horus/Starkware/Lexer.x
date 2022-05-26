@@ -1,4 +1,5 @@
 {
+{-# OPTIONS_GHC -w #-}
 module Horus.Starkware.Lexer where
 }
 
@@ -14,8 +15,8 @@ tokens :-
     [a-zA-Z\_][a-zA-Z\_0-9]*    { \s -> TokenIdentifier s }
     \.                          { \s -> TokenDot }
     ":"                         { \s -> TokenColon }
-    \(                         { \s -> TokenLParen }
-    \)                         { \s -> TokenRParen }
+    \(                          { \s -> TokenLParen }
+    \)                          { \s -> TokenRParen }
 
 { 
 data Token 
