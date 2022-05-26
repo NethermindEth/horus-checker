@@ -1,4 +1,4 @@
-module Horus.Instruction where
+module Horus.Instruction (decodeCairoInstruction) where
 
 import Control.Monad.Except
 import Data.Bits
@@ -32,28 +32,31 @@ data OpCode = Nop | Call | Ret | AssertEqual deriving (Eq, Show)
 data FpUpdate = KeepFp | ApPlus2 | Dst deriving (Eq, Show)
 
 data Instruction = Instruction
-  { dstRegister :: PointerRegister
-  , op0Register :: PointerRegister
-  , op1Source :: Op1Source
-  , resLogic :: ResLogic
-  , pcUpdate :: PcUpdate
-  , apUpdate :: ApUpdate
-  , opCode :: OpCode
-  , op0Offset :: Integer
-  , op1Offset :: Integer
-  , dstOffset :: Integer
-  , fpUpdate :: FpUpdate
-  , imm :: ImmediateValue
+  { i_dstRegister :: PointerRegister
+  , i_op0Register :: PointerRegister
+  , i_op1Source :: Op1Source
+  , i_resLogic :: ResLogic
+  , i_pcUpdate :: PcUpdate
+  , i_apUpdate :: ApUpdate
+  , i_opCode :: OpCode
+  , i_op0Offset :: Integer
+  , i_op1Offset :: Integer
+  , i_dstOffset :: Integer
+  , i_fpUpdate :: FpUpdate
+  , i_imm :: ImmediateValue
   }
   deriving (Eq, Show)
+
+n15, n16 :: Int
+(n15, n16) = (15, 16)
 
 type ImmediateValue = Maybe Integer
 decodeCairoInstruction :: Integer -> ImmediateValue -> Either String Instruction
 decodeCairoInstruction instruction imm = do
   let flags = instruction `shiftR` (3 * 16)
-  let dstEnc = instruction .&. (2 ^ 16 - 1)
-  let op0Enc = (instruction `shiftR` 16) .&. (2 ^ 16 - 1)
-  let op1Enc = (instruction `shiftR` 2 * 16) .&. (2 ^ 16 - 1)
+  let dstEnc = instruction .&. (2 ^ n16 - 1)
+  let op0Enc = (instruction `shiftR` 16) .&. (2 ^ n16 - 1)
+  let op1Enc = (instruction `shiftR` 2 * 16) .&. (2 ^ n16 - 1)
   op1 <-
     op1Map
       (flags `testBit` op1ImmBit)
@@ -94,9 +97,9 @@ decodeCairoInstruction instruction imm = do
             _ -> return apUpdate
         )
     <*> return opcode
-    <*> return (op0Enc - 2 ^ 15)
-    <*> return (op1Enc - 2 ^ 15)
-    <*> return (dstEnc - 2 ^ 15)
+    <*> return (op0Enc - 2 ^ n15)
+    <*> return (op1Enc - 2 ^ n15)
+    <*> return (dstEnc - 2 ^ n15)
     <*> return
       ( case opcode of
           Call -> ApPlus2
