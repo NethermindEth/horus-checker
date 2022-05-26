@@ -6,11 +6,15 @@ category:           Language
 common deps
     build-depends:           aeson
                            , base
-                           , containers
-                           , mtl
-                           , transformers
 
     default-language:        Haskell2010
+    ghc-options:             -Weverything -Werror
+                             -Wno-safe -Wno-unsafe -Wno-implicit-prelude
+                             -Wno-all-missed-specializations
+                             -Wno-missing-deriving-strategies
+                             -Wno-missing-import-lists
+                             -Wno-missing-safe-haskell-mode
+                             -Wno-unused-packages
 
 library
     import:                  deps
@@ -19,9 +23,10 @@ library
     exposed-modules:         Horus.ContractDefinition
                            , Horus.Program
                            , Horus.Instruction
-    build-depends:           array
+    build-depends:           mtl
                            , simple-smt
                            , text
+                           , containers
 
 executable cairo-horus
     import:                  deps
@@ -29,4 +34,3 @@ executable cairo-horus
     main-is:                 Main.hs
 
     build-depends:           CairoHorus
-                           , bytestring
