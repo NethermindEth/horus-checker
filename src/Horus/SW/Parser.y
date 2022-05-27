@@ -27,8 +27,8 @@ import Horus.SW.CairoType
     identifier   {TokenIdentifier $$}
 %%
 
-Identifier : identifier                 { ScopedName [pack $1] }
-           | Identifier '.' identifier  { $1 <> (ScopedName [pack $3]) }
+Identifier : identifier                 { ScopedName [$1] }
+           | Identifier '.' identifier  { $1 <> (ScopedName [$3]) }
 
 NamedType : NonIdentifierType       { (Nothing, Just $1) }
           | Identifier              { (Just $1, Nothing) }

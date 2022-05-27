@@ -1,6 +1,9 @@
 {
 {-# OPTIONS_GHC -w #-}
 module Horus.SW.Lexer where
+
+import Data.Text (Text, pack)
+
 }
 
 %wrapper "basic"
@@ -12,7 +15,7 @@ tokens :-
     \*\*                        { \s -> TokenDoubleStar }
     felt                        { \s -> TokenFelt }
     codeoffset                  { \s -> TokenCodeoffset }
-    [a-zA-Z\_][a-zA-Z\_0-9]*    { \s -> TokenIdentifier s }
+    [a-zA-Z\_][a-zA-Z\_0-9]*    { \s -> TokenIdentifier (pack s) }
     \.                          { \s -> TokenDot }
     ":"                         { \s -> TokenColon }
     \(                          { \s -> TokenLParen }
@@ -29,6 +32,6 @@ data Token
     | TokenRParen
     | TokenFelt
     | TokenCodeoffset
-    | TokenIdentifier String
+    | TokenIdentifier Text
     deriving (Show)
 }

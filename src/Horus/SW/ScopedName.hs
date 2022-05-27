@@ -4,10 +4,9 @@
 module Horus.SW.ScopedName (ScopedName (..), fromText) where
 
 import Data.Aeson
-import Data.Hashable
 import Data.Text
 
-newtype ScopedName = ScopedName {sn_Path :: [Text]} deriving (Eq, Ord, Hashable)
+newtype ScopedName = ScopedName {sn_Path :: [Text]} deriving (Eq, Ord)
 
 fromText :: Text -> ScopedName
 fromText scope = ScopedName $ splitOn "." scope
