@@ -6,15 +6,23 @@ category:           Language
 common deps
     build-depends:           aeson
                            , base
-
     default-language:        Haskell2010
     ghc-options:             -Weverything -Werror
                              -Wno-safe -Wno-unsafe -Wno-implicit-prelude
                              -Wno-all-missed-specializations
                              -Wno-missing-deriving-strategies
+                             -Wno-missing-home-modules
                              -Wno-missing-import-lists
                              -Wno-missing-safe-haskell-mode
+                             -Wno-prepositive-qualified-module
                              -Wno-unused-packages
+
+library typed-simple-smt
+    import:                  deps
+    hs-source-dirs:          src
+    exposed-modules:         SimpleSMT.Typed
+    build-depends:           simple-smt
+                           , text
 
 library
     import:                  deps
@@ -27,6 +35,7 @@ library
                            , simple-smt
                            , text
                            , containers
+                           , typed-simple-smt
 
 executable cairo-horus
     import:                  deps

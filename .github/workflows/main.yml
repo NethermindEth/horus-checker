@@ -23,12 +23,8 @@ jobs:
           pushd ~
           cabal v2-update 'hackage.haskell.org,2022-05-23T11:42:51Z'
           cabal install --overwrite-policy=always --installdir=/usr/local/bin \
-            fourmolu stylish-haskell
+            fourmolu
           popd
-
-      - name: Run stylish-haskell
-        run: |
-          sh ./scripts/check-stylish.sh
 
       - name: Run fourmolu
         run: |
