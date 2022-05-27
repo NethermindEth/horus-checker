@@ -6,6 +6,8 @@ module Horus.Program (Program (..)) where
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
 import Data.Map (Map)
+import Horus.SW.IdentifierDefinition (IdentifierDefinition)
+import Horus.SW.ScopedName (ScopedName)
 import Numeric (readHex)
 
 data Program = Program
@@ -13,6 +15,7 @@ data Program = Program
   , p_builtins :: [String]
   , p_code :: [Integer]
   , p_hints :: Map String String
+  , p_identifiers :: Map ScopedName IdentifierDefinition
   , p_mainScope :: String
   , p_prime :: Integer
   }
@@ -25,6 +28,7 @@ instance FromJSON Program where
       <*> v .: "builtins"
       <*> (v .: "data" >>= traverse parseHexInteger)
       <*> v .: "hints"
+      <*> v .: "identifiers"
       <*> v .: "main_scope"
       <*> (v .: "prime" >>= parseHexInteger)
 
