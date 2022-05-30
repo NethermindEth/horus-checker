@@ -10,7 +10,6 @@ module Horus.Instruction
   , ApUpdate (..)
   , OpCode (..)
   , FpUpdate (..)
-  , decodeCairoInstruction
   )
 where
 
