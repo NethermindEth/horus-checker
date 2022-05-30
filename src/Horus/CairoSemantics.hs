@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -w #-}
 
@@ -7,47 +8,73 @@ import Control.Lens
 import Control.Lens.TH
 import Control.Monad.State
 
-import Data.Map
+import Data.Map (Map, empty, fromList, size)
+import Data.Text (Text, pack)
 
 import GHC.Num (Integer)
 import Horus.Instruction
 import SimpleSMT.Typed
 
-newtype MemVar = MemVar {unMemVar :: TSExpr Integer}
-
 fieldPrime :: TSExpr Integer
 fieldPrime = int 0x800000000000011000000000000000000000000000000000000000000000001
 
 data ConstraintsState = ConstraintsState
-  { _memoryVariables :: Map MemVar (TSExpr Integer)
+  { _memoryVariables :: [TSExpr Integer]
   , _exprs :: [TSExpr Bool]
   , _decls :: [TSExpr ()]
   }
 
 $(makeLenses ''ConstraintsState)
 
+assert :: TSExpr Bool -> State ConstraintsState ()
+assert expr = do
+  state <- get
+  put $ over exprs (expr :) state
+
+-- declare :: String -> State ConstraintsState ()
+-- declare name = 
+
 addBounds :: TSExpr Integer -> State ConstraintsState ()
 addBounds expr = do
-  state <- get
-  put $ over exprs (int 0 .<= expr :) (over exprs (expr .< fieldPrime :) state)
+  assert (int 0 .<= expr)
+  assert (expr .< fieldPrime)
+
+-- do
+--   state <- get
+--   put $ over exprs (int 0 .<= expr :) (over exprs (expr .< fieldPrime :) state)
 
 alloc :: TSExpr Integer -> State ConstraintsState (TSExpr Integer)
 alloc address = do
   state <- get
-  let nextMemVar = "MEM" <> show (size (_memoryVariables state))
-  put $ over decls (declareInt nextMemVar :) state
+  let nextMemVar = "MEM" <> show (length (_memoryVariables state))
+  put $ over decls (++ [declareInt nextMemVar]) (over memoryVariables (constInt nextMemVar :) state)
   addBounds $ constInt nextMemVar
   return $ constInt nextMemVar
 
 type Step = Integer
 
-apStep :: Step -> TSExpr Integer
-apStep step = constInt $ "ap" <> show step
-fpStep :: Step -> TSExpr Integer
-fpStep step = constInt $ "fp" <> show step
-registerStep :: Step -> PointerRegister -> TSExpr Integer
-registerStep step AllocationPointer = apStep step
-registerStep step FramePointer = fpStep step
+encodeSemantics :: [Instruction] -> Text
+encodeSemantics instrs =
+  let state =
+        execState
+          (mkProgramConstraints instrs 0)
+          ConstraintsState
+            { _memoryVariables = []
+            , _exprs = []
+            , _decls =
+                [declareInt ("ap" <> show step) | step <- [0 .. (length instrs)]]
+                  ++ [declareInt ("fp" <> show step) | step <- [0 .. (length instrs)]]
+            }
+   in pack $
+        foldr (\expr str -> showsTSExpr expr ("\n" <> str)) "" (_decls state)
+          ++ foldr (\expr str -> showsTSExpr expr ("\n" <> str)) "" (_exprs state)
+
+mkProgramConstraints :: [Instruction] -> Step -> State ConstraintsState ()
+mkProgramConstraints (instr : instrs) step = do
+  stepFormula <- mkInstructionConstraints instr step
+  assert stepFormula
+  mkProgramConstraints instrs (step + 1)
+mkProgramConstraints [] step = return ()
 
 mkInstructionConstraints :: Instruction -> Step -> State ConstraintsState (TSExpr Bool)
 mkInstructionConstraints
@@ -102,4 +129,12 @@ mkInstructionConstraints
     let instructionAssertion = case opCode of
           AssertEqual -> res .== dst
           _ -> bool True
-    return $ conditionFormula .&& apUpdateFormula .&& fpUpdateFormula .&& instructionAssertion
+    return $ {-conditionFormula .&& apUpdateFormula .&& fpUpdateFormula .&& -} instructionAssertion
+
+apStep :: Step -> TSExpr Integer
+apStep step = constInt $ "ap" <> show step
+fpStep :: Step -> TSExpr Integer
+fpStep step = constInt $ "fp" <> show step
+registerStep :: Step -> PointerRegister -> TSExpr Integer
+registerStep step AllocationPointer = apStep step
+registerStep step FramePointer = fpStep step

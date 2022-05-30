@@ -17,6 +17,7 @@ module SimpleSMT.Typed
   , declareInt
   , constInt
   , int
+  , showsTSExpr
   )
 where
 
@@ -112,3 +113,6 @@ int = coerce SMT.int
 
 constInt :: String -> TSExpr Integer
 constInt = coerce SMT.const
+
+showsTSExpr :: TSExpr a -> ShowS
+showsTSExpr = coerce SMT.showsSExpr
