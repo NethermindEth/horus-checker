@@ -32,8 +32,9 @@ library
     hs-source-dirs:          src
     build-tool-depends:      alex:alex, happy:happy
     exposed-modules:         Horus.ContractDefinition
-                           , Horus.Program
                            , Horus.Instruction
+                           , Horus.Program
+                           , Horus.SMTUtil
                            , Horus.SW.CairoType
                            , Horus.SW.IdentifierDefinition
                            , Horus.SW.ScopedName
