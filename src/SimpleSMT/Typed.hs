@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module SimpleSMT.Typed
   ( TSExpr
   , parseAssertion
@@ -26,6 +24,9 @@ import SimpleSMT (SExpr, readSExpr)
 import qualified SimpleSMT as SMT
 
 newtype TSExpr a = TSExpr SExpr
+
+instance Show (TSExpr a) where
+  showsPrec _ = coerce SMT.showsSExpr
 
 parseAssertion :: Text -> Maybe (TSExpr Bool)
 parseAssertion t = case readSExpr (unpack t) of
