@@ -1,10 +1,16 @@
 module Horus.Instruction
   ( Instruction (..)
   , PointerRegister (..)
-  , PcUpdate (..)
-  , OpCode (..)
   , readAllInstructions
   , instructionSize
+  , Register (..)
+  , Op1Source (..)
+  , ResLogic (..)
+  , PcUpdate (..)
+  , ApUpdate (..)
+  , OpCode (..)
+  , FpUpdate (..)
+  , decodeCairoInstruction
   )
 where
 
