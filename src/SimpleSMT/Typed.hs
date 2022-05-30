@@ -13,6 +13,10 @@ module SimpleSMT.Typed
   , (./=)
   , (.&&)
   , (.||)
+  , bool
+  , declareInt
+  , constInt
+  , int
   )
 where
 
@@ -76,6 +80,14 @@ false = coerce SMT.bool False
 
 not :: TSExpr Bool -> TSExpr Bool
 not = coerce SMT.not
+(.%) :: TSExpr Integer -> TSExpr Integer -> TSExpr Integer
+a .% b = coerce $ SMT.fun "mod" [coerce a, coerce b]
+
+(.<) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
+(.<) = coerce SMT.lt
+
+(.<=) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
+(.<=) = coerce SMT.leq
 
 (.==) :: TSExpr a -> TSExpr a -> TSExpr Bool
 (.==) = coerce SMT.eq
@@ -88,3 +100,15 @@ not = coerce SMT.not
 
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.||) = coerce SMT.or
+
+bool :: Bool -> TSExpr Bool
+bool = coerce SMT.bool
+
+declareInt :: String -> TSExpr ()
+declareInt name = coerce $ SMT.fun "declare-fun" [SMT.Atom name, SMT.List [], SMT.tInt]
+
+int :: Integer -> TSExpr Integer
+int = coerce SMT.int
+
+constInt :: String -> TSExpr Integer
+constInt = coerce SMT.const
