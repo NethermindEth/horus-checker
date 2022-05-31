@@ -1,12 +1,22 @@
-module Horus.SMTUtil (prime, ap, fp, memory, inferJnzCondition, apStep
-    , fpStep
-    , registerStep
-    , Step
-    , substituteFpAndAp) where
+module Horus.SMTUtil
+  ( prime
+  , ap
+  , fp
+  , memory
+  , inferJnzCondition
+  , apStep
+  , fpStep
+  , registerStep
+  , Step
+  , substituteFpAndAp
+  )
+where
+
+import Data.Text (pack)
+import Prelude hiding (const)
 
 import Horus.Instruction (Instruction (..), PointerRegister (..))
-import SimpleSMT.Typed (TSExpr, (./=))
-import SimpleSMT.Typed (TSExpr)
+import SimpleSMT.Typed (TSExpr, const, substitute, (./=))
 import qualified SimpleSMT.Typed as SMT
 
 inferJnzCondition :: Instruction -> TSExpr Bool
@@ -30,9 +40,9 @@ memory = SMT.function "memory"
 type Step = Integer
 
 apStep :: Step -> TSExpr Integer
-apStep step = constInt $ "ap" <> show step
+apStep step = const $ "ap" <> (pack $ show step)
 fpStep :: Step -> TSExpr Integer
-fpStep step = constInt $ "fp" <> show step
+fpStep step = const $ "fp" <> (pack $ show step)
 registerStep :: Step -> PointerRegister -> TSExpr Integer
 registerStep step AllocationPointer = apStep step
 registerStep step FramePointer = fpStep step

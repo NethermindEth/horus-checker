@@ -1,164 +1,160 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
-{-# OPTIONS_GHC -w #-}
 
-module Horus.CairoSemantics where
+module Horus.CairoSemantics (encodeSemantics) where
 
-import Prelude hiding (const, mod, not)
+import Control.Monad.State (State, execState, get)
+import Lens.Micro (Lens')
+import Lens.Micro.Mtl ((%=))
 
-import Control.Lens
-import Control.Lens.TH
-import Control.Monad.State
-
-import Data.Coerce (coerce)
-import Data.Map (Map, empty, fromList, size)
-import Data.Text (Text, pack)
-
-import GHC.Num (Integer)
+import Data.Foldable (traverse_)
+import Data.Text as Text (Text, intercalate, pack)
 
 import Horus.Instruction
+  ( ApUpdate (..)
+  , FpUpdate (..)
+  , Instruction (..)
+  , Op1Source (..)
+  , OpCode (..)
+  , PcUpdate (..)
+  , PointerRegister (..)
+  , ResLogic (..)
+  )
 import Horus.SMTUtil
-import qualified SimpleSMT as SMT
-import SimpleSMT.Typed
-
-fieldPrime :: TSExpr Integer
--- fieldPrime = int 0x800000000000011000000000000000000000000000000000000000000000001
-fieldPrime = constInt "prime"
+  ( Step
+  , prime
+  , registerStep
+  , substituteFpAndAp
+  )
+import Horus.Util (fieldPrime)
+import qualified SimpleSMT as SMT (SExpr (..))
+import SimpleSMT.Typed (TSExpr, (.->), (.<), (.<=), (.==))
+import qualified SimpleSMT.Typed as TSMT
 
 data ConstraintsState = ConstraintsState
-  { _memoryVariables :: [TSExpr Integer]
-  , _exprs :: [TSExpr Bool]
-  , _decls :: [TSExpr ()]
+  { cs_memoryVariables :: [TSExpr Integer]
+  , cs_exprs :: [TSExpr Bool]
+  , cs_decls :: [TSExpr ()]
   }
 
-$(makeLenses ''ConstraintsState)
+csMemoryVariables :: Lens' ConstraintsState [TSExpr Integer]
+csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
+
+csExprs :: Lens' ConstraintsState [TSExpr Bool]
+csExprs lMod g = fmap (\x -> g{cs_exprs = x}) (lMod (cs_exprs g))
+
+csDecls :: Lens' ConstraintsState [TSExpr ()]
+csDecls lMod g = fmap (\x -> g{cs_decls = x}) (lMod (cs_decls g))
+
+encodeSemantics :: [Instruction] -> TSExpr Bool -> TSExpr Bool -> Text
+encodeSemantics instrs preCond postCond =
+  let finalState =
+        execState
+          computation
+          ConstraintsState
+            { cs_memoryVariables = []
+            , cs_exprs = []
+            , cs_decls =
+                -- TODO: turn declaration into monadic action
+                [TSMT.declareInt (pack $ "ap" <> show step) | step <- [0 .. 2 * (length instrs)]]
+                  ++ [TSMT.declareInt (pack $ "fp" <> show step) | step <- [0 .. (length instrs)]]
+                  ++ [TSMT.declareInt "prime"]
+            }
+   in intercalate "\n" (pack . (`TSMT.ppTSExpr` "") <$> cs_decls finalState)
+        <> intercalate "\n" (pack . (\str -> "(assert " <> str <> ")") . (`TSMT.ppTSExpr` "") <$> cs_exprs finalState)
+ where
+  computation :: State ConstraintsState ()
+  computation = do
+    assert (prime .== fromInteger fieldPrime)
+    assert (registerStep 0 FramePointer .<= registerStep 0 AllocationPointer)
+    addBounds (registerStep 0 FramePointer)
+    addBounds (registerStep 0 AllocationPointer)
+    preEliminatedUf <- memoryRemoval (substituteFpAndAp 0 preCond)
+    postEliminatedUf <- memoryRemoval (substituteFpAndAp (toInteger $ length instrs) (TSMT.not postCond))
+    assert preEliminatedUf
+    assert postEliminatedUf
+    mkProgramConstraints instrs 0
 
 assert :: TSExpr Bool -> State ConstraintsState ()
-assert expr = do
-  state <- get
-  put $ over exprs (expr :) state
+assert expr = csExprs %= (expr :)
 
 mkMemoryConstraints :: [TSExpr Integer] -> [TSExpr Bool]
 mkMemoryConstraints = helper . (zip [0 ..])
  where
   helper :: [(Integer, TSExpr Integer)] -> [TSExpr Bool]
   helper ((i, expr) : rest) =
-    [expr .== v .-> (constInt ("MEM" <> show i) .== constInt ("MEM" <> show u)) | (u, v) <- rest]
+    [expr .== v .-> (TSMT.const (pack $ "MEM" <> show i) .== TSMT.const (pack $ "MEM" <> show u)) | (u, v) <- rest]
       ++ helper rest
   helper [] = []
 
 addBounds :: TSExpr Integer -> State ConstraintsState ()
 addBounds expr = do
-  assert (int 0 .<= expr)
-  assert (expr .< fieldPrime)
+  assert (0 .<= expr)
+  assert (expr .< prime)
 
 alloc :: TSExpr Integer -> State ConstraintsState (TSExpr Integer)
 alloc address = do
-  state <- get
-  let nextMemVar = "MEM" <> show (length (_memoryVariables state))
-  put $ over decls (++ [declareInt nextMemVar]) (over memoryVariables (++ [address]) state)
-  addBounds $ constInt nextMemVar
-  return $ constInt nextMemVar
+  currentState <- get
+  let nextMemVar = pack $ "MEM" <> show (length (cs_memoryVariables currentState))
+  csDecls %= (++ [TSMT.declareInt nextMemVar])
+  csMemoryVariables %= (++ [address])
+  addBounds $ TSMT.const nextMemVar
+  return $ TSMT.const nextMemVar
 
 memoryRemoval :: TSExpr a -> State ConstraintsState (TSExpr a)
-memoryRemoval = (fromUnsafe <$>) . unsafeMemoryRemoval . toUnsafe
+memoryRemoval = (TSMT.fromUnsafe <$>) . unsafeMemoryRemoval . TSMT.toUnsafe
  where
   unsafeMemoryRemoval :: SMT.SExpr -> State ConstraintsState SMT.SExpr
-  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = toUnsafe <$> alloc (fromUnsafe x)
-  unsafeMemoryRemoval (SMT.List l) = do
-    processedExprs <- traverse unsafeMemoryRemoval l
-    return (SMT.List processedExprs)
+  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = TSMT.toUnsafe <$> alloc (TSMT.fromUnsafe x)
+  unsafeMemoryRemoval (SMT.List l) = SMT.List <$> traverse unsafeMemoryRemoval l
   unsafeMemoryRemoval expr = return expr
-
-encodeSemantics :: [Instruction] -> TSExpr Bool -> TSExpr Bool -> Text
-encodeSemantics instrs pre post =
-  let state =
-        execState
-          computation
-          ConstraintsState
-            { _memoryVariables = []
-            , _exprs = []
-            , _decls =
-                [declareInt ("ap" <> show step) | step <- [0 .. (length instrs)]]
-                  ++ [declareInt ("fp" <> show step) | step <- [0 .. (length instrs)]]
-            }
-   in pack $
-        foldr (\expr str -> showsTSExpr expr ("\n" <> str)) "" (_decls state)
-          ++ foldr (\expr str -> showsTSExpr expr ("\n" <> str)) "" (_exprs state)
- where
-  computation :: State ConstraintsState ()
-  computation = do
-    preEliminatedUf <- memoryRemoval (substituteFpAndAp 0 pre)
-    postEliminatedUf <- memoryRemoval (substituteFpAndAp (toInteger $ length instrs) (not post))
-    assert preEliminatedUf
-    assert postEliminatedUf
-    mkProgramConstraints instrs 0
 
 mkProgramConstraints :: [Instruction] -> Step -> State ConstraintsState ()
 mkProgramConstraints (instr : instrs) step = do
   stepFormula <- mkInstructionConstraints instr step
   assert stepFormula
   mkProgramConstraints instrs (step + 1)
-mkProgramConstraints [] step = do
-  state <- get
-  assert (registerStep 0 FramePointer .<= registerStep 0 AllocationPointer)
-  addBounds (registerStep 0 FramePointer)
-  addBounds (registerStep 0 AllocationPointer)
-  let vars = _memoryVariables state
-  traverse assert (mkMemoryConstraints vars)
+mkProgramConstraints [] _ = do
+  currentState <- get
+  let vars = cs_memoryVariables currentState
+  traverse_ assert (mkMemoryConstraints vars)
   return ()
 
 mkInstructionConstraints :: Instruction -> Step -> State ConstraintsState (TSExpr Bool)
-mkInstructionConstraints
-  ( Instruction
-      dstRegister
-      op0Register
-      op1Source
-      resLogic
-      pcUpdate
-      apUpdate
-      opCode
-      op0Offset
-      op1Offset
-      dstOffset
-      fpUpdate
-      imm
-    )
-  step = do
-    op0 <- alloc (registerStep step op0Register + int op0Offset)
-    op1 <- case op1Source of
-      Op0 -> alloc $ (op0 + int op1Offset) .% fieldPrime
-      RegisterSource reg -> alloc (registerStep step reg + int op1Offset)
-      Imm -> case imm of
-        Just x -> pure $ int x
-        Nothing -> error "Imm has to contain a value"
-    let res = case resLogic of
-          Op1 -> op1 .% fieldPrime
-          Add -> (op0 + op1) .% fieldPrime
-          Mult -> (op0 * op1) .% fieldPrime
-          Unconstrained -> int 0
-    dst <- alloc (registerStep step dstRegister + int dstOffset)
-    let conditionFormula = dst .== int 0
-    let currentAp = registerStep step AllocationPointer
-    let apUpdateFormula =
-          registerStep
-            (step + 1)
-            AllocationPointer
-            .== case apUpdate of
-              NoUpdate -> currentAp
-              AddRes -> (currentAp + res) .% fieldPrime
-              Add1 -> (currentAp + 1) .% fieldPrime
-              Add2 -> (currentAp + 2) .% fieldPrime
-    let currentFp = registerStep step FramePointer
-    let fpUpdateFormula =
-          registerStep
-            (step + 1)
-            FramePointer
-            .== case fpUpdate of
-              KeepFp -> currentFp
-              ApPlus2 -> (currentAp + 2) .% fieldPrime
-              Dst -> dst
-    let instructionAssertion = case opCode of
-          AssertEqual -> res .== dst
-          _ -> bool True
-    return $ conditionFormula .&& apUpdateFormula .&& fpUpdateFormula .&& instructionAssertion
+mkInstructionConstraints Instruction{..} step = do
+  op0 <- alloc (registerStep step i_op0Register + fromInteger i_op0Offset)
+  op1 <- case i_op1Source of
+    Op0 -> alloc $ (op0 + fromInteger i_op1Offset) `TSMT.mod` prime
+    RegisterSource reg -> alloc (registerStep step reg + fromInteger i_op1Offset)
+    Imm -> return $ fromInteger i_imm
+  let res = case i_resLogic of
+        Op1 -> op1 `TSMT.mod` prime
+        Add -> (op0 + op1) `TSMT.mod` prime
+        Mult -> (op0 * op1) `TSMT.mod` prime
+        Unconstrained -> 0
+  dst <- alloc (registerStep step i_dstRegister + fromInteger i_dstOffset)
+  let conditionFormula = if i_pcUpdate == Jnz then dst .== 0 else TSMT.true
+  let currentAp = registerStep step AllocationPointer
+  let apUpdateFormula =
+        registerStep
+          (step + 1)
+          AllocationPointer
+          .== case i_apUpdate of
+            NoUpdate -> currentAp
+            AddRes -> (currentAp + res) `TSMT.mod` prime
+            Add1 -> (currentAp + 1) `TSMT.mod` prime
+            Add2 -> (currentAp + 2) `TSMT.mod` prime
+  let currentFp = registerStep step FramePointer
+  let fpUpdateFormula =
+        registerStep
+          (step + 1)
+          FramePointer
+          .== case i_fpUpdate of
+            KeepFp -> currentFp
+            ApPlus2 -> (currentAp + 2) `TSMT.mod` prime
+            Dst -> dst
+  let instructionAssertion = case i_opCode of
+        AssertEqual -> res .== dst
+        _ -> TSMT.true
+  return $ TSMT.and [conditionFormula, apUpdateFormula, fpUpdateFormula, instructionAssertion]
