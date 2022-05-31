@@ -4,19 +4,26 @@
 
 module Horus.CairoSemantics where
 
+import Prelude hiding (const, mod, not)
+
 import Control.Lens
 import Control.Lens.TH
 import Control.Monad.State
 
+import Data.Coerce (coerce)
 import Data.Map (Map, empty, fromList, size)
 import Data.Text (Text, pack)
 
 import GHC.Num (Integer)
+
 import Horus.Instruction
+import Horus.SMTUtil
+import qualified SimpleSMT as SMT
 import SimpleSMT.Typed
 
 fieldPrime :: TSExpr Integer
-fieldPrime = int 0x800000000000011000000000000000000000000000000000000000000000001
+-- fieldPrime = int 0x800000000000011000000000000000000000000000000000000000000000001
+fieldPrime = constInt "prime"
 
 data ConstraintsState = ConstraintsState
   { _memoryVariables :: [TSExpr Integer]
@@ -53,13 +60,21 @@ alloc address = do
   addBounds $ constInt nextMemVar
   return $ constInt nextMemVar
 
-type Step = Integer
+memoryRemoval :: TSExpr a -> State ConstraintsState (TSExpr a)
+memoryRemoval = (fromUnsafe <$>) . unsafeMemoryRemoval . toUnsafe
+ where
+  unsafeMemoryRemoval :: SMT.SExpr -> State ConstraintsState SMT.SExpr
+  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = toUnsafe <$> alloc (fromUnsafe x)
+  unsafeMemoryRemoval (SMT.List l) = do
+    processedExprs <- traverse unsafeMemoryRemoval l
+    return (SMT.List processedExprs)
+  unsafeMemoryRemoval expr = return expr
 
-encodeSemantics :: [Instruction] -> Text
-encodeSemantics instrs =
+encodeSemantics :: [Instruction] -> TSExpr Bool -> TSExpr Bool -> Text
+encodeSemantics instrs pre post =
   let state =
         execState
-          (mkProgramConstraints instrs 0)
+          computation
           ConstraintsState
             { _memoryVariables = []
             , _exprs = []
@@ -70,6 +85,14 @@ encodeSemantics instrs =
    in pack $
         foldr (\expr str -> showsTSExpr expr ("\n" <> str)) "" (_decls state)
           ++ foldr (\expr str -> showsTSExpr expr ("\n" <> str)) "" (_exprs state)
+ where
+  computation :: State ConstraintsState ()
+  computation = do
+    preEliminatedUf <- memoryRemoval (substituteFpAndAp 0 pre)
+    postEliminatedUf <- memoryRemoval (substituteFpAndAp (toInteger $ length instrs) (not post))
+    assert preEliminatedUf
+    assert postEliminatedUf
+    mkProgramConstraints instrs 0
 
 mkProgramConstraints :: [Instruction] -> Step -> State ConstraintsState ()
 mkProgramConstraints (instr : instrs) step = do
@@ -139,11 +162,3 @@ mkInstructionConstraints
           AssertEqual -> res .== dst
           _ -> bool True
     return $ conditionFormula .&& apUpdateFormula .&& fpUpdateFormula .&& instructionAssertion
-
-apStep :: Step -> TSExpr Integer
-apStep step = constInt $ "ap" <> show step
-fpStep :: Step -> TSExpr Integer
-fpStep step = constInt $ "fp" <> show step
-registerStep :: Step -> PointerRegister -> TSExpr Integer
-registerStep step AllocationPointer = apStep step
-registerStep step FramePointer = fpStep step

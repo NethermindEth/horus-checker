@@ -14,11 +14,15 @@ module SimpleSMT.Typed
   , (.&&)
   , (.||)
   , (.->)
+  , not
   , bool
   , declareInt
   , constInt
   , int
   , showsTSExpr
+  , substitute
+  , toUnsafe
+  , fromUnsafe
   )
 where
 
@@ -28,6 +32,7 @@ import Data.Coerce (coerce)
 import Data.Text (Text, unpack)
 import SimpleSMT (SExpr, readSExpr)
 import qualified SimpleSMT as SMT
+import Prelude hiding (const, mod, not)
 
 newtype TSExpr a = TSExpr SExpr
 
@@ -120,3 +125,16 @@ constInt = coerce SMT.const
 
 showsTSExpr :: TSExpr a -> ShowS
 showsTSExpr = coerce SMT.showsSExpr
+
+substitute :: String -> TSExpr a -> TSExpr b -> TSExpr b
+substitute = coerce untypedSubstitute
+ where
+  untypedSubstitute :: String -> SExpr -> SExpr -> SExpr
+  untypedSubstitute var forWhat w@(SMT.Atom x) = if x == var then forWhat else w
+  untypedSubstitute var forWhat (SMT.List l) = SMT.List (untypedSubstitute var forWhat <$> l)
+
+fromUnsafe :: SExpr -> TSExpr a
+fromUnsafe = coerce
+
+toUnsafe :: TSExpr a -> SExpr
+toUnsafe = coerce
