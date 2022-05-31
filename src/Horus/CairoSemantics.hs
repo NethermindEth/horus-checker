@@ -31,23 +31,25 @@ assert expr = do
   state <- get
   put $ over exprs (expr :) state
 
--- declare :: String -> State ConstraintsState ()
--- declare name = 
+mkMemoryConstraints :: [TSExpr Integer] -> [TSExpr Bool]
+mkMemoryConstraints = helper . (zip [0 ..])
+ where
+  helper :: [(Integer, TSExpr Integer)] -> [TSExpr Bool]
+  helper ((i, expr) : rest) =
+    [expr .== v .-> (constInt ("MEM" <> show i) .== constInt ("MEM" <> show u)) | (u, v) <- rest]
+      ++ helper rest
+  helper [] = []
 
 addBounds :: TSExpr Integer -> State ConstraintsState ()
 addBounds expr = do
   assert (int 0 .<= expr)
   assert (expr .< fieldPrime)
 
--- do
---   state <- get
---   put $ over exprs (int 0 .<= expr :) (over exprs (expr .< fieldPrime :) state)
-
 alloc :: TSExpr Integer -> State ConstraintsState (TSExpr Integer)
 alloc address = do
   state <- get
   let nextMemVar = "MEM" <> show (length (_memoryVariables state))
-  put $ over decls (++ [declareInt nextMemVar]) (over memoryVariables (constInt nextMemVar :) state)
+  put $ over decls (++ [declareInt nextMemVar]) (over memoryVariables (++ [address]) state)
   addBounds $ constInt nextMemVar
   return $ constInt nextMemVar
 
@@ -74,7 +76,11 @@ mkProgramConstraints (instr : instrs) step = do
   stepFormula <- mkInstructionConstraints instr step
   assert stepFormula
   mkProgramConstraints instrs (step + 1)
-mkProgramConstraints [] step = return ()
+mkProgramConstraints [] step = do
+  state <- get
+  let vars = _memoryVariables state
+  traverse assert (mkMemoryConstraints vars)
+  return ()
 
 mkInstructionConstraints :: Instruction -> Step -> State ConstraintsState (TSExpr Bool)
 mkInstructionConstraints
@@ -129,7 +135,7 @@ mkInstructionConstraints
     let instructionAssertion = case opCode of
           AssertEqual -> res .== dst
           _ -> bool True
-    return $ {-conditionFormula .&& apUpdateFormula .&& fpUpdateFormula .&& -} instructionAssertion
+    return $ conditionFormula .&& apUpdateFormula .&& fpUpdateFormula .&& instructionAssertion
 
 apStep :: Step -> TSExpr Integer
 apStep step = constInt $ "ap" <> show step

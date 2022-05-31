@@ -13,6 +13,7 @@ module SimpleSMT.Typed
   , (./=)
   , (.&&)
   , (.||)
+  , (.->)
   , bool
   , declareInt
   , constInt
@@ -101,6 +102,9 @@ a .% b = coerce $ SMT.fun "mod" [coerce a, coerce b]
 
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.||) = coerce SMT.or
+
+(.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
+(.->) = coerce SMT.implies
 
 bool :: Bool -> TSExpr Bool
 bool = coerce SMT.bool
