@@ -6,6 +6,7 @@ module SimpleSMT.Typed
   , function
   , const
   , mod
+  , and
   , true
   , false
   , not
@@ -14,11 +15,9 @@ module SimpleSMT.Typed
   , (.&&)
   , (.||)
   , (.->)
-  , not
-  , bool
+  , (.<)
+  , (.<=)
   , declareInt
-  , constInt
-  , int
   , showsTSExpr
   , substitute
   , toUnsafe
@@ -26,13 +25,12 @@ module SimpleSMT.Typed
   )
 where
 
-import Prelude hiding (const, mod, not)
+import Prelude hiding (and, const, mod, not)
 
 import Data.Coerce (coerce)
 import Data.Text (Text, unpack)
 import SimpleSMT (SExpr, readSExpr)
 import qualified SimpleSMT as SMT
-import Prelude hiding (const, mod, not)
 
 newtype TSExpr a = TSExpr SExpr
 
@@ -87,8 +85,6 @@ false = coerce SMT.bool False
 
 not :: TSExpr Bool -> TSExpr Bool
 not = coerce SMT.not
-(.%) :: TSExpr Integer -> TSExpr Integer -> TSExpr Integer
-a .% b = coerce $ SMT.fun "mod" [coerce a, coerce b]
 
 (.<) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
 (.<) = coerce SMT.lt
@@ -105,23 +101,17 @@ a .% b = coerce $ SMT.fun "mod" [coerce a, coerce b]
 (.&&) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.&&) = coerce SMT.and
 
+and :: [TSExpr Bool] -> TSExpr Bool
+and = coerce (SMT.fun "and")
+
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.||) = coerce SMT.or
 
 (.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.->) = coerce SMT.implies
 
-bool :: Bool -> TSExpr Bool
-bool = coerce SMT.bool
-
-declareInt :: String -> TSExpr ()
-declareInt name = coerce $ SMT.fun "declare-fun" [SMT.Atom name, SMT.List [], SMT.tInt]
-
-int :: Integer -> TSExpr Integer
-int = coerce SMT.int
-
-constInt :: String -> TSExpr Integer
-constInt = coerce SMT.const
+declareInt :: Text -> TSExpr ()
+declareInt name = coerce $ SMT.fun "declare-fun" [SMT.Atom (unpack name), SMT.List [], SMT.tInt]
 
 showsTSExpr :: TSExpr a -> ShowS
 showsTSExpr = coerce SMT.showsSExpr
