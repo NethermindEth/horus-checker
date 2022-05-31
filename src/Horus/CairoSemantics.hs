@@ -78,6 +78,9 @@ mkProgramConstraints (instr : instrs) step = do
   mkProgramConstraints instrs (step + 1)
 mkProgramConstraints [] step = do
   state <- get
+  assert (registerStep 0 FramePointer .<= registerStep 0 AllocationPointer)
+  addBounds (registerStep 0 FramePointer)
+  addBounds (registerStep 0 AllocationPointer)
   let vars = _memoryVariables state
   traverse assert (mkMemoryConstraints vars)
   return ()
