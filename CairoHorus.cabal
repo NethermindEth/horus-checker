@@ -16,56 +16,60 @@ common deps
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving
-    ghc-options:             -Weverything -Werror
-                             -Wno-safe -Wno-unsafe -Wno-implicit-prelude
-                             -Wno-all-missed-specializations
-                             -Wno-missing-deriving-strategies
-                             -Wno-missing-home-modules
-                             -Wno-missing-import-lists
-                             -Wno-missing-local-signatures
-                             -Wno-missing-safe-haskell-mode
-                             -Wno-prepositive-qualified-module
-                             -Wno-unticked-promoted-constructors
-                             -Wno-unused-packages
+    ghc-options:
+      -Weverything -Werror
+      -Wno-safe -Wno-unsafe -Wno-implicit-prelude
+      -Wno-all-missed-specializations
+      -Wno-missing-deriving-strategies
+      -Wno-missing-home-modules
+      -Wno-missing-import-lists
+      -Wno-missing-local-signatures
+      -Wno-missing-safe-haskell-mode
+      -Wno-prepositive-qualified-module
+      -Wno-unticked-promoted-constructors
+      -Wno-unused-packages
 
 library
     import:                  deps
     hs-source-dirs:          src
     build-tool-depends:      alex:alex, happy:happy
-    exposed-modules:         Horus.Global
-                           , Horus.Global.Runner
-    other-modules:           Horus.CFGBuild
-                           , Horus.CFGBuild.Runner
-                           , Horus.ContractDefinition
-                           , Horus.Instruction
-                           , Horus.Program
-                           , Horus.SMTUtil
-                           , Horus.SW.CairoType
-                           , Horus.SW.IdentifierDefinition
-                           , Horus.SW.Lexer
-                           , Horus.SW.Parser
-                           , Horus.SW.ScopedName
-                           , Horus.Util
-                           , SimpleSMT.Typed
-    build-depends:           aeson
-                           , array
-                           , containers
-                           , free
-                           , hashable
-                           , microlens
-                           , microlens-ghc
-                           , microlens-mtl
-                           , mtl
-                           , simple-smt
-                           , text
-                           , transformers
+    exposed-modules:
+      Horus.Global
+      Horus.Global.Runner
+    other-modules:
+      Horus.CFGBuild
+      Horus.CFGBuild.Runner
+      Horus.ContractDefinition
+      Horus.Instruction
+      Horus.Program
+      Horus.SMTUtil
+      Horus.SW.CairoType
+      Horus.SW.IdentifierDefinition
+      Horus.SW.Lexer
+      Horus.SW.Parser
+      Horus.SW.ScopedName
+      Horus.Util
+      SimpleSMT.Typed
+    build-depends:
+      aeson,
+      array,
+      containers,
+      free,
+      hashable,
+      microlens,
+      microlens-ghc,
+      microlens-mtl,
+      mtl,
+      simple-smt,
+      text,
+      transformers,
 
 executable cairo-horus
     import:                  deps
     hs-source-dirs:          app
     main-is:                 Main.hs
-
-    build-depends:           CairoHorus
-                           , aeson
-                           , pretty-simple
-                           , text
+    build-depends:
+      CairoHorus,
+      aeson,
+      pretty-simple,
+      text,
