@@ -55,6 +55,7 @@ library
       aeson,
       array,
       containers,
+      dlist,
       free,
       hashable,
       microlens,
