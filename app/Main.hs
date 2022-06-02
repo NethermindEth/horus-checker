@@ -1,10 +1,12 @@
 module Main (main) where
 
 import Data.Aeson (eitherDecodeFileStrict)
+import Data.Text (unpack)
 import System.Environment (getArgs)
+import Text.Pretty.Simple (pPrint)
 
-import Horus.ContractDefinition (cd_checks, cd_program)
-import Horus.Program (p_code)
+import Horus.Global (makeCFG)
+import qualified Horus.Global.Runner as Global (run)
 
 main :: IO ()
 main = do
@@ -12,9 +14,9 @@ main = do
   mbContract <- eitherDecodeFileStrict filename
   case mbContract of
     Left err -> fail err
-    Right contract -> do
-      print (p_code (cd_program contract))
-      print (cd_checks contract)
+    Right contract -> case Global.run (makeCFG contract) of
+      Left err -> fail (unpack err)
+      Right cfg -> pPrint cfg
 
 parseArgs :: [String] -> IO String
 parseArgs [filename] = pure filename
