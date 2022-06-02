@@ -1,6 +1,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module Horus.CFGBuild (CFGBuildT (..), addAssertion, throw, buildCFG, Label, CFGBuildF (..)) where
+module Horus.CFGBuild
+  ( CFGBuildT (..)
+  , addAssertion
+  , throw
+  , buildCFG
+  , Label (..)
+  , CFGBuildF (..)
+  )
+where
 
 import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
