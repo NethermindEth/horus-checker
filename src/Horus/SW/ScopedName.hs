@@ -1,6 +1,3 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 module Horus.SW.ScopedName (ScopedName (..), fromText) where
 
 import Data.Aeson
@@ -18,7 +15,7 @@ instance Semigroup ScopedName where
   lhs <> rhs = ScopedName (sn_Path lhs ++ sn_Path rhs)
 
 instance FromJSONKey ScopedName where
-  fromJSONKey = FromJSONKeyText $ fromText
+  fromJSONKey = FromJSONKeyText fromText
 
 instance FromJSON ScopedName where
   parseJSON = withText "ScopedName" $ \v ->

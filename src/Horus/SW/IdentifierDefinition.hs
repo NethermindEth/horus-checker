@@ -1,11 +1,10 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE OverloadedStrings #-}
 
 module Horus.SW.IdentifierDefinition
   ( IdentifierDefinition (..)
   , IdentifierDefinitionGADT (..)
+  , getFunctionPc
+  , getLabelPc
   )
 where
 
@@ -45,6 +44,14 @@ data IdentifierDefinitionGADT a where
   ScopeDefinition :: IdentifierDefinitionGADT Scope
 
 data IdentifierDefinition = forall a. IdentifierDefinition (IdentifierDefinitionGADT a)
+
+getFunctionPc :: IdentifierDefinition -> Maybe Int
+getFunctionPc (IdentifierDefinition (FunctionDefinition pc _)) = pure pc
+getFunctionPc _ = Nothing
+
+getLabelPc :: IdentifierDefinition -> Maybe Int
+getLabelPc (IdentifierDefinition (LabelDefinition pc)) = pure pc
+getLabelPc _ = Nothing
 
 instance Show (IdentifierDefinitionGADT Member) where
   show (MemberDefinition typ offset) =
