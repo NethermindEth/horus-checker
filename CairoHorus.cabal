@@ -39,6 +39,7 @@ library
     other-modules:
       Horus.CFGBuild
       Horus.CFGBuild.Runner
+      Horus.CairoSemantics
       Horus.ContractDefinition
       Horus.Instruction
       Horus.Program
