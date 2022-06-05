@@ -6,6 +6,7 @@ module SimpleSMT.Typed
   , function
   , const
   , mod
+  , and
   , true
   , false
   , not
@@ -13,10 +14,18 @@ module SimpleSMT.Typed
   , (./=)
   , (.&&)
   , (.||)
+  , (.->)
+  , (.<)
+  , (.<=)
+  , declareInt
+  , showsTSExpr
+  , substitute
+  , toUnsafe
+  , fromUnsafe
   )
 where
 
-import Prelude hiding (const, mod, not)
+import Prelude hiding (and, const, mod, not)
 
 import Data.Coerce (coerce)
 import Data.Text (Text, unpack)
@@ -77,6 +86,12 @@ false = coerce SMT.bool False
 not :: TSExpr Bool -> TSExpr Bool
 not = coerce SMT.not
 
+(.<) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
+(.<) = coerce SMT.lt
+
+(.<=) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
+(.<=) = coerce SMT.leq
+
 (.==) :: TSExpr a -> TSExpr a -> TSExpr Bool
 (.==) = coerce SMT.eq
 
@@ -86,5 +101,30 @@ not = coerce SMT.not
 (.&&) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.&&) = coerce SMT.and
 
+and :: [TSExpr Bool] -> TSExpr Bool
+and = coerce (SMT.fun "and")
+
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.||) = coerce SMT.or
+
+(.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
+(.->) = coerce SMT.implies
+
+declareInt :: Text -> TSExpr ()
+declareInt name = coerce $ SMT.fun "declare-fun" [SMT.Atom (unpack name), SMT.List [], SMT.tInt]
+
+showsTSExpr :: TSExpr a -> ShowS
+showsTSExpr = coerce SMT.showsSExpr
+
+substitute :: String -> TSExpr a -> TSExpr b -> TSExpr b
+substitute = coerce untypedSubstitute
+ where
+  untypedSubstitute :: String -> SExpr -> SExpr -> SExpr
+  untypedSubstitute var forWhat w@(SMT.Atom x) = if x == var then forWhat else w
+  untypedSubstitute var forWhat (SMT.List l) = SMT.List (untypedSubstitute var forWhat <$> l)
+
+fromUnsafe :: SExpr -> TSExpr a
+fromUnsafe = coerce
+
+toUnsafe :: TSExpr a -> SExpr
+toUnsafe = coerce
