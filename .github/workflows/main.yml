@@ -12,19 +12,19 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - run: cabal v2-update
+      - run: cabal v2-freeze $CONFIG
       - uses: actions/cache@v2
         name: Cache ~/.cabal
         with:
           path: ~/.cabal
-          key: "cabal"
+          key: ${{ runner.os }}-${{ hashFiles('cabal.project.freeze') }}
+          restore-keys: ${{ runner.os }}-
 
       - name: Install linters
         run: |
-          pushd ~
-          cabal v2-update 'hackage.haskell.org,2022-05-23T11:42:51Z'
           cabal install --overwrite-policy=always --installdir=/usr/local/bin \
             fourmolu
-          popd
 
       - name: Run fourmolu
         run: |
