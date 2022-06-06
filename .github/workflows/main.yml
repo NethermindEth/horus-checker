@@ -18,8 +18,7 @@ jobs:
         name: Cache ~/.cabal
         with:
           path: ~/.cabal
-          key: ${{ runner.os }}-${{ hashFiles('cabal.project.freeze') }}
-          restore-keys: ${{ runner.os }}-
+          key: "cabal"
 
       - name: Install linters
         run: |
