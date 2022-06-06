@@ -9,7 +9,7 @@ import Data.Text (Text, unpack)
 import SimpleSMT (SExpr, ppSExpr, readSExpr)
 
 import Horus.Program (Program)
-
+-- Test
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_checks :: Checks
