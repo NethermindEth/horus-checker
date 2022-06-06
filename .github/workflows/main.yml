@@ -3,7 +3,7 @@ name: main
 on:
   push:
     branches: [ master ]
-  pull_request:
+  pull_request: 
 
 jobs:
   lint:
@@ -23,8 +23,10 @@ jobs:
 
       - name: Install linters
         run: |
+          pushd ~
           cabal install --overwrite-policy=always --installdir=/usr/local/bin \
             fourmolu
+          popd
 
       - name: Run fourmolu
         run: |
