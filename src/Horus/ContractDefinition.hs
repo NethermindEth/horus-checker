@@ -1,6 +1,4 @@
-{-# LANGUAGE OverloadedStrings #-}
-
-module Horus.ContractDefinition (ContractDefinition (..)) where
+module Horus.ContractDefinition (ContractDefinition (..), Checks (..)) where
 
 import Data.Aeson (FromJSON (..), withObject, withText, (.:))
 import Data.Coerce (coerce)
@@ -11,15 +9,16 @@ import SimpleSMT (SExpr, ppSExpr
 
 import Horus.Program (Program)
 -- Test
+
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_checks :: Checks}
   deriving (Show)
 
 data Checks = Checks
-  { c_preConds :: Map Text SExpr
-  , c_postConds :: Map Text SExpr
-  , c_invariants :: Map Text SExpr
+  { c_preConds :: Map ScopedName (TSExpr Bool)
+  , c_postConds :: Map ScopedName (TSExpr Bool)
+  , c_invariants :: Map ScopedName (TSExpr Bool)
   }
 
 instance FromJSON ContractDefinition where
@@ -28,21 +27,21 @@ instance FromJSON ContractDefinition where
       <$> v .: "program"
       <*> v .: "checks"
 
-newtype HSExpr = HSExpr SExpr
+newtype HSExpr a = HSExpr (TSExpr a)
 
-instance FromJSON HSExpr where
+instance FromJSON (HSExpr Bool) where
   parseJSON = withText "HSExpr" $ \t ->
-    case readSExpr (unpack t) of
-      Just (sexpr, "") -> pure (HSExpr sexpr)
+    case parseAssertion t of
+      Just tsexpr -> pure (HSExpr tsexpr)
       _ -> fail "Can't parse an smt2 sexp"
 
-instance Show HSExpr where
-  showsPrec _ (HSExpr sexpr) = ppSExpr sexpr
+instance Show (HSExpr a) where
+  showsPrec _ (HSExpr sexpr) = ppTSExpr sexpr
 
-elimHSExpr :: Map Text HSExpr -> Map Text SExpr
+elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (TSExpr a)
 elimHSExpr = coerce
 
-introHSExpr :: Map Text SExpr -> Map Text HSExpr
+introHSExpr :: Map ScopedName (TSExpr a) -> Map ScopedName (HSExpr a)
 introHSExpr = coerce
 
 instance FromJSON Checks where
