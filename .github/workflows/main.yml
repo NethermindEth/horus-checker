@@ -22,7 +22,8 @@ jobs:
 
       - name: Install linters
         run: |
-          curl -vL -o /usr/local/bin/fourmolu https://github.com/fourmolu/fourmolu/releases/download/v0.7.0.1/fourmolu-0.7.0.1-linux-x86_64
+          curl -L -o /usr/local/bin/fourmolu https://github.com/fourmolu/fourmolu/releases/download/v0.7.0.1/fourmolu-0.7.0.1-linux-x86_64
+          chmod a+x /usr/local/bin/fourmolu
 
       - name: Run fourmolu
         run: |
