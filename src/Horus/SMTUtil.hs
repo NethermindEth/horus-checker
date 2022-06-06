@@ -25,7 +25,7 @@ inferJnzCondition i = memory dstAddr ./= 0
   reg = case i_dstRegister i of
     AllocationPointer -> ap
     FramePointer -> fp
-  dstAddr = (reg + fromInteger (i_op0Offset i)) `SMT.mod` prime
+  dstAddr = (reg + fromInteger (i_dstOffset i)) `SMT.mod` prime
 
 prime :: TSExpr Integer
 prime = SMT.const "prime"
