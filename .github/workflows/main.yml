@@ -13,15 +13,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-
-      - run: cabal v2-update 'hackage.haskell.org,2022-05-23T11:42:51Z'
-      - run: cabal v2-freeze $CONFIG
-      - uses: actions/cache@v2
-        name: Cache ~/.cabal
-        with:
-          path: ~/.cabal
-          key: "cabal"
-
       - name: Install linters
         run: |
           curl -L -o /usr/local/bin/fourmolu ${{env.fourmolu_url}}
