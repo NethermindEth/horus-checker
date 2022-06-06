@@ -22,8 +22,7 @@ jobs:
 
       - name: Install linters
         run: |
-          cabal install --overwrite-policy=always --installdir=/usr/local/bin \
-            fourmolu
+          curl -vL -o /usr/local/bin/fourmolu https://github.com/fourmolu/fourmolu/releases/download/v0.7.0.1/fourmolu-0.7.0.1-linux-x86_64
 
       - name: Run fourmolu
         run: |
