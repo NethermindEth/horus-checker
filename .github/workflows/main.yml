@@ -3,7 +3,9 @@ name: main
 on:
   push:
     branches: [ master ]
-  pull_request:
+  pull_request: 
+env:
+  fourmolu_url: https://github.com/fourmolu/fourmolu/releases/download/v0.7.0.1/fourmolu-0.7.0.1-linux-x86_64
 
 jobs:
   lint:
@@ -11,20 +13,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-
-      - uses: actions/cache@v2
-        name: Cache ~/.cabal
-        with:
-          path: ~/.cabal
-          key: "cabal"
-
       - name: Install linters
         run: |
-          pushd ~
-          cabal v2-update 'hackage.haskell.org,2022-05-23T11:42:51Z'
-          cabal install --overwrite-policy=always --installdir=/usr/local/bin \
-            fourmolu
-          popd
+          curl -L -o /usr/local/bin/fourmolu ${{env.fourmolu_url}}
+          chmod a+x /usr/local/bin/fourmolu
 
       - name: Run fourmolu
         run: |
