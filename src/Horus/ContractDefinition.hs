@@ -4,15 +4,14 @@ import Data.Aeson (FromJSON (..), withObject, withText, (.:))
 import Data.Coerce (coerce)
 import Data.Map (Map)
 import Data.Text (Text, unpack)
-import SimpleSMT (SExpr, ppSExpr
-, readSExpr)
+import SimpleSMT (SExpr, ppSExpr, readSExpr)
 
 import Horus.Program (Program)
--- Test
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
-  , cd_checks :: Checks}
+  , cd_checks :: Checks
+  }
   deriving (Show)
 
 data Checks = Checks
