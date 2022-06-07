@@ -1,5 +1,7 @@
 module SimpleSMT.Typed
   ( TSExpr
+  , TSStmt
+  -- Expressions
   , parseAssertion
   , parseArithmetic
   , ppTSExpr
@@ -17,9 +19,14 @@ module SimpleSMT.Typed
   , (.->)
   , (.<)
   , (.<=)
-  , declareInt
   , showsTSExpr
   , substitute
+  -- Statements
+  , ppTSStmt
+  , showTSStmt
+  , assert
+  , declareInt
+  -- Unsafe
   , toUnsafe
   , fromUnsafe
   )
@@ -28,12 +35,14 @@ where
 import Prelude hiding (and, const, mod, not)
 
 import Data.Coerce (coerce)
-import Data.Text (Text, unpack)
+import Data.Text (Text, pack, unpack)
 import SimpleSMT (SExpr, readSExpr)
 import qualified SimpleSMT as SMT
 
 newtype TSExpr a = TSExpr SExpr
   deriving newtype (Eq)
+
+newtype TSStmt = TSStmt SExpr
 
 instance Show (TSExpr a) where
   showsPrec _ = coerce SMT.showsSExpr
@@ -108,7 +117,7 @@ infixr 3 .&&
 (.&&) = coerce SMT.and
 
 and :: [TSExpr Bool] -> TSExpr Bool
-and = coerce (SMT.fun "and")
+and = coerce SMT.andMany
 
 infixr 2 .||
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
@@ -117,9 +126,6 @@ infixr 2 .||
 infixr 1 .->
 (.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.->) = coerce SMT.implies
-
-declareInt :: Text -> TSExpr ()
-declareInt name = coerce $ SMT.fun "declare-fun" [SMT.Atom (unpack name), SMT.List [], SMT.tInt]
 
 showsTSExpr :: TSExpr a -> ShowS
 showsTSExpr = coerce SMT.showsSExpr
@@ -130,6 +136,18 @@ substitute = coerce untypedSubstitute
   untypedSubstitute :: String -> SExpr -> SExpr -> SExpr
   untypedSubstitute var forWhat w@(SMT.Atom x) = if x == var then forWhat else w
   untypedSubstitute var forWhat (SMT.List l) = SMT.List (untypedSubstitute var forWhat <$> l)
+
+ppTSStmt :: TSStmt -> Text
+ppTSStmt (TSStmt s) = pack (SMT.ppSExpr s "")
+
+showTSStmt :: TSStmt -> Text
+showTSStmt (TSStmt s) = pack (SMT.showsSExpr s "")
+
+assert :: TSExpr Bool -> TSStmt
+assert cond = coerce (SMT.fun "assert") [cond]
+
+declareInt :: Text -> TSStmt
+declareInt name = coerce $ SMT.fun "declare-fun" [SMT.Atom (unpack name), SMT.List [], SMT.tInt]
 
 fromUnsafe :: SExpr -> TSExpr a
 fromUnsafe = coerce

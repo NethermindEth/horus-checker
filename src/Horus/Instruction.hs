@@ -1,8 +1,6 @@
 module Horus.Instruction
   ( Instruction (..)
   , PointerRegister (..)
-  , readAllInstructions
-  , instructionSize
   , Register (..)
   , Op1Source (..)
   , ResLogic (..)
@@ -10,6 +8,9 @@ module Horus.Instruction
   , ApUpdate (..)
   , OpCode (..)
   , FpUpdate (..)
+  , readAllInstructions
+  , instructionSize
+  , callDestination
   )
 where
 
@@ -64,6 +65,16 @@ data Instruction = Instruction
   }
   deriving (Eq, Show)
 
+instructionSize :: Instruction -> Int
+instructionSize Instruction{i_op1Source = Imm} = 2
+instructionSize _ = 1
+
+callDestination :: Int -> Instruction -> Maybe Int
+callDestination pc i@Instruction{i_opCode = Call}
+  | JumpRel <- i_pcUpdate i = pure (pc + fromInteger (i_imm i))
+  | otherwise = pure (fromInteger (i_imm i))
+callDestination _ _ = Nothing
+
 n15, n16 :: Int
 (n15, n16) = (15, 16)
 
@@ -72,10 +83,6 @@ readAllInstructions [] = pure []
 readAllInstructions (i : is) = do
   (instr, is') <- readInstruction (i :| is)
   (instr :) <$> readAllInstructions is'
-
-instructionSize :: Instruction -> Int
-instructionSize Instruction{i_op1Source = Imm} = 2
-instructionSize _ = 1
 
 readInstruction :: forall m. MonadError Text m => NonEmpty Integer -> m (Instruction, [Integer])
 readInstruction (i :| is) = do

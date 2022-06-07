@@ -1,85 +1,112 @@
-module Horus.Global (GlobalT, GlobalL, GlobalF (..), runCFGBuildT, makeCFG, makeModules) where
+module Horus.Global
+  ( GlobalT (..)
+  , GlobalL
+  , GlobalF (..)
+  , runCFGBuildT
+  , makeCFG
+  , makeModules
+  , produceSMT2Models
+  )
+where
 
-import Control.Monad (unless)
-import Control.Monad.State (State, evalState, get, put)
+import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
-import Control.Monad.Writer (WriterT, execWriterT, tell)
 import Data.Coerce (coerce)
-import Data.DList (DList)
-import qualified Data.DList as D (singleton)
-import Data.Foldable (for_, toList)
 import Data.Function ((&))
 import Data.Functor.Identity (Identity)
-import qualified Data.Map as Map (elems)
+import qualified Data.IntMap as IntMap (fromList)
+import qualified Data.Map as Map (fromList, toList)
 import Data.Maybe (mapMaybe)
-import Data.Set (Set)
-import qualified Data.Set as Set (empty, insert, member)
 import Data.Text (Text)
-import Lens.Micro (ix, (^.))
+import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 
-import Horus.CFGBuild (CFGBuildT, Label (..), buildCFG)
+import Horus.CFGBuild (CFGBuildT, Label (..), LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
-import Horus.ContractDefinition (ContractDefinition (..))
-import Horus.Instruction (Instruction)
-import Horus.Program (p_identifiers)
+import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
+import Horus.CairoSemantics.Runner (SemanticsEnv (..))
+import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
+import Horus.Instruction (callDestination, readAllInstructions)
+import Horus.Label (labelInsructions)
+import Horus.Module (Module, runModuleL, traverseCFG)
+import Horus.Program (p_code, p_identifiers)
 import Horus.SW.IdentifierDefinition (getFunctionPc)
-import SimpleSMT.Typed (TSExpr, (.->))
-import qualified SimpleSMT.Typed as SMT (and, true)
+import Horus.Util (Box (..), topmostStepFT)
+import qualified SimpleSMT.Typed as SMT (true)
 
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
+  | forall b. RunCairoSemanticsT SemanticsEnv (CairoSemanticsT m b) (Text -> a)
   | Throw Text
 
 deriving instance Functor (GlobalF m)
 
-type GlobalT m = FT (GlobalF m) m
+newtype GlobalT m a = GlobalT {runGlobalT :: FT (GlobalF m) m a}
+  deriving newtype (Functor, Applicative, Monad)
 type GlobalL = GlobalT Identity
 
+instance MonadTrans GlobalT where
+  lift = GlobalT . lift
+
+instance Monad m => MonadError Text (GlobalT m) where -- TODO deriving via
+  throwError = throw
+  catchError m handler = do
+    step <- lift (topmostStepFT (runGlobalT m))
+    case step of
+      Just (Box (Throw t)) -> handler t
+      _ -> m
+
+liftF' :: GlobalF m a -> GlobalT m a
+liftF' = GlobalT . liftF
+
 runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
-runCFGBuildT cfgBuilder = liftF (RunCFGBuildT cfgBuilder id)
+runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
 
-makeCFG :: ContractDefinition -> GlobalL CFG
-makeCFG cd = do
-  runCFGBuildT (buildCFG cd)
+runCairoSemanticsT :: SemanticsEnv -> CairoSemanticsT m a -> GlobalT m Text
+runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder id)
 
-makeModules :: ContractDefinition -> GlobalL [Module]
-makeModules cd = do
-  cfg <- makeCFG cd
-  pure (runTraversalL (traverseCFG sources cfg))
+throw :: Text -> GlobalT m a
+throw t = liftF' (Throw t)
+
+makeCFG :: ContractDefinition -> [LabeledInst] -> GlobalL CFG
+makeCFG cd labeledInsts = runCFGBuildT (buildCFG cd labeledInsts)
+
+makeModules :: ContractDefinition -> CFG -> GlobalL [Module]
+makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
  where
-  sources = cd_program cd & p_identifiers & Map.elems & mapMaybe getFunctionPc & coerce
+  sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
+  preConds = cd ^. cdChecks . cPreConds
+  takeSourceAndPre (name, idef) = do
+    pc <- getFunctionPc idef
+    let pre = preConds ^. at name . non SMT.true
+    pure (Label pc, pre)
 
-data Module = Module {m_pre :: TSExpr Bool, m_post :: TSExpr Bool, m_prog :: [Instruction]}
-  deriving (Show)
+makeSMT2 :: SemanticsEnv -> Module -> GlobalL Text
+makeSMT2 env = runCairoSemanticsT env . encodeSemantics
 
-type TraversalL = WriterT (DList Module) (State (Set Label))
+produceSMT2Models :: ContractDefinition -> GlobalL [Text]
+produceSMT2Models cd = do
+  insts <- readAllInstructions (p_code (cd_program cd))
+  let labeledInsts = labelInsructions insts
+  cfg <- makeCFG cd labeledInsts
+  modules <- makeModules cd cfg
+  let semanticsEnv = mkSemanticsEnv cd labeledInsts
+  traverse (makeSMT2 semanticsEnv) modules
 
-runTraversalL :: TraversalL a -> [Module]
-runTraversalL = toList . flip evalState Set.empty . execWriterT
-
-emitModule :: Module -> TraversalL ()
-emitModule = tell . D.singleton
-
--- | Register the label as visited and return if it was visited before.
-registerLabel :: Label -> TraversalL Bool
-registerLabel l = do
-  visited <- get
-  put (Set.insert l visited)
-  pure (Set.member l visited)
-
-traverseCFG :: [Label] -> CFG -> TraversalL ()
-traverseCFG sources cfg = for_ sources $ \l ->
-  let pre = SMT.and (cfg_assertions cfg ^. ix l) in visitArcs [] pre l
+mkSemanticsEnv :: ContractDefinition -> [LabeledInst] -> SemanticsEnv
+mkSemanticsEnv cd labeledInsts =
+  SemanticsEnv
+    { se_pres = Map.fromList [(pc, pre) | (pc, fun) <- funByCall, Just pre <- [getPre fun]]
+    , se_posts = Map.fromList [(pc, post) | (pc, fun) <- funByCall, Just post <- [getPost fun]]
+    }
  where
-  visit :: [Instruction] -> TSExpr Bool -> Label -> TSExpr Bool -> TraversalL ()
-  visit acc pre l test = do
-    isVisited <- registerLabel l
-    case cfg_assertions cfg ^. ix l of
-      [] | test == SMT.true -> unless isVisited (visitArcs acc pre l)
-      conjuncts -> do
-        emitModule (Module pre (test .-> SMT.and conjuncts) (toList acc))
-        unless isVisited (visitArcs [] (SMT.and conjuncts) l)
-  visitArcs acc pre l = do
-    for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
-      visit (insts <> acc) pre lTo test
+  pcToFun = IntMap.fromList [(pc, fun) | (fun, idef) <- identifiers, Just pc <- [getFunctionPc idef]]
+  identifiers = Map.toList (p_identifiers (cd_program cd))
+  getPre name = cd ^. cdChecks . cPreConds . at name
+  getPost name = cd ^. cdChecks . cPostConds . at name
+  funByCall =
+    [ (pc, fun)
+    | (pc, inst) <- labeledInsts
+    , Just callDst <- [callDestination (coerce pc) inst]
+    , Just fun <- [pcToFun ^. at callDst]
+    ]
