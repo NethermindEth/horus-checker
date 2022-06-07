@@ -7,11 +7,13 @@ module Horus.Util
   , Box (..)
   , topmostStepFT
   , appendList
+  , tShow
   )
 where
 
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Text (Text, pack)
 
 fieldPrime :: Integer
 fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
@@ -31,3 +33,6 @@ topmostStepFT ft = runFT ft (const (pure Nothing)) (\_ step -> pure (Just (Box s
 
 appendList :: NonEmpty a -> [a] -> NonEmpty a
 appendList (x :| xs) ys = x :| xs <> ys
+
+tShow :: Show a => a -> Text
+tShow = pack . show

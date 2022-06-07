@@ -1,8 +1,18 @@
-module Horus.ContractDefinition (ContractDefinition (..), Checks (..)) where
+module Horus.ContractDefinition
+  ( ContractDefinition (..)
+  , Checks (..)
+  , cdProgram
+  , cdChecks
+  , cPreConds
+  , cPostConds
+  , cInvariants
+  )
+where
 
 import Data.Aeson (FromJSON (..), withObject, withText, (.:))
 import Data.Coerce (coerce)
 import Data.Map (Map)
+import Lens.Micro (Lens')
 
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
@@ -14,11 +24,26 @@ data ContractDefinition = ContractDefinition
   }
   deriving (Show)
 
+cdProgram :: Lens' ContractDefinition Program
+cdProgram lMod g = fmap (\x -> g{cd_program = x}) (lMod (cd_program g))
+
+cdChecks :: Lens' ContractDefinition Checks
+cdChecks lMod g = fmap (\x -> g{cd_checks = x}) (lMod (cd_checks g))
+
 data Checks = Checks
   { c_preConds :: Map ScopedName (TSExpr Bool)
   , c_postConds :: Map ScopedName (TSExpr Bool)
   , c_invariants :: Map ScopedName (TSExpr Bool)
   }
+
+cPreConds :: Lens' Checks (Map ScopedName (TSExpr Bool))
+cPreConds lMod g = fmap (\x -> g{c_preConds = x}) (lMod (c_preConds g))
+
+cPostConds :: Lens' Checks (Map ScopedName (TSExpr Bool))
+cPostConds lMod g = fmap (\x -> g{c_postConds = x}) (lMod (c_postConds g))
+
+cInvariants :: Lens' Checks (Map ScopedName (TSExpr Bool))
+cInvariants lMod g = fmap (\x -> g{c_invariants = x}) (lMod (c_invariants g))
 
 instance FromJSON ContractDefinition where
   parseJSON = withObject "ContractDefinition" $ \v ->
