@@ -1,5 +1,3 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
-
 module Horus.CFGBuild
   ( CFGBuildT (..)
   , addAssertion
@@ -7,41 +5,40 @@ module Horus.CFGBuild
   , buildCFG
   , Label (..)
   , CFGBuildF (..)
+  , LabeledInst
   )
 where
 
-import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Coerce (coerce)
 import Data.Foldable (for_, toList)
 import Data.Function ((&))
 import Data.Functor.Identity (Identity)
-import qualified Data.IntMap as IntMap (assocs)
-import Data.List (union)
+import qualified Data.IntMap as IntMap (toList)
+import Data.List (sort, union)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty (last, reverse, (<|))
 import Data.Map (Map)
-import qualified Data.Map as Map (assocs, elems, fromList, fromListWith, (!), (!?))
+import qualified Data.Map as Map (elems, fromList, fromListWith, toList, (!))
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
+import Lens.Micro (at, ix, non, (^.))
+import Lens.Micro.GHC ()
 
 import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
-import Horus.Instruction (Instruction (..), OpCode (..), PcUpdate (..), instructionSize, readAllInstructions)
+import Horus.Instruction (Instruction (..), OpCode (..), PcUpdate (..), instructionSize)
+import Horus.Label (Label (..), LabeledInst, moveLabel)
 import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
 import Horus.SMTUtil (inferJnzCondition)
 import Horus.SW.IdentifierDefinition (getFunctionPc, getLabelPc)
-import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (Box (..), appendList, safeLast, topmostStepFT, whenJust)
 import SimpleSMT.Typed (TSExpr)
-import qualified SimpleSMT.Typed as SMT (not, true)
-
-newtype Label = Label Int
-  deriving (Eq, Ord, Show)
+import qualified SimpleSMT.Typed as SMT (true)
 
 data CFGBuildF a
   = AddVertex Label a
-  | AddArc Label Label [Instruction] (TSExpr Bool) a
+  | AddArc Label Label [LabeledInst] (TSExpr Bool) a
   | AddAssertion Label (TSExpr Bool) a
   | Throw Text
   deriving (Functor)
@@ -56,7 +53,7 @@ liftF' = CFGBuildT . liftF
 addVertex :: Label -> CFGBuildT m ()
 addVertex l = liftF' (AddVertex l ())
 
-addArc :: Label -> Label -> [Instruction] -> TSExpr Bool -> CFGBuildT m ()
+addArc :: Label -> Label -> [LabeledInst] -> TSExpr Bool -> CFGBuildT m ()
 addArc lFrom lTo insts test = liftF' (AddArc lFrom lTo insts test ())
 
 addAssertion :: Label -> TSExpr Bool -> CFGBuildT m ()
@@ -73,24 +70,24 @@ instance Monad m => MonadError Text (CFGBuildT m) where
       Just (Box (Throw t)) -> handler t
       _ -> m
 
-buildCFG :: ContractDefinition -> CFGBuildL ()
-buildCFG cd = do
-  insts <- readAllInstructions (p_code (cd_program cd))
-  let labeledInsts = labelInsructions insts
+buildCFG :: ContractDefinition -> [LabeledInst] -> CFGBuildL ()
+buildCFG cd labeledInsts = do
   buildFrame labeledInsts identifiers
-  let retsByFuns = mapFunsToRets funByLabel labeledInsts
-  addAssertions retsByFuns (cd_checks cd) identifiers
+  let retsByFun = mapFunsToRets funByLabel labeledInsts
+  addAssertions retsByFun (cd_checks cd) identifiers
  where
   identifiers = p_identifiers (cd_program cd)
   funByLabel =
     Map.fromList
-      [ (Label pc, fun)
-      | (pc, ilInfo) <- IntMap.assocs (di_instructionLocations debugInfo)
-      , Just fun <- [safeLast (il_accessibleScopes ilInfo)]
+      [ (Label pc, Label funPc)
+      | (pc, ilInfo) <- IntMap.toList (di_instructionLocations debugInfo)
+      , Just name <- [safeLast (il_accessibleScopes ilInfo)]
+      , Just funPc <- [getFunctionPc (identifiers Map.! name)]
       ]
   debugInfo = p_debugInfo (cd_program cd)
 
 newtype Segment = Segment (NonEmpty (Int, Instruction))
+  deriving (Show)
 
 segmentLabel :: Segment -> Label
 segmentLabel (Segment ((l, _) :| _)) = Label l
@@ -100,20 +97,13 @@ nextSegmentLabel s = Label (lastLabel + instructionSize lastInst)
  where
   (lastLabel, lastInst) = NonEmpty.last (coerce s)
 
-segmentInsts :: Segment -> [Instruction]
-segmentInsts (Segment ne) = toList ne & map snd
+segmentInsts :: Segment -> [LabeledInst]
+segmentInsts (Segment ne) = coerce (toList ne)
 
 isControlFlow :: Instruction -> Bool
 isControlFlow i = i_opCode i == Call || i_pcUpdate i /= Regular
 
-type LabeledInsts = [(Int, Instruction)]
-
-labelInsructions :: [Instruction] -> LabeledInsts
-labelInsructions insts = zip pcs insts
- where
-  pcs = scanl (+) 0 (map instructionSize insts)
-
-buildFrame :: LabeledInsts -> Identifiers -> CFGBuildL ()
+buildFrame :: [LabeledInst] -> Identifiers -> CFGBuildL ()
 buildFrame rows identifiers = do
   let segments = breakIntoSegments labels rows
   for_ segments $ \s -> do
@@ -123,21 +113,22 @@ buildFrame rows identifiers = do
   funLabels = identifiers & Map.elems & mapMaybe getFunctionPc & coerce
   namedLabels = identifiers & Map.elems & mapMaybe getLabelPc & coerce
   inducedLabels =
-    [ Label (pc + instructionSize inst)
+    [ moveLabel pc (instructionSize inst)
     | (pc, inst) <- rows
-    , isControlFlow inst
+    , isControlFlow inst && not (isCall inst)
     ]
-  labels = funLabels `union` namedLabels `union` inducedLabels
+  retLabels = [pc | (pc, inst) <- rows, isRet inst]
+  labels = sort (funLabels `union` namedLabels `union` inducedLabels `union` retLabels)
 
-breakIntoSegments :: [Label] -> [(Int, Instruction)] -> [Segment]
+breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
 breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
  where
   go gAcc lAcc [] rest = reverse (NonEmpty.reverse lAcc `appendList` rest : gAcc)
   go gAcc lAcc (_ : _) [] = reverse (NonEmpty.reverse lAcc : gAcc)
   go gAcc lAcc (l : ls) (i@(pc, _) : is)
-    | l < Label pc = go gAcc lAcc ls (i : is)
-    | l == Label pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
+    | l < pc = go gAcc lAcc ls (i : is)
+    | l == pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
     | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
 
 addArcsFrom :: Segment -> CFGBuildL ()
@@ -146,7 +137,8 @@ addArcsFrom s
       let lTo = nextSegmentLabel s
       addArc lFrom lTo insts SMT.true
   | Call <- i_opCode endInst = do
-      throw "function calls are not implemented"
+      let lTo = nextSegmentLabel s
+      addArc lFrom lTo insts SMT.true
   | Ret <- i_opCode endInst = do
       pure ()
   | JumpAbs <- i_pcUpdate endInst = do
@@ -159,7 +151,10 @@ addArcsFrom s
       let condition = inferJnzCondition endInst
           lTo1 = nextSegmentLabel s
           lTo2 = Label (endPc + fromInteger (i_imm endInst))
-      addArc lFrom lTo1 insts (SMT.not condition)
+      -- We don't remove the last inst (jnz), so that ap is updated. Also, we dont' need
+      -- to put a condition on the arc, because JNZ's condition is always asserted to be
+      -- zero by the semantics modeler.
+      addArc lFrom lTo1 insts SMT.true
       addArc lFrom lTo2 (init insts) condition
   | otherwise = pure ()
  where
@@ -167,28 +162,33 @@ addArcsFrom s
   (endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
 
-addAssertions :: Map ScopedName [Label] -> Checks -> Identifiers -> CFGBuildL ()
+addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildL ()
 addAssertions retsByFun checks identifiers = do
-  for_ (Map.assocs identifiers) $ \(idName, def) -> do
-    whenJust (getPc def) (\pc -> handleLabel (Label pc) idName)
- where
-  getPc x = getFunctionPc x <|> getLabelPc x
-  handleLabel label idName = do
-    whenJust (c_preConds checks Map.!? idName) (label `addAssertion`)
-    whenJust (c_postConds checks Map.!? idName) $ \post ->
-      for_ (retsByFun Map.! idName) (`addAssertion` post)
-    whenJust (c_invariants checks Map.!? idName) (label `addAssertion`)
+  for_ (Map.toList identifiers) $ \(idName, def) -> do
+    whenJust (getFunctionPc def) $ \pc -> do
+      let post = c_postConds checks ^. at idName . non SMT.true
+      for_ (retsByFun ^. ix (Label pc)) (`addAssertion` post)
+    whenJust (getLabelPc def) $ \pc ->
+      whenJust (c_invariants checks ^. at idName) (Label pc `addAssertion`)
 
-mapFunsToRets :: Map Label ScopedName -> LabeledInsts -> Map ScopedName [Label]
+{- | Map each function label to a list of pcs of its 'rets'.
+
+ Note, there might be no rets in a function, for example, when it ends with an endless
+ loop.
+-}
+mapFunsToRets :: Map Label Label -> [LabeledInst] -> Map Label [Label]
 mapFunsToRets funByLabel rows =
   Map.fromListWith
     (++)
-    [ (funByLabel Map.! l, [l])
+    [ (funByLabel Map.! pc, [pc])
     | (pc, inst) <- rows
-    , let l = Label pc
     , isRet inst
     ]
 
 isRet :: Instruction -> Bool
 isRet Instruction{i_opCode = Ret} = True
 isRet _ = False
+
+isCall :: Instruction -> Bool
+isCall Instruction{i_opCode = Call} = True
+isCall _ = False
