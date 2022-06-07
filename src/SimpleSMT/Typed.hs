@@ -33,6 +33,7 @@ import SimpleSMT (SExpr, readSExpr)
 import qualified SimpleSMT as SMT
 
 newtype TSExpr a = TSExpr SExpr
+  deriving newtype (Eq)
 
 instance Show (TSExpr a) where
   showsPrec _ = coerce SMT.showsSExpr
