@@ -13,6 +13,7 @@ common deps
       FlexibleInstances
       GADTs
       GeneralizedNewtypeDeriving
+      MultiParamTypeClasses
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving
@@ -36,12 +37,16 @@ library
     exposed-modules:
       Horus.Global
       Horus.Global.Runner
+      Horus.Util
     other-modules:
       Horus.CFGBuild
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
+      Horus.CairoSemantics.Runner
       Horus.ContractDefinition
       Horus.Instruction
+      Horus.Label
+      Horus.Module
       Horus.Program
       Horus.SMTUtil
       Horus.SW.CairoType
@@ -49,7 +54,6 @@ library
       Horus.SW.Lexer
       Horus.SW.Parser
       Horus.SW.ScopedName
-      Horus.Util
       SimpleSMT.Typed
     build-depends:
       aeson,
@@ -62,6 +66,7 @@ library
       microlens-ghc,
       microlens-mtl,
       mtl,
+      pretty-simple,
       simple-smt,
       text,
       transformers,
