@@ -87,27 +87,34 @@ false = coerce SMT.bool False
 not :: TSExpr Bool -> TSExpr Bool
 not = coerce SMT.not
 
+infix 4 .<
 (.<) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
 (.<) = coerce SMT.lt
 
+infix 4 .<=
 (.<=) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
 (.<=) = coerce SMT.leq
 
+infix 4 .==
 (.==) :: TSExpr a -> TSExpr a -> TSExpr Bool
 (.==) = coerce SMT.eq
 
+infix 4 ./=
 (./=) :: TSExpr a -> TSExpr a -> TSExpr Bool
 (./=) a b = coerce (SMT.distinct [coerce a, coerce b])
 
+infixr 3 .&&
 (.&&) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.&&) = coerce SMT.and
 
 and :: [TSExpr Bool] -> TSExpr Bool
 and = coerce (SMT.fun "and")
 
+infixr 2 .||
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.||) = coerce SMT.or
 
+infixr 1 .->
 (.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.->) = coerce SMT.implies
 
