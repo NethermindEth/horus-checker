@@ -16,7 +16,7 @@ import Lens.Micro (Lens')
 
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
-import SimpleSMT.Typed (TSExpr, parseAssertion, ppTSExpr)
+import SimpleSMT.Typed (TSExpr, parseAssertion)
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
@@ -52,15 +52,13 @@ instance FromJSON ContractDefinition where
       <*> v .: "checks"
 
 newtype HSExpr a = HSExpr (TSExpr a)
+  deriving newtype (Show)
 
 instance FromJSON (HSExpr Bool) where
   parseJSON = withText "HSExpr" $ \t ->
     case parseAssertion t of
       Just tsexpr -> pure (HSExpr tsexpr)
       _ -> fail "Can't parse an smt2 sexp"
-
-instance Show (HSExpr a) where
-  showsPrec _ (HSExpr sexpr) = ppTSExpr sexpr
 
 elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (TSExpr a)
 elimHSExpr = coerce
