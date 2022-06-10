@@ -5,6 +5,7 @@ module SimpleSMT.Typed
   , parseAssertion
   , parseArithmetic
   , ppTSExpr
+  , showTSExpr
   , function
   , const
   , mod
@@ -19,7 +20,6 @@ module SimpleSMT.Typed
   , (.->)
   , (.<)
   , (.<=)
-  , showsTSExpr
   , substitute
   -- Statements
   , ppTSStmt
@@ -57,8 +57,11 @@ parseArithmetic t = case readSExpr (unpack t) of
   Just (sexpr, "") -> pure (TSExpr sexpr) -- TODO assert that the type is integer
   _ -> Nothing
 
-ppTSExpr :: TSExpr a -> ShowS
-ppTSExpr = coerce SMT.ppSExpr
+ppTSExpr :: TSExpr a -> Text
+ppTSExpr (TSExpr s) = pack (SMT.ppSExpr s "")
+
+showTSExpr :: TSExpr a -> Text
+showTSExpr (TSExpr s) = pack (SMT.showsSExpr s "")
 
 const :: Text -> TSExpr a
 const = function
@@ -126,9 +129,6 @@ infixr 2 .||
 infixr 1 .->
 (.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
 (.->) = coerce SMT.implies
-
-showsTSExpr :: TSExpr a -> ShowS
-showsTSExpr = coerce SMT.showsSExpr
 
 substitute :: String -> TSExpr a -> TSExpr b -> TSExpr b
 substitute = coerce untypedSubstitute
