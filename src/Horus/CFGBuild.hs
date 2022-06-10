@@ -14,7 +14,6 @@ import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Coerce (coerce)
 import Data.Foldable (for_, toList)
 import Data.Function ((&))
-import Data.Functor.Identity (Identity)
 import qualified Data.IntMap as IntMap (toList)
 import Data.List (sort, union)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -45,7 +44,6 @@ data CFGBuildF a
 
 newtype CFGBuildT m a = CFGBuildT {runCFGBuildT :: FT CFGBuildF m a}
   deriving newtype (Functor, Applicative, Monad, MonadTrans)
-type CFGBuildL = CFGBuildT Identity
 
 liftF' :: CFGBuildF a -> CFGBuildT m a
 liftF' = CFGBuildT . liftF
@@ -70,7 +68,7 @@ instance Monad m => MonadError Text (CFGBuildT m) where
       Just (Box (Throw t)) -> handler t
       _ -> m
 
-buildCFG :: ContractDefinition -> [LabeledInst] -> CFGBuildL ()
+buildCFG :: ContractDefinition -> [LabeledInst] -> CFGBuildT m ()
 buildCFG cd labeledInsts = do
   buildFrame labeledInsts identifiers
   let retsByFun = mapFunsToRets funByLabel labeledInsts
@@ -103,7 +101,7 @@ segmentInsts (Segment ne) = coerce (toList ne)
 isControlFlow :: Instruction -> Bool
 isControlFlow i = i_opCode i == Call || i_pcUpdate i /= Regular
 
-buildFrame :: [LabeledInst] -> Identifiers -> CFGBuildL ()
+buildFrame :: [LabeledInst] -> Identifiers -> CFGBuildT m ()
 buildFrame rows identifiers = do
   let segments = breakIntoSegments labels rows
   for_ segments $ \s -> do
@@ -131,7 +129,7 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
     | l == pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
     | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
 
-addArcsFrom :: Segment -> CFGBuildL ()
+addArcsFrom :: Segment -> CFGBuildT m ()
 addArcsFrom s
   | not (isControlFlow endInst) = do
       let lTo = nextSegmentLabel s
@@ -162,7 +160,7 @@ addArcsFrom s
   (endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
 
-addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildL ()
+addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildT m ()
 addAssertions retsByFun checks identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> do
     whenJust (getFunctionPc def) $ \pc -> do
