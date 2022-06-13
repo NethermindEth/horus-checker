@@ -4,6 +4,7 @@ module Horus.CairoSemantics.Runner
   ( SemanticsEnv (..)
   , runT
   , run
+  , MemoryVariable (..)
   , ConstraintsState (..)
   , makeModel
   , debugFriendlyModel
@@ -32,14 +33,20 @@ import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
 import qualified SimpleSMT.Typed as SMT (TSExpr (True), assert, const, declareInt, ppTSExpr, showTSExpr)
 
+data MemoryVariable = MemoryVariable
+  { mv_varName :: Text
+  , mv_addrName :: Text
+  , mv_addrExpr :: TSExpr Integer
+  }
+
 data ConstraintsState = ConstraintsState
-  { cs_memoryVariables :: [(Text, TSExpr Integer)]
+  { cs_memoryVariables :: [MemoryVariable]
   , cs_exprs :: [TSExpr Bool]
   , cs_decls :: [Text]
   , cs_nameCounter :: Int
   }
 
-csMemoryVariables :: Lens' ConstraintsState [(Text, TSExpr Integer)]
+csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
 csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
 csExprs :: Lens' ConstraintsState [TSExpr Bool]
@@ -88,12 +95,13 @@ interpret = iterTM exec
     cont (SMT.const name)
   exec (DeclareMem address cont) = do
     memVars <- use csMemoryVariables
-    case List.find ((address ==) . snd) memVars of
-      Just (name, _) -> cont (SMT.const name)
+    case List.find ((address ==) . mv_addrExpr) memVars of
+      Just MemoryVariable{..} -> cont (SMT.const mv_varName)
       Nothing -> do
         freshCount <- csNameCounter <%= (+ 1)
         let name = "MEM!" <> tShow freshCount
-        csMemoryVariables %= ((name, address) :)
+        let addrName = "ADDR!" <> tShow freshCount
+        csMemoryVariables %= (MemoryVariable name addrName address :)
         cont (SMT.const name)
   exec (GetPreByCall label cont) = do
     pres <- asks se_pres
@@ -109,23 +117,24 @@ debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
   Text.intercalate "\n" (memoryPairs <> map SMT.ppTSExpr cs_exprs)
  where
-  memoryPairs = [name <> "=[" <> SMT.showTSExpr addr <> "]" | (name, addr) <- cs_memoryVariables]
+  memoryPairs = [mv_varName <> "=[" <> SMT.showTSExpr mv_addrExpr <> "]" | MemoryVariable{..} <- cs_memoryVariables]
 
 makeModel :: Text -> ConstraintsState -> Text
 makeModel rawSmt ConstraintsState{..} =
-  let names = "prime" : cs_decls <> map fst cs_memoryVariables
+  let names = "prime" : cs_decls <> map mv_varName cs_memoryVariables <> map mv_addrName cs_memoryVariables
       decls = map SMT.declareInt names
       feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- tail names]
       memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-      restrictions = concat [feltRestrictions, memRestrictions, cs_exprs]
+      addrDefinitions = [SMT.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
+      restrictions = concat [feltRestrictions, memRestrictions, addrDefinitions, cs_exprs]
    in (decls <> map SMT.assert restrictions)
         & map showTSStmt
         & (rawSmt :)
         & Text.intercalate "\n"
  where
   restrictMemTail [] = []
-  restrictMemTail ((var0, addr0) : rest) =
-    [addr0 .== addr .-> SMT.const var0 .== SMT.const var | (var, addr) <- rest]
+  restrictMemTail (MemoryVariable var _ addr : rest) =
+    [addr .== mv_addrExpr .-> SMT.const var .== SMT.const mv_varName | MemoryVariable{..} <- rest]
 
 runImplT :: Monad m => SemanticsEnv -> ImplT m a -> m ConstraintsState
 runImplT env (ImplT m) = runReaderT m env & flip execStateT emptyConstraintsState
