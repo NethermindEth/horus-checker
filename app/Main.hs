@@ -3,12 +3,10 @@ module Main (main) where
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON, eitherDecodeFileStrict)
-import Data.Foldable (for_)
+import Data.Foldable (traverse_)
 import Data.Text (Text, pack, unpack)
-import qualified Data.Text.IO as Text (writeFile)
 import System.Directory (createDirectoryIfMissing)
 import System.Environment (getArgs)
-import System.FilePath ((</>))
 
 import Horus.Global (Config (..), produceSMT2Models)
 import qualified Horus.Global.Runner as Global (runT)
@@ -22,8 +20,7 @@ main' = do
   contract <- eioDecodeFileStrict filename
   models <- Global.runT config (produceSMT2Models contract)
   liftIO (createDirectoryIfMissing True dir)
-  for_ (zip [0 :: Int ..] models) $ \(i, model) -> liftIO $ do
-    Text.writeFile (dir </> "modelNo" <> show i <> ".smt2") model
+  liftIO $ traverse_ print models
 
 parseArgs :: [String] -> EIO (String, String, Bool)
 parseArgs [filename, dir, "-v"] = pure (filename, dir, True)
