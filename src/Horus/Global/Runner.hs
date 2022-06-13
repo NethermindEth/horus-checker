@@ -2,7 +2,7 @@ module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad ((<=<))
 import Control.Monad.Except (ExceptT, MonadError, liftEither, runExceptT, throwError)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
@@ -13,6 +13,8 @@ import Text.Pretty.Simple (pPrint)
 import qualified Horus.CFGBuild.Runner as CFGBuild (interpret, runImplT)
 import qualified Horus.CairoSemantics.Runner as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
+
+import Z3.Monad (evalZ3)
 
 newtype ImplT m a = ImplT (ReaderT Config (ExceptT Text m) a)
   deriving newtype
@@ -37,6 +39,7 @@ interpret = iterTM exec . runGlobalT
   exec (RunCairoSemanticsT env builder cont) = do
     lift (CairoSemantics.runT env builder) >>= cont
   exec (AskConfig cont) = ask >>= cont
+  exec (RunZ3 z3 cont) = liftIO (evalZ3 z3) >>= cont
   exec (Print' what cont) = pPrint what >> cont
   exec (Throw t) = throwError t
 
