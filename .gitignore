@@ -1,3 +1,5 @@
 .stack-work/
 .vscode/
 dist-newstyle/
+**/__pycache__
+tests/resources/golden/**.out
