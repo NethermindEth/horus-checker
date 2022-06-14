@@ -1,0 +1,21 @@
+#!/usr/bin/env sh
+
+test_case() {
+    base="$1"
+    test_file="${base}.cairo"
+    printf "# checking %s\n" "$test_file" >&3
+    gold_file="${base}.gold"
+    temp_file="${base}.temp"
+
+    python ./test-lib/tests.py \
+           --stop_toolchain_at verify \
+           -smt MathS -smt Z3 \
+           -t "$test_file" > "$temp_file"
+    diff "$gold_file" "$temp_file" \
+         --unified \
+         --ignore-trailing-space \
+         --ignore-blank-lines \
+         --new-file # treat absent files as empty
+    rm "$temp_file"
+    rm "$base.out" -rf
+}
