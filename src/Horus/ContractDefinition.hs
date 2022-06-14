@@ -9,9 +9,10 @@ module Horus.ContractDefinition
   )
 where
 
-import Data.Aeson (FromJSON (..), withObject, withText, (.:))
+import Data.Aeson (FromJSON (..), withObject, withText, (.!=), (.:), (.:?))
 import Data.Coerce (coerce)
 import Data.Map (Map)
+import qualified Data.Map as Map (empty)
 import Lens.Micro (Lens')
 
 import Horus.Program (Program)
@@ -45,11 +46,14 @@ cPostConds lMod g = fmap (\x -> g{c_postConds = x}) (lMod (c_postConds g))
 cInvariants :: Lens' Checks (Map ScopedName (TSExpr Bool))
 cInvariants lMod g = fmap (\x -> g{c_invariants = x}) (lMod (c_invariants g))
 
+emptyChecks :: Checks
+emptyChecks = Checks Map.empty Map.empty Map.empty
+
 instance FromJSON ContractDefinition where
   parseJSON = withObject "ContractDefinition" $ \v ->
     ContractDefinition
       <$> v .: "program"
-      <*> v .: "checks"
+      <*> v .:? "checks" .!= emptyChecks
 
 newtype HSExpr a = HSExpr (TSExpr a)
   deriving newtype (Show)

@@ -35,19 +35,19 @@ library
     hs-source-dirs:          src
     build-tool-depends:      alex:alex, happy:happy
     exposed-modules:
+      Horus.ContractDefinition
       Horus.Global
       Horus.Global.Runner
+      Horus.Instruction
+      Horus.Label
+      Horus.Program
       Horus.Util
     other-modules:
       Horus.CFGBuild
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
-      Horus.ContractDefinition
-      Horus.Instruction
-      Horus.Label
       Horus.Module
-      Horus.Program
       Horus.SMTUtil
       Horus.SW.CairoType
       Horus.SW.IdentifierDefinition
@@ -82,4 +82,14 @@ executable horus-check
       horus-check,
       mtl,
       pretty-simple,
+      text,
+
+executable horus-disasm
+    import:                  deps
+    hs-source-dirs:          app/disasm
+    main-is:                 Main.hs
+    build-depends:
+      aeson,
+      horus-check,
+      mtl,
       text,

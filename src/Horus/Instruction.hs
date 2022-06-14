@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Horus.Instruction
   ( Instruction (..)
   , PointerRegister (..)
@@ -11,6 +13,7 @@ module Horus.Instruction
   , readAllInstructions
   , instructionSize
   , callDestination
+  , toSemiAsm
   )
 where
 
@@ -19,7 +22,7 @@ import Data.Bits
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 
-import Horus.Util (fieldPrime)
+import Horus.Util (fieldPrime, tShow)
 
 dstRegBit, op0RegBit, op1ImmBit, op1FpBit, op1ApBit :: Int
 resAddBit, resMulBit, pcJumpAbsBit, pcJumpRelBit, pcJnzBit :: Int
@@ -107,7 +110,6 @@ readInstruction (i :| is) = do
       (flags `testBit` opcodeAssertEqBit)
   res <-
     resMap
-      pcUpdate
       (flags `testBit` resAddBit)
       (flags `testBit` resMulBit)
   apUpdate <-
@@ -124,10 +126,9 @@ readInstruction (i :| is) = do
       (if flags `testBit` op0RegBit then FramePointer else AllocationPointer)
       op1
       res
-      <$> ( case (pcUpdate, res) of
-              (Jnz, Unconstrained) -> return pcUpdate
-              (Jnz, _) -> throwError "JNZ opcode means res must be UNCONSTRAINED"
-              (_, _) -> return pcUpdate
+      <$> ( case pcUpdate of
+              Jnz | res /= Op1 || opcode /= Nop || apUpdate == AddRes -> throwError "Invalid JNZ"
+              _ -> return pcUpdate
           )
       <*> ( case (opcode, apUpdate) of
               (Call, NoUpdate) -> return Add2
@@ -153,12 +154,11 @@ readInstruction (i :| is) = do
   op1Map False False True = return $ RegisterSource FramePointer
   op1Map False False False = return Op0
   op1Map _ _ _ = throwError "wrong op1 code"
-  resMap :: PcUpdate -> Bool -> Bool -> m ResLogic
-  resMap _ True False = return Add
-  resMap _ False True = return Mult
-  resMap Jnz False False = return Unconstrained
-  resMap _ False False = return Op1
-  resMap _ _ _ = throwError "wrong res code"
+  resMap :: Bool -> Bool -> m ResLogic
+  resMap True False = return Add
+  resMap False True = return Mult
+  resMap False False = return Op1
+  resMap True True = return Unconstrained
   pcMap :: Bool -> Bool -> Bool -> m PcUpdate
   pcMap True False False = return JumpAbs
   pcMap False True False = return JumpRel
@@ -181,3 +181,43 @@ toSigned :: Integer -> Integer
 toSigned x
   | x <= fieldPrime `div` 2 = x
   | otherwise = x - fieldPrime
+
+toSemiAsm :: MonadError Text m => Instruction -> m Text
+toSemiAsm Instruction{..} = do
+  case i_opCode of
+    Ret -> pure "ret"
+    Call -> case i_pcUpdate of
+      JumpAbs -> withRes ("call abs " <>)
+      JumpRel -> withRes ("call rel " <>)
+      other -> throwError ("Unexpected PC update for a call: " <> tShow other)
+    AssertEqual -> withRes (\res -> dst <> " = " <> res <> mbApPP)
+    Nop -> case i_pcUpdate of
+      JumpAbs -> withRes (\res -> "jmp abs " <> res <> mbApPP)
+      JumpRel -> withRes (\res -> "jmp rel" <> res <> mbApPP)
+      Jnz -> withRes (\res -> "jmp rel " <> res <> " if " <> dst <> " != 0" <> mbApPP)
+      Regular -> case i_apUpdate of
+        AddRes -> withRes ("ap += " <>)
+        other -> throwError ("Unexpected AP update for a NOP, non-jump opcode: " <> tShow other)
+ where
+  withRes f = fmap f getRes
+  dst = mem (printReg i_dstRegister `add` i_dstOffset)
+  mbApPP = case i_apUpdate of
+    Add1 -> "; ap++"
+    _ -> ""
+  getRes = case i_resLogic of
+    Op1 -> pure op1
+    Add -> pure (op0 <> " + " <> op1)
+    Mult -> pure (op0 <> " * " <> op1)
+    Unconstrained -> throwError "Don't use the result"
+  mem addr = "[" <> addr <> "]"
+  printReg AllocationPointer = "ap"
+  printReg FramePointer = "fp"
+  op1 = case i_op1Source of
+    Op0 -> mem (op0 `add` i_op1Offset)
+    RegisterSource reg -> mem (printReg reg `add` i_op1Offset)
+    Imm -> tShow i_imm
+  op0 = mem (printReg i_op0Register `add` i_op0Offset)
+  op `add` v
+    | v < 0 = op <> " - " <> tShow (-v)
+    | v == 0 = op
+    | otherwise = op <> " + " <> tShow v
