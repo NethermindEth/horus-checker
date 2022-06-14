@@ -1,0 +1,20 @@
+Timeout = 5000ms.
+Seed    = random.
+Smts    = ['MathS', 'Z3'].
+Toolchain stopping at: verify
+Generating segments...
+Running SMTs...
+Execution policy: one process for each SMT, segments serially, files serially.
+Analyzing SMT outputs...
+Results:
+Program: resources/golden/func_succ_pred_id_pre.out
+MathS: unsat
+MathS: unsat
+MathS: unsat
+MathS: unsat
+MathS: unsat
+Z3: unsat
+Z3: unsat
+Z3: unsat
+Z3: unsat
+Z3: unsat
