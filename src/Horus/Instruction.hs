@@ -82,7 +82,7 @@ readInstruction (i :| is) = do
   let flags = i `shiftR` (3 * 16)
   let dstEnc = i .&. (2 ^ n16 - 1)
   let op0Enc = (i `shiftR` 16) .&. (2 ^ n16 - 1)
-  let op1Enc = (i `shiftR` 2 * 16) .&. (2 ^ n16 - 1)
+  let op1Enc = (i `shiftR` 32) .&. (2 ^ n16 - 1)
   op1 <-
     op1Map
       (flags `testBit` op1ImmBit)
