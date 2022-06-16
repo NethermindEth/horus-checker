@@ -13,7 +13,7 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Function ((&))
-import qualified Data.Map as Map (fromList, toList)
+import qualified Data.Map as Map (fromList, map, toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Lens.Micro (at, non, (^.))
@@ -31,7 +31,7 @@ import Horus.CairoSemantics.Runner
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Module (Module, runModuleL, traverseCFG)
-import Horus.Program (p_code, p_identifiers)
+import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc)
 import Horus.Util (Box (..), topmostStepFT)
 import qualified SimpleSMT.Typed as SMT (true)
@@ -118,12 +118,15 @@ mkSemanticsEnv cd labeledInsts =
   SemanticsEnv
     { se_pres = Map.fromList [(pc, pre) | (pc, fun) <- funByCall, Just pre <- [getPre fun]]
     , se_posts = Map.fromList [(pc, post) | (pc, fun) <- funByCall, Just post <- [getPost fun]]
+    , se_apTracking = Map.map getTracking instructionLocations
     }
  where
   pcToFun = Map.fromList [(pc, fun) | (fun, idef) <- identifiers, Just pc <- [getFunctionPc idef]]
   identifiers = Map.toList (p_identifiers (cd_program cd))
   getPre name = cd ^. cdChecks . cPreConds . at name
   getPost name = cd ^. cdChecks . cPostConds . at name
+  instructionLocations = di_instructionLocations (p_debugInfo (cd_program cd))
+  getTracking = ftd_apTracking . il_flowTrackingData
   funByCall =
     [ (pc, fun)
     | (pc, inst) <- labeledInsts
