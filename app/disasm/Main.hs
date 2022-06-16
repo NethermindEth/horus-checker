@@ -10,8 +10,8 @@ import qualified Data.Text.IO as Text (putStrLn)
 import System.Environment (getArgs)
 
 import Horus.ContractDefinition (cd_program)
-import Horus.Instruction (readAllInstructions, toSemiAsm)
-import Horus.Label (Label (..), labelInsructions)
+import Horus.Instruction (labelInsructions, readAllInstructions, toSemiAsm)
+import Horus.Label (Label (..))
 import Horus.Program (p_code)
 
 type EIO = ExceptT Text IO
