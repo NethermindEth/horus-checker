@@ -3,7 +3,6 @@ module Horus.SMTUtil
   , ap
   , fp
   , memory
-  , inferJnzCondition
   , apStep
   , fpStep
   , Step
@@ -13,17 +12,8 @@ where
 
 import Data.Text (Text)
 
-import Horus.Instruction (Instruction (..), PointerRegister (..))
-import SimpleSMT.Typed (TSExpr, substitute, (./=))
+import SimpleSMT.Typed (TSExpr, substitute)
 import qualified SimpleSMT.Typed as SMT
-
-inferJnzCondition :: Instruction -> TSExpr Bool
-inferJnzCondition i = memory dstAddr ./= 0
- where
-  reg = case i_dstRegister i of
-    AllocationPointer -> ap
-    FramePointer -> fp
-  dstAddr = (reg + fromInteger (i_dstOffset i)) `SMT.mod` prime
 
 prime :: TSExpr Integer
 prime = SMT.const "prime"
