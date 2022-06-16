@@ -8,15 +8,12 @@ where
 
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
-import Data.Function ((&))
-import Data.Functor ((<&>))
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap (fromDistinctAscList)
 import Data.Map (Map)
-import qualified Data.Map as Map (toAscList)
+import Numeric (readHex)
+
+import Horus.Label (Label (..))
 import Horus.SW.IdentifierDefinition (IdentifierDefinition)
 import Horus.SW.ScopedName (ScopedName)
-import Numeric (readHex)
 
 type Identifiers = Map ScopedName IdentifierDefinition
 
@@ -33,7 +30,7 @@ data Program = Program
   deriving (Show)
 
 data DebugInfo = DebugInfo
-  {di_instructionLocations :: IntMap ILInfo}
+  {di_instructionLocations :: Map Label ILInfo}
   deriving (Show)
 
 data ILInfo = ILInfo
@@ -54,11 +51,7 @@ instance FromJSON Program where
 
 instance FromJSON DebugInfo where
   parseJSON = withObject "debug_info" $ \v ->
-    DebugInfo
-      <$> (v .: "instruction_locations" <&> toIntMap)
-   where
-    toIntMap :: Map Int a -> IntMap a
-    toIntMap m = Map.toAscList m & IntMap.fromDistinctAscList
+    DebugInfo <$> (v .: "instruction_locations")
 
 instance FromJSON ILInfo where
   parseJSON = withObject "ILInfo" $ \v ->
