@@ -20,12 +20,13 @@ import qualified Data.List as List (tails, union)
 import Data.Map (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text (intercalate)
-import Lens.Micro (Lens', at, non, (^.))
+import Lens.Micro (Lens', at, ix, non, (^.), (^?!))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl ((%=), (<%=))
 
 import Horus.CFGBuild (Label)
 import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, CairoSemanticsT)
+import Horus.Program (ApTracking)
 import Horus.SMTUtil (prime)
 import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
@@ -62,6 +63,7 @@ emptyConstraintsState =
 data SemanticsEnv = SemanticsEnv
   { se_pres :: Map Label (TSExpr Bool)
   , se_posts :: Map Label (TSExpr Bool)
+  , se_apTracking :: Map Label ApTracking
   }
 
 newtype ImplT m a = ImplT (ReaderT SemanticsEnv (StateT ConstraintsState m) a)
@@ -94,6 +96,9 @@ interpret = iterTM exec
   exec (GetPostByCall label cont) = do
     posts <- asks se_posts
     cont (posts ^. at label . non SMT.true)
+  exec (GetApTracking label cont) = do
+    trackings <- asks se_apTracking
+    cont (trackings ^?! ix label)
 
 debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
