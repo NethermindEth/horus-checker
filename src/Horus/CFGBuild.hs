@@ -1,5 +1,6 @@
 module Horus.CFGBuild
   ( CFGBuildT (..)
+  , ArcCondition (..)
   , addAssertion
   , throw
   , buildCFG
@@ -29,15 +30,17 @@ import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
 import Horus.Instruction (Instruction (..), OpCode (..), PcUpdate (..), instructionSize)
 import Horus.Label (Label (..), LabeledInst, moveLabel)
 import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
-import Horus.SMTUtil (inferJnzCondition)
 import Horus.SW.IdentifierDefinition (getFunctionPc, getLabelPc)
 import Horus.Util (Box (..), appendList, safeLast, topmostStepFT, whenJust)
 import SimpleSMT.Typed (TSExpr)
 import qualified SimpleSMT.Typed as SMT (true)
 
+data ArcCondition = ACNone | ACJnz Label Bool
+  deriving stock (Show)
+
 data CFGBuildF a
   = AddVertex Label a
-  | AddArc Label Label [LabeledInst] (TSExpr Bool) a
+  | AddArc Label Label [LabeledInst] ArcCondition a
   | AddAssertion Label (TSExpr Bool) a
   | Throw Text
   deriving (Functor)
@@ -51,7 +54,7 @@ liftF' = CFGBuildT . liftF
 addVertex :: Label -> CFGBuildT m ()
 addVertex l = liftF' (AddVertex l ())
 
-addArc :: Label -> Label -> [LabeledInst] -> TSExpr Bool -> CFGBuildT m ()
+addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> CFGBuildT m ()
 addArc lFrom lTo insts test = liftF' (AddArc lFrom lTo insts test ())
 
 addAssertion :: Label -> TSExpr Bool -> CFGBuildT m ()
@@ -84,19 +87,19 @@ buildCFG cd labeledInsts = do
       ]
   debugInfo = p_debugInfo (cd_program cd)
 
-newtype Segment = Segment (NonEmpty (Int, Instruction))
+newtype Segment = Segment (NonEmpty (Label, Instruction))
   deriving (Show)
 
 segmentLabel :: Segment -> Label
-segmentLabel (Segment ((l, _) :| _)) = Label l
+segmentLabel (Segment ((l, _) :| _)) = l
 
 nextSegmentLabel :: Segment -> Label
-nextSegmentLabel s = Label (lastLabel + instructionSize lastInst)
+nextSegmentLabel s = moveLabel lastLabel (instructionSize lastInst)
  where
   (lastLabel, lastInst) = NonEmpty.last (coerce s)
 
 segmentInsts :: Segment -> [LabeledInst]
-segmentInsts (Segment ne) = coerce (toList ne)
+segmentInsts (Segment ne) = toList ne
 
 isControlFlow :: Instruction -> Bool
 isControlFlow i = i_opCode i == Call || i_pcUpdate i /= Regular
@@ -129,31 +132,30 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
     | l == pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
     | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
 
+addArc' :: Label -> Label -> [LabeledInst] -> CFGBuildT m ()
+addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone
+
 addArcsFrom :: Segment -> CFGBuildT m ()
 addArcsFrom s
   | not (isControlFlow endInst) = do
       let lTo = nextSegmentLabel s
-      addArc lFrom lTo insts SMT.true
+      addArc' lFrom lTo insts
   | Call <- i_opCode endInst = do
       let lTo = nextSegmentLabel s
-      addArc lFrom lTo insts SMT.true
+      addArc' lFrom lTo insts
   | Ret <- i_opCode endInst = do
       pure ()
   | JumpAbs <- i_pcUpdate endInst = do
       let lTo = Label (fromInteger (i_imm endInst))
-      addArc lFrom lTo (init insts) SMT.true
+      addArc' lFrom lTo (init insts)
   | JumpRel <- i_pcUpdate endInst = do
-      let lTo = Label (endPc + fromInteger (i_imm endInst))
-      addArc lFrom lTo (init insts) SMT.true
+      let lTo = moveLabel endPc (fromInteger (i_imm endInst))
+      addArc' lFrom lTo (init insts)
   | Jnz <- i_pcUpdate endInst = do
-      let condition = inferJnzCondition endInst
-          lTo1 = nextSegmentLabel s
-          lTo2 = Label (endPc + fromInteger (i_imm endInst))
-      -- We don't remove the last inst (jnz), so that ap is updated. Also, we dont' need
-      -- to put a condition on the arc, because JNZ's condition is always asserted to be
-      -- zero by the semantics modeler.
-      addArc lFrom lTo1 insts SMT.true
-      addArc lFrom lTo2 (init insts) condition
+      let lTo1 = nextSegmentLabel s
+          lTo2 = moveLabel endPc (fromInteger (i_imm endInst))
+      addArc lFrom lTo1 insts (ACJnz endPc False)
+      addArc lFrom lTo2 insts (ACJnz endPc True)
   | otherwise = pure ()
  where
   lFrom = segmentLabel s
