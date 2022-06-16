@@ -2,6 +2,8 @@ module Horus.Program
   ( Program (..)
   , DebugInfo (..)
   , ILInfo (..)
+  , FlowTrackingData (..)
+  , ApTracking (..)
   , Identifiers
   )
 where
@@ -34,8 +36,16 @@ data DebugInfo = DebugInfo
   deriving (Show)
 
 data ILInfo = ILInfo
-  {il_accessibleScopes :: [ScopedName]}
+  { il_accessibleScopes :: [ScopedName]
+  , il_flowTrackingData :: FlowTrackingData
+  }
   deriving (Show)
+
+data FlowTrackingData = FlowTrackingData {ftd_apTracking :: ApTracking}
+  deriving stock (Show)
+
+data ApTracking = ApTracking {at_group :: Int, at_offset :: Int}
+  deriving stock (Show)
 
 instance FromJSON Program where
   parseJSON = withObject "Program" $ \v ->
@@ -55,7 +65,17 @@ instance FromJSON DebugInfo where
 
 instance FromJSON ILInfo where
   parseJSON = withObject "ILInfo" $ \v ->
-    ILInfo <$> v .: "accessible_scopes"
+    ILInfo
+      <$> v .: "accessible_scopes"
+      <*> v .: "flow_tracking_data"
+
+instance FromJSON FlowTrackingData where
+  parseJSON = withObject "flow_tracking_data" $ \v ->
+    FlowTrackingData <$> v .: "ap_tracking"
+
+instance FromJSON ApTracking where
+  parseJSON = withObject "ap_tracking" $ \v ->
+    ApTracking <$> v .: "group" <*> v .: "offset"
 
 parseHexInteger :: String -> Parser Integer
 parseHexInteger ('0' : 'x' : rest)
