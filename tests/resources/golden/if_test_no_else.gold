@@ -7,10 +7,8 @@ Running SMTs...
 Execution policy: one process for each SMT, segments serially, files serially.
 Analyzing SMT outputs...
 Results:
-Program: resources/golden/func_peano_prod.out
+Program: resources/golden/if_test_no_else.out
 MathS: unsat
 MathS: unsat
-MathS: unsat
-Z3: unsat
 Z3: unsat
 Z3: unsat
