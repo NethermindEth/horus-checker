@@ -1,4 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Horus.CairoSemantics
@@ -14,6 +13,8 @@ import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_)
 import Data.Function ((&))
 import Data.Functor.Identity (Identity)
+import Data.Map (Map)
+import qualified Data.Map as Map ((!?))
 import Data.Text (Text)
 
 import Horus.CFGBuild (Label, LabeledInst)
@@ -23,7 +24,6 @@ import Horus.Instruction
   , Instruction (..)
   , Op1Source (..)
   , OpCode (..)
-  , PcUpdate (..)
   , PointerRegister (..)
   , ResLogic (..)
   )
@@ -31,7 +31,7 @@ import Horus.Module (Module (..))
 import Horus.SMTUtil (Step, prime, substituteFpAndAp)
 import Horus.Util (fieldPrime, tShow)
 import qualified SimpleSMT as SMT (SExpr (..))
-import SimpleSMT.Typed (TSExpr, (.->), (.<=), (.==))
+import SimpleSMT.Typed (TSExpr, (.->), (./=), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
 data CairoSemanticsF a
@@ -81,7 +81,7 @@ encodeSemantics Module{..} = do
   preparedPre <- prepare "0" m_pre
   preparedPost <- prepare lastStep (TSMT.not m_post)
   assert preparedPre *> assert preparedPost
-  mkProgramConstraints m_prog
+  mkProgramConstraints m_jnzOracle m_prog
  where
   lastStep = tShow (length m_prog)
 
@@ -96,9 +96,9 @@ registerStep step reg = declareFelt (regName <> step)
 registerApFp :: Step -> CairoSemanticsT m (TSExpr Integer, TSExpr Integer)
 registerApFp step = (,) <$> registerStep step AllocationPointer <*> registerStep step FramePointer
 
-mkProgramConstraints :: [LabeledInst] -> CairoSemanticsT m ()
-mkProgramConstraints insts = for_ (zip insts [0 ..]) $ \(inst, step) -> do
-  mkInstructionConstraints inst step >>= assert . TSMT.and
+mkProgramConstraints :: Map Label Bool -> [LabeledInst] -> CairoSemanticsT m ()
+mkProgramConstraints jnzOracle insts = for_ (zip insts [0 ..]) $ \(inst, step) -> do
+  mkInstructionConstraints jnzOracle inst step >>= assert . TSMT.and
 
 alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
 alloc address = do
@@ -125,8 +125,8 @@ memoryRemoval expr =
   unsafeMemoryRemoval (SMT.List l) = SMT.List <$> traverse unsafeMemoryRemoval l
   unsafeMemoryRemoval expr' = return expr'
 
-mkInstructionConstraints :: LabeledInst -> Int -> CairoSemanticsT m [TSExpr Bool]
-mkInstructionConstraints (pc, Instruction{..}) step = do
+mkInstructionConstraints :: Map Label Bool -> LabeledInst -> Int -> CairoSemanticsT m [TSExpr Bool]
+mkInstructionConstraints jnzOracle (pc, Instruction{..}) step = do
   op0Reg <- registerIntStep step i_op0Register
   op0 <- alloc (op0Reg + fromInteger i_op0Offset)
   op1 <- case i_op1Source of
@@ -142,7 +142,10 @@ mkInstructionConstraints (pc, Instruction{..}) step = do
         Unconstrained -> 0
   dstReg <- registerIntStep step i_dstRegister
   dst <- alloc (dstReg + fromInteger i_dstOffset)
-  let conditionFormula = if i_pcUpdate == Jnz then dst .== 0 else TSMT.true
+  let conditionFormula = case jnzOracle Map.!? pc of
+        Nothing -> TSMT.true
+        Just False -> dst .== 0
+        Just True -> dst ./= 0
   (ap, fp) <- registerApFp (tShow step)
   (apNext, fpNext) <- registerApFp (tShow (step + 1))
   let newApValue = case i_apUpdate of
