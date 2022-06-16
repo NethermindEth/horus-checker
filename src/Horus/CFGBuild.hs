@@ -15,20 +15,19 @@ import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Coerce (coerce)
 import Data.Foldable (for_, toList)
 import Data.Function ((&))
-import qualified Data.IntMap as IntMap (toList)
 import Data.List (sort, union)
 import Data.List.NonEmpty (NonEmpty (..))
 import qualified Data.List.NonEmpty as NonEmpty (last, reverse, (<|))
 import Data.Map (Map)
-import qualified Data.Map as Map (elems, fromList, fromListWith, toList, (!))
+import qualified Data.Map as Map (elems, fromListWith, mapMaybe, toList, (!))
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Lens.Micro (at, ix, non, (^.))
 import Lens.Micro.GHC ()
 
 import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
-import Horus.Instruction (Instruction (..), OpCode (..), PcUpdate (..), instructionSize)
-import Horus.Label (Label (..), LabeledInst, moveLabel)
+import Horus.Instruction (Instruction (..), LabeledInst, OpCode (..), PcUpdate (..), instructionSize)
+import Horus.Label (Label (..), moveLabel)
 import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc, getLabelPc)
 import Horus.Util (Box (..), appendList, safeLast, topmostStepFT, whenJust)
@@ -78,14 +77,11 @@ buildCFG cd labeledInsts = do
   addAssertions retsByFun (cd_checks cd) identifiers
  where
   identifiers = p_identifiers (cd_program cd)
-  funByLabel =
-    Map.fromList
-      [ (Label pc, Label funPc)
-      | (pc, ilInfo) <- IntMap.toList (di_instructionLocations debugInfo)
-      , Just name <- [safeLast (il_accessibleScopes ilInfo)]
-      , Just funPc <- [getFunctionPc (identifiers Map.! name)]
-      ]
+  funByLabel = Map.mapMaybe ilInfoToFun (di_instructionLocations debugInfo)
   debugInfo = p_debugInfo (cd_program cd)
+  ilInfoToFun ilInfo = do
+    name <- safeLast (il_accessibleScopes ilInfo)
+    getFunctionPc (identifiers Map.! name)
 
 newtype Segment = Segment (NonEmpty (Label, Instruction))
   deriving (Show)
@@ -167,9 +163,9 @@ addAssertions retsByFun checks identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> do
     whenJust (getFunctionPc def) $ \pc -> do
       let post = c_postConds checks ^. at idName . non SMT.true
-      for_ (retsByFun ^. ix (Label pc)) (`addAssertion` post)
+      for_ (retsByFun ^. ix pc) (`addAssertion` post)
     whenJust (getLabelPc def) $ \pc ->
-      whenJust (c_invariants checks ^. at idName) (Label pc `addAssertion`)
+      whenJust (c_invariants checks ^. at idName) (pc `addAssertion`)
 
 {- | Map each function label to a list of pcs of its 'rets'.
 

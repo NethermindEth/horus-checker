@@ -1,5 +1,7 @@
 module Horus.Instruction
   ( Instruction (..)
+  , LabeledInst
+  , labelInsructions
   , PointerRegister (..)
   , Register (..)
   , Op1Source (..)
@@ -16,9 +18,11 @@ where
 
 import Control.Monad.Except (MonadError, throwError)
 import Data.Bits
+import Data.Coerce (coerce)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 
+import Horus.Label (Label (..), moveLabel)
 import Horus.Util (fieldPrime)
 
 dstRegBit, op0RegBit, op1ImmBit, op1FpBit, op1ApBit :: Int
@@ -65,14 +69,21 @@ data Instruction = Instruction
   }
   deriving (Eq, Show)
 
+type LabeledInst = (Label, Instruction)
+
+labelInsructions :: [Instruction] -> [LabeledInst]
+labelInsructions insts = zip (coerce pcs) insts
+ where
+  pcs = scanl (+) 0 (map instructionSize insts)
+
 instructionSize :: Instruction -> Int
 instructionSize Instruction{i_op1Source = Imm} = 2
 instructionSize _ = 1
 
-callDestination :: Int -> Instruction -> Maybe Int
+callDestination :: Label -> Instruction -> Maybe Label
 callDestination pc i@Instruction{i_opCode = Call}
-  | JumpRel <- i_pcUpdate i = pure (pc + fromInteger (i_imm i))
-  | otherwise = pure (fromInteger (i_imm i))
+  | JumpRel <- i_pcUpdate i = pure (moveLabel pc (fromInteger (i_imm i)))
+  | otherwise = pure (Label (fromInteger (i_imm i)))
 callDestination _ _ = Nothing
 
 n15, n16 :: Int
