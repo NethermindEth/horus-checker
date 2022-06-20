@@ -40,9 +40,9 @@ memory = SMT.function "memory"
 type Step = Integer
 
 apStep :: Step -> TSExpr Integer
-apStep step = const $ "ap" <> (pack $ show step)
+apStep step = const $ "ap" <> pack (show step)
 fpStep :: Step -> TSExpr Integer
-fpStep step = const $ "fp" <> (pack $ show step)
+fpStep step = const $ "fp" <> pack (show step)
 registerStep :: Step -> PointerRegister -> TSExpr Integer
 registerStep step AllocationPointer = apStep step
 registerStep step FramePointer = fpStep step
