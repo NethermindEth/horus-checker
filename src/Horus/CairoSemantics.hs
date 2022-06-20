@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module Horus.CairoSemantics (encodeSemantics) where
 
@@ -57,7 +56,7 @@ encodeSemantics instrs preCond postCond =
             , cs_exprs = []
             , cs_decls =
                 -- TODO: turn declaration into monadic action
-                [TSMT.declareInt (pack $ "ap" <> show step) | step <- [0 .. 2 * (length instrs)]]
+                [TSMT.declareInt (pack $ "ap" <> show step) | step <- [0 .. 2 * length instrs]]
                   ++ [TSMT.declareInt (pack $ "fp" <> show step) | step <- [0 .. (length instrs)]]
                   ++ [TSMT.declareInt "prime"]
             }
@@ -80,7 +79,7 @@ assert :: TSExpr Bool -> State ConstraintsState ()
 assert expr = csExprs %= (expr :)
 
 mkMemoryConstraints :: [TSExpr Integer] -> [TSExpr Bool]
-mkMemoryConstraints = helper . (zip [0 ..])
+mkMemoryConstraints = helper . zip [0 ..]
  where
   helper :: [(Integer, TSExpr Integer)] -> [TSExpr Bool]
   helper ((i, expr) : rest) =
@@ -119,7 +118,6 @@ mkProgramConstraints [] _ = do
   currentState <- get
   let vars = cs_memoryVariables currentState
   traverse_ assert (mkMemoryConstraints vars)
-  return ()
 
 mkInstructionConstraints :: Instruction -> Step -> State ConstraintsState (TSExpr Bool)
 mkInstructionConstraints Instruction{..} step = do
