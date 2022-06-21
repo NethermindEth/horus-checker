@@ -1,5 +1,7 @@
+{-# LANGUAGE PatternSynonyms #-}
+
 module SimpleSMT.Typed
-  ( TSExpr
+  ( TSExpr (True, False)
   , TSStmt
   -- Expressions
   , parseAssertion
@@ -10,8 +12,6 @@ module SimpleSMT.Typed
   , const
   , mod
   , and
-  , true
-  , false
   , not
   , (.==)
   , (./=)
@@ -32,7 +32,7 @@ module SimpleSMT.Typed
   )
 where
 
-import Prelude hiding (and, const, mod, not)
+import Prelude hiding (False, True, and, const, mod, not)
 
 import Data.Coerce (coerce)
 import Data.Text (Text, pack, unpack)
@@ -90,14 +90,16 @@ instance Num (TSExpr Integer) where
 mod :: TSExpr Integer -> TSExpr Integer -> TSExpr Integer
 mod = coerce SMT.mod
 
-true :: TSExpr Bool
-true = coerce SMT.bool True
+pattern True :: TSExpr Bool
+pattern True = TSExpr (SMT.Atom "true")
 
-false :: TSExpr Bool
-false = coerce SMT.bool False
+pattern False :: TSExpr Bool
+pattern False = TSExpr (SMT.Atom "false")
 
 not :: TSExpr Bool -> TSExpr Bool
-not = coerce SMT.not
+not True = False
+not False = True
+not v = coerce SMT.not v
 
 infix 4 .<
 (.<) :: TSExpr Integer -> TSExpr Integer -> TSExpr Bool
@@ -117,18 +119,35 @@ infix 4 ./=
 
 infixr 3 .&&
 (.&&) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
-(.&&) = coerce SMT.and
+True .&& b = b
+False .&& _ = False
+a .&& True = a
+_ .&& False = False
+a .&& b = coerce SMT.and a b
 
 and :: [TSExpr Bool] -> TSExpr Bool
-and = coerce SMT.andMany
+and xs
+  | False `elem` xs = False
+  | [x] <- xs' = x
+  | otherwise = coerce SMT.andMany xs'
+ where
+  xs' = filter (/= True) xs
 
 infixr 2 .||
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
-(.||) = coerce SMT.or
+True .|| _ = True
+False .|| b = b
+_ .|| True = True
+a .|| False = a
+a .|| b = coerce SMT.or a b
 
 infixr 1 .->
 (.->) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool
-(.->) = coerce SMT.implies
+True .-> b = b
+False .-> _ = True
+a .-> False = not a
+_ .-> True = True
+a .-> b = coerce SMT.implies a b
 
 substitute :: String -> TSExpr a -> TSExpr b -> TSExpr b
 substitute = coerce untypedSubstitute
