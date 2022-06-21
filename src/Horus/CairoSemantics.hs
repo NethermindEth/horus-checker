@@ -150,7 +150,7 @@ mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) step = do
   dstReg <- registerIntStep step i_dstRegister
   dst <- alloc (dstReg + fromInteger i_dstOffset)
   let conditionFormula = case jnzOracle Map.!? pc of
-        Nothing -> TSMT.true
+        Nothing -> TSMT.True
         Just False -> dst .== 0
         Just True -> dst ./= 0
   (ap, fp) <- registerApFp (tShow step)

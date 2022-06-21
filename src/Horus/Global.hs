@@ -34,7 +34,7 @@ import Horus.Module (Module, runModuleL, traverseCFG)
 import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc)
 import Horus.Util (Box (..), topmostStepFT)
-import qualified SimpleSMT.Typed as SMT (true)
+import qualified SimpleSMT.Typed as SMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -91,7 +91,7 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
-    let pre = preConds ^. at name . non SMT.true
+    let pre = preConds ^. at name . non SMT.True
     pure (pc, pre)
 
 extractConstraints :: SemanticsEnv -> Module -> GlobalT m ConstraintsState
