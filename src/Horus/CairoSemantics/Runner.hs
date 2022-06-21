@@ -30,7 +30,7 @@ import Horus.Program (ApTracking)
 import Horus.SMTUtil (prime)
 import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
-import qualified SimpleSMT.Typed as SMT (assert, const, declareInt, ppTSExpr, showTSExpr, true)
+import qualified SimpleSMT.Typed as SMT (TSExpr (True), assert, const, declareInt, ppTSExpr, showTSExpr)
 
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [(Text, TSExpr Integer)]
@@ -92,10 +92,10 @@ interpret = iterTM exec
   exec (MarkAsMem name address cont) = csMemoryVariables %= ((name, address) :) >> cont
   exec (GetPreByCall label cont) = do
     pres <- asks se_pres
-    cont (pres ^. at label . non SMT.true)
+    cont (pres ^. at label . non SMT.True)
   exec (GetPostByCall label cont) = do
     posts <- asks se_posts
-    cont (posts ^. at label . non SMT.true)
+    cont (posts ^. at label . non SMT.True)
   exec (GetApTracking label cont) = do
     trackings <- asks se_apTracking
     cont (trackings ^?! ix label)

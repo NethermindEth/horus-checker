@@ -40,7 +40,7 @@ import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc, getLabelPc)
 import Horus.Util (Box (..), appendList, safeLast, topmostStepFT, whenJust)
 import SimpleSMT.Typed (TSExpr)
-import qualified SimpleSMT.Typed as SMT (true)
+import qualified SimpleSMT.Typed as SMT (TSExpr (True))
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -166,7 +166,7 @@ addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildT m ()
 addAssertions retsByFun checks identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> do
     whenJust (getFunctionPc def) $ \pc -> do
-      let post = c_postConds checks ^. at idName . non SMT.true
+      let post = c_postConds checks ^. at idName . non SMT.True
       for_ (retsByFun ^. ix pc) (`addAssertion` post)
     whenJust (getLabelPc def) $ \pc ->
       whenJust (c_invariants checks ^. at idName) (pc `addAssertion`)
