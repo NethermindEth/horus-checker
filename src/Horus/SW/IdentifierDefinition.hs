@@ -26,6 +26,7 @@ data IdentifierDefinitionKind
   | Label
   | Function
   | Namespace
+  | Reference
   | Scope
 
 data IdentifierDefinitionGADT a where
@@ -41,6 +42,7 @@ data IdentifierDefinitionGADT a where
   LabelDefinition :: Int -> IdentifierDefinitionGADT Label
   FunctionDefinition :: Int -> [Text] -> IdentifierDefinitionGADT Function
   NamespaceDefinition :: IdentifierDefinitionGADT Namespace
+  ReferenceDefinition :: IdentifierDefinitionGADT Reference
   ScopeDefinition :: IdentifierDefinitionGADT Scope
 
 data IdentifierDefinition = forall a. IdentifierDefinition (IdentifierDefinitionGADT a)
@@ -83,6 +85,7 @@ instance Show IdentifierDefinition where
   show (IdentifierDefinition (FunctionDefinition pc decorators)) =
     "function(pc=" <> show pc <> "; decorators=" <> show decorators <> ")"
   show (IdentifierDefinition NamespaceDefinition) = "namespace"
+  show (IdentifierDefinition ReferenceDefinition) = "reference"
   show (IdentifierDefinition ScopeDefinition) = "scope"
 
 instance FromJSON (IdentifierDefinitionGADT Member) where
@@ -116,6 +119,6 @@ instance FromJSON IdentifierDefinition where
         "label" -> IdentifierDefinition . LabelDefinition <$> v .: "pc"
         "function" -> IdentifierDefinition <$> (FunctionDefinition <$> v .: "pc" <*> v .: "decorators")
         "namespace" -> pure $ IdentifierDefinition NamespaceDefinition
-        "reference" -> fail "not implemented"
+        "reference" -> pure $ IdentifierDefinition ReferenceDefinition
         "scope" -> pure $ IdentifierDefinition NamespaceDefinition
         _ -> fail "wrong type"
