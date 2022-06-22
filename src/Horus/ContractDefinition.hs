@@ -9,13 +9,16 @@ module Horus.ContractDefinition
   )
 where
 
-import Data.Aeson (FromJSON (..), withObject, withText, (.:))
+import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
 import Data.Coerce (coerce)
 import Data.Map (Map)
+import Data.Text (Text)
+import qualified Data.Text as Text (intercalate)
 import Lens.Micro (Lens')
 
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
+import Horus.Util (whenJust)
 import SimpleSMT.Typed (TSExpr, parseAssertion)
 
 data ContractDefinition = ContractDefinition
@@ -55,8 +58,15 @@ newtype HSExpr a = HSExpr (TSExpr a)
   deriving newtype (Show)
 
 instance FromJSON (HSExpr Bool) where
-  parseJSON = withText "HSExpr" $ \t ->
-    case parseAssertion t of
+  parseJSON = withObject "HSExpr" $ \v -> do
+    mbDecls <- v .:? "decls"
+    whenJust (mbDecls :: Maybe [Text]) $ \_ ->
+      fail "Logical variables are not supported yet, but the 'decls' field is present"
+    mbAxiom <- v .:? "axiom"
+    whenJust (mbAxiom :: Maybe Text) $ \_ ->
+      fail "Axioms are not supported yet, but the 'axiom' field is present"
+    exprLines <- v .: "bool_ref"
+    case parseAssertion (Text.intercalate "\n" exprLines) of
       Just tsexpr -> pure (HSExpr tsexpr)
       _ -> fail "Can't parse an smt2 sexp"
 

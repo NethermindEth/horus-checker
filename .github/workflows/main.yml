@@ -66,7 +66,7 @@ jobs:
           USER: ${{ secrets.PYPI_USER }}
           PASS: ${{ secrets.PYPI_PASSWORD }}
         run: >
-          pip install horus-compile==0.0.1
+          pip install horus-compile==0.0.2
           --extra-index-url http://${USER}:${PASS}@139.162.29.35/
           --trusted-host 139.162.29.35
 

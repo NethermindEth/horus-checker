@@ -1,5 +1,5 @@
 # @pre True
-# @post (([ap - 1] == [fp - 3] + 1) /\ ([fp - 3] == 0)) \/ (([ap - 1] == [fp - 3] - 1) /\ ([fp - 3] > 0))
+# @post (([ap - 1] == [fp - 3] + 1) && ([fp - 3] == 0)) || (([ap - 1] == [fp - 3] - 1) && ([fp - 3] > 0))
 func succpred(m):
     jmp add if [fp - 3] != 0
     [ap] = [fp - 3] + 1; ap++
