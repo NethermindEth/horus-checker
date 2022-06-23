@@ -1,6 +1,14 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Horus.CairoSemantics.Runner (SemanticsEnv (..), runT, run) where
+module Horus.CairoSemantics.Runner
+  ( SemanticsEnv (..)
+  , runT
+  , run
+  , ConstraintsState (..)
+  , makeModel
+  , debugFriendlyModel
+  )
+where
 
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.State (MonadState, StateT, execStateT)
@@ -18,9 +26,10 @@ import Lens.Micro.Mtl ((%=), (<%=))
 
 import Horus.CFGBuild (Label)
 import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, CairoSemanticsT)
+import Horus.SMTUtil (prime)
 import Horus.Util (tShow)
-import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.==))
-import qualified SimpleSMT.Typed as SMT (assert, const, declareInt, true)
+import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
+import qualified SimpleSMT.Typed as SMT (assert, const, declareInt, ppTSExpr, showTSExpr, true)
 
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [(Text, TSExpr Integer)]
@@ -72,7 +81,7 @@ interpret = iterTM exec
  where
   exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
   exec (Assert a cont) = csExprs %= (a :) >> cont
-  exec (DeclareInt name cont) = do
+  exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
     cont (SMT.const name)
   exec (GetFreshName cont) = do
@@ -86,22 +95,31 @@ interpret = iterTM exec
     posts <- asks se_posts
     cont (posts ^. at label . non SMT.true)
 
-runImplT :: Monad m => SemanticsEnv -> ImplT m a -> m Text
-runImplT env (ImplT m) = do
-  ConstraintsState{..} <- m & flip runReaderT env & flip execStateT emptyConstraintsState
+debugFriendlyModel :: ConstraintsState -> Text
+debugFriendlyModel ConstraintsState{..} =
+  Text.intercalate "\n" (memoryPairs <> map SMT.ppTSExpr cs_exprs)
+ where
+  memoryPairs = [name <> "=[" <> SMT.showTSExpr addr <> "]" | (name, addr) <- cs_memoryVariables]
+
+makeModel :: ConstraintsState -> Text
+makeModel ConstraintsState{..} =
   let declStmts = SMT.declareInt "prime" : map SMT.declareInt cs_decls
+      feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- cs_decls]
       memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-  concat [declStmts, map SMT.assert memRestrictions, map SMT.assert cs_exprs]
-    & map showTSStmt
-    & Text.intercalate "\n"
-    & pure
+      restrictions = concat [feltRestrictions, memRestrictions, cs_exprs]
+   in (declStmts <> map SMT.assert restrictions)
+        & map showTSStmt
+        & Text.intercalate "\n"
  where
   restrictMemTail [] = []
   restrictMemTail ((var0, addr0) : rest) =
     [addr0 .== addr .-> SMT.const var0 .== SMT.const var | (var, addr) <- rest]
 
-runT :: Monad m => SemanticsEnv -> CairoSemanticsT m a -> m Text
+runImplT :: Monad m => SemanticsEnv -> ImplT m a -> m ConstraintsState
+runImplT env (ImplT m) = runReaderT m env & flip execStateT emptyConstraintsState
+
+runT :: Monad m => SemanticsEnv -> CairoSemanticsT m a -> m ConstraintsState
 runT env = runImplT env . interpret
 
-run :: SemanticsEnv -> CairoSemanticsL a -> Text
+run :: SemanticsEnv -> CairoSemanticsL a -> ConstraintsState
 run env = runIdentity . runT env
