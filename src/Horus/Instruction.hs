@@ -22,7 +22,7 @@ import Data.Bits
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text)
 
-import Horus.Util (fieldPrime, tShow)
+import Horus.Util (tShow, toSignedFelt)
 
 dstRegBit, op0RegBit, op1ImmBit, op1FpBit, op1ApBit :: Int
 resAddBit, resMulBit, pcJumpAbsBit, pcJumpRelBit, pcJnzBit :: Int
@@ -145,7 +145,7 @@ readInstruction (i :| is) = do
             Ret -> Dst
             _ -> KeepFp
         )
-      <*> return (toSigned imm)
+      <*> return (toSignedFelt imm)
   pure (instruction, is')
  where
   op1Map :: Bool -> Bool -> Bool -> m Op1Source
@@ -176,11 +176,6 @@ readInstruction (i :| is) = do
   opCodeMap False False True = return AssertEqual
   opCodeMap False False False = return Nop
   opCodeMap _ _ _ = throwError "wrong opcode"
-
-toSigned :: Integer -> Integer
-toSigned x
-  | x <= fieldPrime `div` 2 = x
-  | otherwise = x - fieldPrime
 
 toSemiAsm :: MonadError Text m => Instruction -> m Text
 toSemiAsm Instruction{..} = do
