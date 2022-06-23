@@ -29,6 +29,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      horus_compile_version: 0.0.1
+
     steps:
       - uses: actions/checkout@v2
 
@@ -44,17 +47,15 @@ jobs:
       - name: Setup BATS
         uses: mig4/setup-bats@v1
 
-      - uses: actions/cache@v2
-        name: Cache ~/.stack
-        with:
-          path: ~/.stack
-          key: "stack"
+      - uses: freckle/stack-cache-action@main
 
       - uses: actions/cache@v2
-        name: Cache ~/.cache/pip
+        name: Cache python dependencies
         with:
-          path: ~/.cache/pip
-          key: "pip-cache"
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ env.horus_compile_version }}
+          restore-keys:
+            ${{ env.pythonLocation }}-
 
       - name: Build
         run: |
@@ -66,7 +67,7 @@ jobs:
           USER: ${{ secrets.PYPI_USER }}
           PASS: ${{ secrets.PYPI_PASSWORD }}
         run: >
-          pip install horus-compile==0.0.1
+          pip install horus-compile=="$horus_compile_version"
           --extra-index-url http://${USER}:${PASS}@139.162.29.35/
           --trusted-host 139.162.29.35
 
