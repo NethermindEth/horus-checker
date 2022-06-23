@@ -60,6 +60,7 @@ library
       Horus.SW.Lexer
       Horus.SW.Parser
       Horus.SW.ScopedName
+      Horus.SW.Std
       SimpleSMT.Typed
     build-depends:
       aeson,
@@ -89,6 +90,7 @@ executable horus-check
       directory,
       filepath,
       horus-check,
+      microlens,
       mtl,
       optparse-applicative,
       pretty-simple,
