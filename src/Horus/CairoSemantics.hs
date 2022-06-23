@@ -13,7 +13,6 @@ import Control.Monad.Reader (ReaderT, ask, lift, local, runReaderT)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_)
 import Data.Function ((&))
-import Data.Functor (($>))
 import Data.Functor.Identity (Identity)
 import Data.Text (Text)
 
@@ -32,12 +31,12 @@ import Horus.Module (Module (..))
 import Horus.SMTUtil (Step, prime, substituteFpAndAp)
 import Horus.Util (fieldPrime, tShow)
 import qualified SimpleSMT as SMT (SExpr (..))
-import SimpleSMT.Typed (TSExpr, (.->), (.<), (.<=), (.==))
+import SimpleSMT.Typed (TSExpr, (.->), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
 data CairoSemanticsF a
   = Assert (TSExpr Bool) a
-  | DeclareInt Text (TSExpr Integer -> a)
+  | DeclareFelt Text (TSExpr Integer -> a)
   | GetFreshName (Text -> a)
   | MarkAsMem Text (TSExpr Integer) a
   | GetPreByCall Label (TSExpr Bool -> a)
@@ -50,8 +49,8 @@ type CairoSemanticsL = CairoSemanticsT Identity
 assert :: TSExpr Bool -> CairoSemanticsT m ()
 assert a = liftF (Assert a ())
 
-declareInt :: Text -> CairoSemanticsT m (TSExpr Integer)
-declareInt t = liftF (DeclareInt t id)
+declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
+declareFelt t = liftF (DeclareFelt t id)
 
 getFreshName :: CairoSemanticsT m Text
 getFreshName = liftF (GetFreshName id)
@@ -64,14 +63,6 @@ getPreByCall l = liftF (GetPreByCall l id)
 
 getPostByCall :: Label -> CairoSemanticsT m (TSExpr Bool)
 getPostByCall l = liftF (GetPostByCall l id)
-
-declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
-declareFelt t = declareInt t >>= (\v -> addBounds v $> v)
-
-addBounds :: TSExpr Integer -> CairoSemanticsT m ()
-addBounds expr = do
-  assert (0 .<= expr)
-  assert (expr .< prime)
 
 {- | Prepare the expression for usage in the model.
 

@@ -1,7 +1,7 @@
 module Horus.Global
   ( GlobalT (..)
-  , GlobalL
   , GlobalF (..)
+  , Config (..)
   , runCFGBuildT
   , makeCFG
   , makeModules
@@ -9,11 +9,11 @@ module Horus.Global
   )
 where
 
+import Control.Monad (when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Coerce (coerce)
 import Data.Function ((&))
-import Data.Functor.Identity (Identity)
 import qualified Data.IntMap as IntMap (fromList)
 import qualified Data.Map as Map (fromList, toList)
 import Data.Maybe (mapMaybe)
@@ -24,7 +24,7 @@ import Lens.Micro.GHC ()
 import Horus.CFGBuild (CFGBuildT, Label (..), LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
-import Horus.CairoSemantics.Runner (SemanticsEnv (..))
+import Horus.CairoSemantics.Runner (ConstraintsState (..), SemanticsEnv (..), debugFriendlyModel, makeModel)
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, readAllInstructions)
 import Horus.Label (labelInsructions)
@@ -34,16 +34,21 @@ import Horus.SW.IdentifierDefinition (getFunctionPc)
 import Horus.Util (Box (..), topmostStepFT)
 import qualified SimpleSMT.Typed as SMT (true)
 
+data Config = Config
+  { cfg_verbose :: Bool
+  }
+
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
-  | forall b. RunCairoSemanticsT SemanticsEnv (CairoSemanticsT m b) (Text -> a)
+  | forall b. RunCairoSemanticsT SemanticsEnv (CairoSemanticsT m b) (ConstraintsState -> a)
+  | AskConfig (Config -> a)
+  | forall b. Show b => Print' b a
   | Throw Text
 
 deriving instance Functor (GlobalF m)
 
 newtype GlobalT m a = GlobalT {runGlobalT :: FT (GlobalF m) m a}
   deriving newtype (Functor, Applicative, Monad)
-type GlobalL = GlobalT Identity
 
 instance MonadTrans GlobalT where
   lift = GlobalT . lift
@@ -62,16 +67,22 @@ liftF' = GlobalT . liftF
 runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
 runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
 
-runCairoSemanticsT :: SemanticsEnv -> CairoSemanticsT m a -> GlobalT m Text
+runCairoSemanticsT :: SemanticsEnv -> CairoSemanticsT m a -> GlobalT m ConstraintsState
 runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder id)
+
+askConfig :: GlobalT m Config
+askConfig = liftF' (AskConfig id)
+
+print' :: Show a => a -> GlobalT m ()
+print' what = liftF' (Print' what ())
 
 throw :: Text -> GlobalT m a
 throw t = liftF' (Throw t)
 
-makeCFG :: ContractDefinition -> [LabeledInst] -> GlobalL CFG
+makeCFG :: ContractDefinition -> [LabeledInst] -> GlobalT m CFG
 makeCFG cd labeledInsts = runCFGBuildT (buildCFG cd labeledInsts)
 
-makeModules :: ContractDefinition -> CFG -> GlobalL [Module]
+makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
 makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
  where
   sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
@@ -81,17 +92,24 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
     let pre = preConds ^. at name . non SMT.true
     pure (Label pc, pre)
 
-makeSMT2 :: SemanticsEnv -> Module -> GlobalL Text
-makeSMT2 env = runCairoSemanticsT env . encodeSemantics
+extractConstraints :: SemanticsEnv -> Module -> GlobalT m ConstraintsState
+extractConstraints env = runCairoSemanticsT env . encodeSemantics
 
-produceSMT2Models :: ContractDefinition -> GlobalL [Text]
+produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m [Text]
 produceSMT2Models cd = do
+  config <- askConfig
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
   cfg <- makeCFG cd labeledInsts
   modules <- makeModules cd cfg
   let semanticsEnv = mkSemanticsEnv cd labeledInsts
-  traverse (makeSMT2 semanticsEnv) modules
+  constraints <- traverse (extractConstraints semanticsEnv) modules
+  when (cfg_verbose config) $ do
+    print' labeledInsts
+    print' cfg
+    print' modules
+    print' (map debugFriendlyModel constraints)
+  pure (map makeModel constraints)
 
 mkSemanticsEnv :: ContractDefinition -> [LabeledInst] -> SemanticsEnv
 mkSemanticsEnv cd labeledInsts =

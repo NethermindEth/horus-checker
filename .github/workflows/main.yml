@@ -26,11 +26,23 @@ jobs:
         run: |
           curl -sSL https://raw.github.com/ndmitchell/hlint/master/misc/run.sh | sh -s src app
 
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v2
+
+      - name: Install SMT solvers
+        run: |
+          sh ./scripts/ci/install-z3.sh
+          sh ./scripts/ci/install-mathsat.sh
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.7'
+
+      - name: Setup BATS
+        uses: mig4/setup-bats@v1
 
       - uses: actions/cache@v2
         name: Cache ~/.stack
@@ -38,7 +50,25 @@ jobs:
           path: ~/.stack
           key: "stack"
 
+      - uses: actions/cache@v2
+        name: Cache ~/.cache/pip
+        with:
+          path: ~/.cache/pip
+          key: "pip-cache"
+
       - name: Build
         run: |
           jobs=$(getconf _NPROCESSORS_ONLN)
-          stack --jobs "$jobs" build
+          stack --jobs "$jobs" install
+
+      - name: Install python dependencies
+        env:
+          USER: ${{ secrets.PYPI_USER }}
+          PASS: ${{ secrets.PYPI_PASSWORD }}
+        run: >
+          pip install horus-compile==0.0.1
+          --extra-index-url http://${USER}:${PASS}@139.162.29.35/
+          --trusted-host 139.162.29.35
+
+      - name: Test
+        run: bash ./tests/entrypoint.sh
