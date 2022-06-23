@@ -2,6 +2,7 @@
 
 module Horus.Util
   ( fieldPrime
+  , toSignedFelt
   , whenJust
   , safeLast
   , Box (..)
@@ -17,6 +18,11 @@ import Data.Text (Text, pack)
 
 fieldPrime :: Integer
 fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
+
+toSignedFelt :: Integer -> Integer
+toSignedFelt x
+  | x <= fieldPrime `div` 2 = x
+  | otherwise = x - fieldPrime
 
 whenJust :: Applicative f => Maybe a -> (a -> f ()) -> f ()
 whenJust Nothing _ = pure ()
