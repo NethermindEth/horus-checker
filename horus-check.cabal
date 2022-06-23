@@ -1,5 +1,5 @@
 cabal-version:      2.4
-name:               CairoHorus
+name:               horus-check
 version:            0.1.0.0
 category:           Language
 
@@ -71,12 +71,15 @@ library
       text,
       transformers,
 
-executable cairo-horus
+executable horus-check
     import:                  deps
     hs-source-dirs:          app
     main-is:                 Main.hs
     build-depends:
-      CairoHorus,
       aeson,
+      directory,
+      filepath,
+      horus-check,
+      mtl,
       pretty-simple,
       text,
