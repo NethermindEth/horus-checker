@@ -32,7 +32,6 @@ import Horus.Instruction
   , OpCode (..)
   , PcUpdate (..)
   , getNextPc
-  , instructionSize
   , jumpDestination
   )
 import Horus.Label (Label (..), moveLabel)
@@ -91,16 +90,14 @@ buildCFG cd labeledInsts = do
     name <- safeLast (il_accessibleScopes ilInfo)
     getFunctionPc (identifiers Map.! name)
 
-newtype Segment = Segment (NonEmpty (Label, Instruction))
+newtype Segment = Segment (NonEmpty LabeledInst)
   deriving (Show)
 
 segmentLabel :: Segment -> Label
 segmentLabel (Segment ((l, _) :| _)) = l
 
 nextSegmentLabel :: Segment -> Label
-nextSegmentLabel s = moveLabel lastLabel (instructionSize lastInst)
- where
-  (lastLabel, lastInst) = NonEmpty.last (coerce s)
+nextSegmentLabel s = getNextPc (NonEmpty.last (coerce s))
 
 segmentInsts :: Segment -> [LabeledInst]
 segmentInsts (Segment ne) = toList ne
