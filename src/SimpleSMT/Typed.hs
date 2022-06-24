@@ -8,6 +8,7 @@ module SimpleSMT.Typed
   , parseArithmetic
   , ppTSExpr
   , showTSExpr
+  , inlineLets
   , function
   , const
   , mod
@@ -34,8 +35,14 @@ where
 
 import Prelude hiding (False, True, and, const, mod, not)
 
+import Control.Monad.Reader (Reader, local, runReader)
 import Data.Coerce (coerce)
+import Data.Map (Map)
+import qualified Data.Map as Map (empty, fromList)
 import Data.Text (Text, pack, unpack)
+import Lens.Micro (at, non, (&))
+import Lens.Micro.GHC ()
+import Lens.Micro.Mtl (view)
 import SimpleSMT (SExpr, readSExpr)
 import qualified SimpleSMT as SMT
 
@@ -62,6 +69,22 @@ ppTSExpr (TSExpr s) = pack (SMT.ppSExpr s "")
 
 showTSExpr :: TSExpr a -> Text
 showTSExpr (TSExpr s) = pack (SMT.showsSExpr s "")
+
+inlineLets :: TSExpr a -> TSExpr a
+inlineLets = coerce (flip runReader Map.empty . go)
+ where
+  go :: SExpr -> Reader (Map String SExpr) SExpr
+  go (SMT.Atom s) = view (at s . non (SMT.Atom s))
+  go (SMT.List [SMT.Atom "let", SMT.List bs, body]) = do
+    extension <- bindingsToMap bs
+    local (<> extension) (go body)
+  go (SMT.List l) = SMT.List <$> traverse go l
+
+  bindingsToMap :: [SExpr] -> Reader (Map String SExpr) (Map String SExpr)
+  bindingsToMap bs =
+    [(s, v) | SMT.List [SMT.Atom s, v] <- bs]
+      & traverse (\(s, v) -> (s,) <$> go v)
+      & fmap Map.fromList
 
 const :: Text -> TSExpr a
 const = function
