@@ -3,7 +3,7 @@ func succpred(m):
     jmp add if [fp - 3] != 0
     [ap] = [fp - 3] + 1; ap++
     ret
-    # @invariant True
+    # @invariant [fp - 3] > 0
     add:
     [ap] = [fp - 3] - 1; ap++
     ret
