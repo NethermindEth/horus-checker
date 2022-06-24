@@ -18,7 +18,7 @@ import Lens.Micro (Lens', at, (&), (^.), _Just)
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl ((%=))
 
-import Horus.CFGBuild (CFGBuildF (..), CFGBuildT (..), Label, LabeledInst)
+import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildT (..), Label, LabeledInst)
 import SimpleSMT.Typed (TSExpr)
 
 newtype ImplT m a = ImplT (ExceptT Text (StateT CFG m) a)
@@ -29,7 +29,7 @@ instance MonadTrans ImplT where
 
 data CFG = CFG
   { cfg_vertices :: [Label]
-  , cfg_arcs :: Map Label [(Label, [LabeledInst], TSExpr Bool)]
+  , cfg_arcs :: Map Label [(Label, [LabeledInst], ArcCondition)]
   , cfg_assertions :: Map Label [TSExpr Bool]
   }
   deriving (Show)
@@ -40,7 +40,7 @@ emptyCFG = CFG [] Map.empty Map.empty
 cfgVertices :: Lens' CFG [Label]
 cfgVertices lMod g = fmap (\x -> g{cfg_vertices = x}) (lMod (cfg_vertices g))
 
-cfgArcs :: Lens' CFG (Map Label [(Label, [LabeledInst], TSExpr Bool)])
+cfgArcs :: Lens' CFG (Map Label [(Label, [LabeledInst], ArcCondition)])
 cfgArcs lMod g = fmap (\x -> g{cfg_arcs = x}) (lMod (cfg_arcs g))
 
 cfgAssertions :: Lens' CFG (Map Label [TSExpr Bool])
