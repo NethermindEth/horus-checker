@@ -143,7 +143,7 @@ mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) step = do
       alloc (op1Reg + fromInteger i_op1Offset)
     Imm -> return $ fromInteger i_imm
   let res = case i_resLogic of
-        Op1 -> op1 `TSMT.mod` prime
+        Op1 -> op1
         Add -> (op0 + op1) `TSMT.mod` prime
         Mult -> (op0 * op1) `TSMT.mod` prime
         Unconstrained -> 0
