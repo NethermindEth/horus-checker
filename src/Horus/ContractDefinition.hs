@@ -21,7 +21,7 @@ import Lens.Micro (Lens')
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (whenJust)
-import SimpleSMT.Typed (TSExpr, parseAssertion)
+import SimpleSMT.Typed (TSExpr, inlineLets, parseAssertion)
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
@@ -77,7 +77,7 @@ instance FromJSON (HSExpr Bool) where
       fail "Axioms are not supported yet, but the 'axiom' field is present"
     exprLines <- v .: "bool_ref"
     case parseAssertion (Text.intercalate "\n" exprLines) of
-      Just tsexpr -> pure (HSExpr tsexpr)
+      Just tsexpr -> pure (HSExpr (inlineLets tsexpr))
       _ -> fail "Can't parse an smt2 sexp"
 
 elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (TSExpr a)
