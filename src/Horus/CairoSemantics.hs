@@ -34,10 +34,10 @@ import Horus.Instruction
 import Horus.Label (Label (..))
 import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
-import Horus.SMTUtil (prime, regToTSExpr)
+import Horus.SMTUtil (memory, prime, regToTSExpr)
 import qualified Horus.SMTUtil as Util (ap, fp)
 import Horus.Util (fieldPrime, tShow, whenJust, whenJustM)
-import SimpleSMT.Typed (TSExpr, (.&&), (./=), (.<=), (.==))
+import SimpleSMT.Typed (TSExpr, (./=), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
 data CairoSemanticsF a
@@ -145,11 +145,13 @@ mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
       calleeFp <- declareFelt ("fp@" <> tShow (unLabel pc))
       let calleePc = uncheckedCallDestination inst
           nextPc = getNextPc inst
-      fpCond <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
+      setNewFp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
+      saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
+      setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
       preparedPre <- getPreByCall pc >>= prepare calleePc calleeFp
       preparedPost <- getPostByCall pc >>= prepare nextPc calleeFp
       expect preparedPre
-      assert (fpCond .&& preparedPost)
+      assert (TSMT.and [setNewFp, saveOldFp, setNextPc, preparedPost])
     AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
     Nop -> case jnzOracle Map.!? pc of
       Just False -> assert (dst .== 0)
