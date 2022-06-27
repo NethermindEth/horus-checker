@@ -215,7 +215,7 @@ toSemiAsm Instruction{..} = do
     AssertEqual -> withRes (\res -> dst <> " = " <> res <> mbApPP)
     Nop -> case i_pcUpdate of
       JumpAbs -> withRes (\res -> "jmp abs " <> res <> mbApPP)
-      JumpRel -> withRes (\res -> "jmp rel" <> res <> mbApPP)
+      JumpRel -> withRes (\res -> "jmp rel " <> res <> mbApPP)
       Jnz -> withRes (\res -> "jmp rel " <> res <> " if " <> dst <> " != 0" <> mbApPP)
       Regular -> case i_apUpdate of
         AddRes -> withRes ("ap += " <>)
