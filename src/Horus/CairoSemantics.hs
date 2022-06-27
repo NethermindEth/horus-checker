@@ -16,22 +16,25 @@ import Data.Functor.Identity (Identity)
 import Data.Map (Map)
 import qualified Data.Map as Map ((!?))
 import Data.Text (Text)
+import qualified SimpleSMT as SMT (SExpr (..))
 
-import Horus.CFGBuild (Label, LabeledInst)
 import Horus.Instruction
   ( ApUpdate (..)
   , FpUpdate (..)
   , Instruction (..)
+  , LabeledInst
   , Op1Source (..)
   , OpCode (..)
   , PointerRegister (..)
   , ResLogic (..)
+  , instructionSize
   )
+import Horus.Label (Label, moveLabel)
 import Horus.Module (Module (..))
+import Horus.Program (ApTracking (..))
 import Horus.SMTUtil (Step, prime, substituteFpAndAp)
 import Horus.Util (fieldPrime, tShow)
-import qualified SimpleSMT as SMT (SExpr (..))
-import SimpleSMT.Typed (TSExpr, (.->), (./=), (.<=), (.==))
+import SimpleSMT.Typed (TSExpr, (.->), (./=), (.<), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
 data CairoSemanticsF a
@@ -41,6 +44,7 @@ data CairoSemanticsF a
   | MarkAsMem Text (TSExpr Integer) a
   | GetPreByCall Label (TSExpr Bool -> a)
   | GetPostByCall Label (TSExpr Bool -> a)
+  | GetApTracking Label (ApTracking -> a)
   deriving stock (Functor)
 
 type CairoSemanticsT = FT CairoSemanticsF
@@ -63,6 +67,9 @@ getPreByCall l = liftF (GetPreByCall l id)
 
 getPostByCall :: Label -> CairoSemanticsT m (TSExpr Bool)
 getPostByCall l = liftF (GetPostByCall l id)
+
+getApTracking :: Label -> CairoSemanticsT m ApTracking
+getApTracking l = liftF (GetApTracking l id)
 
 {- | Prepare the expression for usage in the model.
 
@@ -126,7 +133,7 @@ memoryRemoval expr =
   unsafeMemoryRemoval expr' = return expr'
 
 mkInstructionConstraints :: Map Label Bool -> LabeledInst -> Int -> CairoSemanticsT m [TSExpr Bool]
-mkInstructionConstraints jnzOracle (pc, Instruction{..}) step = do
+mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) step = do
   op0Reg <- registerIntStep step i_op0Register
   op0 <- alloc (op0Reg + fromInteger i_op0Offset)
   op1 <- case i_op1Source of
@@ -165,15 +172,24 @@ mkInstructionConstraints jnzOracle (pc, Instruction{..}) step = do
       (ap'', fp'') <- registerApFp step''
       preparedPre <- getPreByCall pc >>= prepare step'
       preparedPost <- getPostByCall pc >>= prepare step''
+      apAdvance <- calcApAdvance inst
       pure
         [ conditionFormula
         , ap' .== newApValue
         , fp' .== newFpValue
         , preparedPre .-> preparedPost
-        , ap' .<= ap''
         , fp' .== fp''
         , ap'' .== apNext
         , fpNext .== fp
+        , maybe (ap .< apNext) (\x -> ap + fromIntegral x .== apNext) apAdvance
         ]
     AssertEqual -> pure [conditionFormula, apNext .== newApValue, fpNext .== newFpValue, res .== dst]
     _ -> pure [conditionFormula, apNext .== newApValue, fpNext .== newFpValue]
+
+calcApAdvance :: LabeledInst -> CairoSemanticsT m (Maybe Int)
+calcApAdvance (pc, i) = do
+  tracking1 <- getApTracking pc
+  tracking2 <- getApTracking (moveLabel pc (instructionSize i))
+  if at_group tracking1 == at_group tracking2
+    then pure (Just (at_offset tracking2 - at_offset tracking1))
+    else pure Nothing

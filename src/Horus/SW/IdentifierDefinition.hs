@@ -12,6 +12,7 @@ import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.Map (Map)
 import Data.Text (Text)
+import Horus.Label (Label)
 import Horus.SW.CairoType
 import Horus.SW.Lexer
 import Horus.SW.Parser
@@ -23,7 +24,7 @@ data IdentifierDefinitionKind
   | Member
   | Struct
   | Typ
-  | Label
+  | LabelId
   | Function
   | Namespace
   | Reference
@@ -39,19 +40,19 @@ data IdentifierDefinitionGADT a where
     Int ->
     IdentifierDefinitionGADT Struct
   TypeDefinition :: CairoType -> IdentifierDefinitionGADT Typ
-  LabelDefinition :: Int -> IdentifierDefinitionGADT Label
-  FunctionDefinition :: Int -> [Text] -> IdentifierDefinitionGADT Function
+  LabelDefinition :: Label -> IdentifierDefinitionGADT LabelId
+  FunctionDefinition :: Label -> [Text] -> IdentifierDefinitionGADT Function
   NamespaceDefinition :: IdentifierDefinitionGADT Namespace
   ReferenceDefinition :: IdentifierDefinitionGADT Reference
   ScopeDefinition :: IdentifierDefinitionGADT Scope
 
 data IdentifierDefinition = forall a. IdentifierDefinition (IdentifierDefinitionGADT a)
 
-getFunctionPc :: IdentifierDefinition -> Maybe Int
+getFunctionPc :: IdentifierDefinition -> Maybe Label
 getFunctionPc (IdentifierDefinition (FunctionDefinition pc _)) = pure pc
 getFunctionPc _ = Nothing
 
-getLabelPc :: IdentifierDefinition -> Maybe Int
+getLabelPc :: IdentifierDefinition -> Maybe Label
 getLabelPc (IdentifierDefinition (LabelDefinition pc)) = pure pc
 getLabelPc _ = Nothing
 
