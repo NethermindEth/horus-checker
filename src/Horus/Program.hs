@@ -2,21 +2,20 @@ module Horus.Program
   ( Program (..)
   , DebugInfo (..)
   , ILInfo (..)
+  , FlowTrackingData (..)
+  , ApTracking (..)
   , Identifiers
   )
 where
 
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
-import Data.Function ((&))
-import Data.Functor ((<&>))
-import Data.IntMap (IntMap)
-import qualified Data.IntMap as IntMap (fromDistinctAscList)
 import Data.Map (Map)
-import qualified Data.Map as Map (toAscList)
+import Numeric (readHex)
+
+import Horus.Label (Label (..))
 import Horus.SW.IdentifierDefinition (IdentifierDefinition)
 import Horus.SW.ScopedName (ScopedName)
-import Numeric (readHex)
 
 type Identifiers = Map ScopedName IdentifierDefinition
 
@@ -33,12 +32,20 @@ data Program = Program
   deriving (Show)
 
 data DebugInfo = DebugInfo
-  {di_instructionLocations :: IntMap ILInfo}
+  {di_instructionLocations :: Map Label ILInfo}
   deriving (Show)
 
 data ILInfo = ILInfo
-  {il_accessibleScopes :: [ScopedName]}
+  { il_accessibleScopes :: [ScopedName]
+  , il_flowTrackingData :: FlowTrackingData
+  }
   deriving (Show)
+
+data FlowTrackingData = FlowTrackingData {ftd_apTracking :: ApTracking}
+  deriving stock (Show)
+
+data ApTracking = ApTracking {at_group :: Int, at_offset :: Int}
+  deriving stock (Show)
 
 instance FromJSON Program where
   parseJSON = withObject "Program" $ \v ->
@@ -54,15 +61,21 @@ instance FromJSON Program where
 
 instance FromJSON DebugInfo where
   parseJSON = withObject "debug_info" $ \v ->
-    DebugInfo
-      <$> (v .: "instruction_locations" <&> toIntMap)
-   where
-    toIntMap :: Map Int a -> IntMap a
-    toIntMap m = Map.toAscList m & IntMap.fromDistinctAscList
+    DebugInfo <$> (v .: "instruction_locations")
 
 instance FromJSON ILInfo where
   parseJSON = withObject "ILInfo" $ \v ->
-    ILInfo <$> v .: "accessible_scopes"
+    ILInfo
+      <$> v .: "accessible_scopes"
+      <*> v .: "flow_tracking_data"
+
+instance FromJSON FlowTrackingData where
+  parseJSON = withObject "flow_tracking_data" $ \v ->
+    FlowTrackingData <$> v .: "ap_tracking"
+
+instance FromJSON ApTracking where
+  parseJSON = withObject "ap_tracking" $ \v ->
+    ApTracking <$> v .: "group" <*> v .: "offset"
 
 parseHexInteger :: String -> Parser Integer
 parseHexInteger ('0' : 'x' : rest)

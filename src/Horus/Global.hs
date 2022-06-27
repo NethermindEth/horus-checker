@@ -12,24 +12,26 @@ where
 import Control.Monad (when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
-import Data.Coerce (coerce)
 import Data.Function ((&))
-import qualified Data.IntMap as IntMap (fromList)
-import qualified Data.Map as Map (fromList, toList)
+import qualified Data.Map as Map (fromList, map, toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 
-import Horus.CFGBuild (CFGBuildT, Label (..), LabeledInst, buildCFG)
+import Horus.CFGBuild (CFGBuildT, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
-import Horus.CairoSemantics.Runner (ConstraintsState (..), SemanticsEnv (..), debugFriendlyModel, makeModel)
+import Horus.CairoSemantics.Runner
+  ( ConstraintsState (..)
+  , SemanticsEnv (..)
+  , debugFriendlyModel
+  , makeModel
+  )
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
-import Horus.Instruction (callDestination, readAllInstructions)
-import Horus.Label (labelInsructions)
+import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Module (Module, runModuleL, traverseCFG)
-import Horus.Program (p_code, p_identifiers)
+import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc)
 import Horus.Util (Box (..), topmostStepFT)
 import qualified SimpleSMT.Typed as SMT (true)
@@ -90,7 +92,7 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
     let pre = preConds ^. at name . non SMT.true
-    pure (Label pc, pre)
+    pure (pc, pre)
 
 extractConstraints :: SemanticsEnv -> Module -> GlobalT m ConstraintsState
 extractConstraints env = runCairoSemanticsT env . encodeSemantics
@@ -116,15 +118,18 @@ mkSemanticsEnv cd labeledInsts =
   SemanticsEnv
     { se_pres = Map.fromList [(pc, pre) | (pc, fun) <- funByCall, Just pre <- [getPre fun]]
     , se_posts = Map.fromList [(pc, post) | (pc, fun) <- funByCall, Just post <- [getPost fun]]
+    , se_apTracking = Map.map getTracking instructionLocations
     }
  where
-  pcToFun = IntMap.fromList [(pc, fun) | (fun, idef) <- identifiers, Just pc <- [getFunctionPc idef]]
+  pcToFun = Map.fromList [(pc, fun) | (fun, idef) <- identifiers, Just pc <- [getFunctionPc idef]]
   identifiers = Map.toList (p_identifiers (cd_program cd))
   getPre name = cd ^. cdChecks . cPreConds . at name
   getPost name = cd ^. cdChecks . cPostConds . at name
+  instructionLocations = di_instructionLocations (p_debugInfo (cd_program cd))
+  getTracking = ftd_apTracking . il_flowTrackingData
   funByCall =
     [ (pc, fun)
     | (pc, inst) <- labeledInsts
-    , Just callDst <- [callDestination (coerce pc) inst]
+    , Just callDst <- [callDestination pc inst]
     , Just fun <- [pcToFun ^. at callDst]
     ]
