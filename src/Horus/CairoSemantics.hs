@@ -40,8 +40,7 @@ import qualified SimpleSMT.Typed as TSMT
 data CairoSemanticsF a
   = Assert (TSExpr Bool) a
   | DeclareFelt Text (TSExpr Integer -> a)
-  | GetFreshName (Text -> a)
-  | MarkAsMem Text (TSExpr Integer) a
+  | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
   | GetPreByCall Label (TSExpr Bool -> a)
   | GetPostByCall Label (TSExpr Bool -> a)
   | GetApTracking Label (ApTracking -> a)
@@ -56,11 +55,8 @@ assert a = liftF (Assert a ())
 declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
 declareFelt t = liftF (DeclareFelt t id)
 
-getFreshName :: CairoSemanticsT m Text
-getFreshName = liftF (GetFreshName id)
-
-markAsMem :: Text -> TSExpr Integer -> CairoSemanticsT m ()
-markAsMem var address = liftF (MarkAsMem var address ())
+declareMem :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
+declareMem address = liftF (DeclareMem address id)
 
 getPreByCall :: Label -> CairoSemanticsT m (TSExpr Bool)
 getPreByCall l = liftF (GetPreByCall l id)
@@ -108,10 +104,7 @@ mkProgramConstraints jnzOracle insts = for_ (zip insts [0 ..]) $ \(inst, step) -
   mkInstructionConstraints jnzOracle inst step >>= assert . TSMT.and
 
 alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
-alloc address = do
-  memName <- ("MEM" <>) <$> getFreshName
-  markAsMem memName (address `TSMT.mod` prime)
-  declareFelt memName
+alloc address = declareMem (address `TSMT.mod` prime)
 
 memoryRemoval :: TSExpr a -> CairoSemanticsT m (TSExpr a)
 memoryRemoval expr =
