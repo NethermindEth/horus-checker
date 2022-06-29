@@ -13,8 +13,8 @@ import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, cons, intercalate, length)
-import Lens.Micro (ix, (^.))
+import Data.Text qualified as Text
+import Lens.Micro (ix, over, (^.))
 
 import Horus.CFGBuild (ArcCondition (..), Label (..))
 import Horus.CFGBuild.Runner (CFG (..))
@@ -26,13 +26,13 @@ import Horus.SW.Identifier
   , getLabelPc
   )
 import Horus.SW.ScopedName (ScopedName (..))
+import Horus.ScopedTSExpr (ScopedTSExpr, conjunctSTS, stsexprExpr)
 import Horus.Util (tShow)
-import SimpleSMT.Typed (TSExpr, (.&&), (.==))
-import SimpleSMT.Typed qualified as SMT (and)
+import SimpleSMT.Typed ((.&&), (.==))
 
 data Module = Module
-  { m_pre :: TSExpr Bool
-  , m_post :: TSExpr Bool
+  { m_pre :: ScopedTSExpr Bool
+  , m_post :: ScopedTSExpr Bool
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map Label Bool
   }
@@ -91,22 +91,23 @@ runModuleL = toList . flip runReader Set.empty . execWriterT
 emitModule :: Module -> ModuleL ()
 emitModule = tell . D.singleton
 
-traverseCFG :: [(Label, TSExpr Bool)] -> CFG -> ModuleL ()
+traverseCFG :: [(Label, ScopedTSExpr Bool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(l, pre) ->
-  visit Map.empty [] (pre .&& ap .== fp) l ACNone
+  visit Map.empty [] (over stsexprExpr (.&& ap .== fp) pre) l ACNone
  where
-  visit :: Map Label Bool -> [LabeledInst] -> TSExpr Bool -> Label -> ArcCondition -> ModuleL ()
+  visit :: Map Label Bool -> [LabeledInst] -> ScopedTSExpr Bool -> Label -> ArcCondition -> ModuleL ()
   visit oracle acc pre l arcCond = do
     let oracle' = updateOracle arcCond oracle
         assertions = cfg_assertions cfg ^. ix l
+        conjSTS = conjunctSTS assertions
     unless (null assertions) $ do
-      emitModule (Module pre (SMT.and assertions) acc oracle')
+      emitModule (Module pre conjSTS acc oracle')
     visited <- ask
     unless (Set.member l visited) $
       local (Set.insert l) $ do
         if null assertions
           then visitArcs oracle' acc pre l
-          else visitArcs Map.empty [] (SMT.and assertions) l
+          else visitArcs Map.empty [] conjSTS l
   visitArcs oracle acc pre l = do
     for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
       visit oracle (acc <> insts) pre lTo test

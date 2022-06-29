@@ -1,15 +1,19 @@
-# @post [ap - 1] == [fp - 3] + [fp - 4]
-func add(m, n):
-    jmp next if [fp - 4] != 0
-        [ap] = [fp - 3]; ap++
-        ret
-    # @invariant [fp - 4] > 0
-    next:
-        [ap] = [fp - 4] - 1; ap++
-        [ap] = [fp - 3]; ap++
-        call add
-        [ap] = [ap - 1] + 1; ap++
-        ret
+# @pre True
+# @post [ap - 1] == m + n
+func add(m : felt, n : felt) -> (res : felt):
+    if n == 0:
+        return (res=m)
+    else:
+        let (res1) = add(m, n - 1)
+        let (res2) = inc(res1)
+        return (res=res2)
+    end
+end
+
+# @pre True
+# @post [ap - 1] == x + 1
+func inc(x : felt) -> (res : felt):
+     return (res=x+1)
 end
 
 # @post [ap - 1] == 5
