@@ -11,6 +11,7 @@ module Horus.Util
   , commonPrefix
   , enumerate
   , maybeToError
+  , onSnd
   )
 where
 
@@ -63,3 +64,6 @@ enumerate = [minBound ..]
 
 maybeToError :: MonadError e m => e -> Maybe a -> m a
 maybeToError e = maybe (throwError e) pure
+
+onSnd :: (b -> c) -> (a, b) -> (a, c)
+onSnd f (a, b) = (a, f b)
