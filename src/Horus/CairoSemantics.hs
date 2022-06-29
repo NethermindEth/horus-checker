@@ -6,19 +6,26 @@ module Horus.CairoSemantics
   , CairoSemanticsT
   , CairoSemanticsL
   , BuiltinOffsets (..)
+  , MemoryVariable (..)
   )
 where
 
 import Control.Monad (when)
+import Control.Monad.Reader (ReaderT (..), ask, local)
+import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity)
+import Data.List (tails)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
-import Data.Text (Text)
-import SimpleSMT qualified as SMT (SExpr (..))
+import Data.Set (Set)
+import Data.Set qualified as Set (toList)
+import Data.Text (Text, unpack)
+import Lens.Micro ((^.))
+import SimpleSMT qualified as SMT (SExpr (..), const)
 
 import Horus.Instruction
   ( ApUpdate (..)
@@ -31,7 +38,7 @@ import Horus.Instruction
   , getNextPc
   , uncheckedCallDestination
   )
-import Horus.Label (Label (..))
+import Horus.Label (Label (..), tShowLabel)
 import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
 import Horus.SMTUtil
@@ -39,25 +46,36 @@ import Horus.SMTUtil
   , builtinConstraint
   , builtinEnd
   , builtinStart
+  , existsFelt
   , memory
   , prime
-  , regToTSExpr
+  , regToSTSExpr
   , pattern Memory
   )
 import Horus.SMTUtil qualified as Util (ap, fp)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
+import Horus.ScopedTSExpr (LVar, ScopedTSExpr, addLVarSuffix, stsexprExpr, stsexprScope, withEmptyScope)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 import SimpleSMT.Typed (TSExpr (Mod, (:+)), (.&&), (.->), (./=), (.<), (.<=), (.==), (.||))
 import SimpleSMT.Typed qualified as TSMT
 
+data MemoryVariable = MemoryVariable
+  { mv_varName :: Text
+  , mv_addrName :: Text
+  , mv_addrExpr :: TSExpr Integer
+  }
+  deriving (Show)
+
 data CairoSemanticsF a
   = Assert' (TSExpr Bool) a
   | Expect' (TSExpr Bool) a
+  | CheckPoint ([MemoryVariable] -> TSExpr Bool) a
   | DeclareFelt Text (TSExpr Integer -> a)
   | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
-  | GetPreByCall LabeledInst (TSExpr Bool -> a)
-  | GetPostByCall LabeledInst (TSExpr Bool -> a)
+  | DeclareLocalMem (TSExpr Integer) (MemoryVariable -> a)
+  | GetPreByCall LabeledInst (ScopedTSExpr Bool -> a)
+  | GetPostByCall LabeledInst (ScopedTSExpr Bool -> a)
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
@@ -73,17 +91,23 @@ assert' a = liftF (Assert' a ())
 expect' :: TSExpr Bool -> CairoSemanticsT m ()
 expect' a = liftF (Expect' a ())
 
+checkPoint :: ([MemoryVariable] -> TSExpr Bool) -> CairoSemanticsT m ()
+checkPoint a = liftF (CheckPoint a ())
+
 declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
 declareFelt t = liftF (DeclareFelt t id)
 
 declareMem :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
 declareMem address = liftF (DeclareMem address id)
 
-getPreByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
+getPreByCall :: LabeledInst -> CairoSemanticsT m (ScopedTSExpr Bool)
 getPreByCall inst = liftF (GetPreByCall inst id)
 
-getPostByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
+getPostByCall :: LabeledInst -> CairoSemanticsT m (ScopedTSExpr Bool)
 getPostByCall inst = liftF (GetPostByCall inst id)
+
+declareLocalMem :: TSExpr Integer -> CairoSemanticsT m MemoryVariable
+declareLocalMem address = liftF (DeclareLocalMem address id)
 
 getApTracking :: Label -> CairoSemanticsT m ApTracking
 getApTracking inst = liftF (GetApTracking inst id)
@@ -115,11 +139,22 @@ memoryRemoval = TSMT.transform' step
 That is, deduce AP from the ApTracking data by PC and replace FP name
 with the given one.
 -}
-prepare :: Label -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
-prepare pc fp expr = prepare' <$> getAp pc <*> pure fp <*> pure expr
+prepare :: Label -> TSExpr Integer -> ScopedTSExpr a -> CairoSemanticsT m (TSExpr a)
+prepare pc fp stsexpr = getAp pc >>= \ap -> prepare' ap fp stsexpr
 
-prepare' :: TSExpr Integer -> TSExpr Integer -> TSExpr a -> TSExpr a
-prepare' ap fp expr = TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr)
+prepare' :: TSExpr Integer -> TSExpr Integer -> ScopedTSExpr a -> CairoSemanticsT m (TSExpr a)
+prepare' ap fp stsexpr = do
+  let stsexpr_scope = stsexpr ^. stsexprScope
+      stsexpr_expr = stsexpr ^. stsexprExpr
+  mapM_ declareFelt (Set.toList stsexpr_scope)
+  memoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap stsexpr_expr))
+
+prepareCheckPoint :: Label -> TSExpr Integer -> ScopedTSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
+prepareCheckPoint pc fp stsexpr = do
+  let stsexpr_scope = stsexpr ^. stsexprScope
+      stsexpr_expr = stsexpr ^. stsexprExpr
+  ap <- getAp pc
+  exMemoryRemoval stsexpr_scope (TSMT.substitute "fp" fp . TSMT.substitute "ap" ap $ stsexpr_expr)
 
 encodeApTracking :: ApTracking -> CairoSemanticsT m (TSExpr Integer)
 encodeApTracking ApTracking{..} =
@@ -142,17 +177,64 @@ encodeSemantics m@Module{..} = do
   apStart <- moduleStartAp m
   apEnd <- moduleEndAp m
   assert (fp .<= apStart)
-  assert (prepare' apStart fp m_pre)
-  expect (prepare' apEnd fp m_post)
+  pre <- prepare' apStart fp m_pre
+  post <- prepare' apEnd fp m_post
+  assert pre
   for_ m_prog $ \inst -> do
     mkInstructionConstraints fp m_jnzOracle inst
+  expect post
   whenJust (nonEmpty m_prog) $ \neInsts -> do
     mkApConstraints fp apEnd neInsts
     mkBuiltinConstraints fp neInsts
 
+alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
+alloc address = declareMem (address `TSMT.mod` prime)
+
+allocLocal :: TSExpr Integer -> CairoSemanticsT m MemoryVariable
+allocLocal address = declareLocalMem (address `TSMT.mod` prime)
+
+exMemoryRemoval :: Set LVar -> TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
+exMemoryRemoval exVars expr = do
+  (sexpr, lMemVars) <- runReaderT (unsafeMemoryRemoval (TSMT.toUnsafe expr)) id
+  pure (intro (TSMT.fromUnsafe sexpr) lMemVars)
+ where
+  restrictMemTail [] = []
+  restrictMemTail (MemoryVariable var _ addr : rest) =
+    [addr .== mv_addrExpr .-> TSMT.const var .== TSMT.const mv_varName | MemoryVariable{..} <- rest]
+  intro :: TSExpr Bool -> [MemoryVariable] -> [MemoryVariable] -> TSExpr Bool
+  intro ex lmv gmv =
+    let globMemRestrictions = [addr1 .== addr2 .-> TSMT.const var1 .== TSMT.const var2 | MemoryVariable var1 _ addr1 <- lmv, MemoryVariable var2 _ addr2 <- gmv]
+        locMemRestrictions = concatMap restrictMemTail (tails lmv)
+        inner_expr = TSMT.and (ex : (locMemRestrictions ++ globMemRestrictions))
+        quant_lmv = foldr (\mvar e -> existsFelt (mv_varName mvar) (const e)) inner_expr lmv
+     in foldr (\var e -> existsFelt var (const e)) quant_lmv exVars
+  unsafeMemoryRemoval :: SMT.SExpr -> ReaderT (SMT.SExpr -> SMT.SExpr) (CairoSemanticsT m) (SMT.SExpr, [MemoryVariable])
+  unsafeMemoryRemoval (SMT.List [SMT.Atom "let", SMT.List bindings, x]) = do
+    res <- traverse unsafeMemoryRemoval bindings
+    let bindings' = map fst res
+        bindingLocalMemVars = concatMap snd res
+        wrapper x' = SMT.List [SMT.Atom "let", SMT.List bindings', x']
+    (x', xLocalMemVars) <- local (. wrapper) (unsafeMemoryRemoval x)
+    pure (wrapper x', bindingLocalMemVars ++ xLocalMemVars)
+  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
+    (x', localMemVars) <- unsafeMemoryRemoval x
+    bindingWrapper <- ask
+    if null localMemVars && not (TSMT.referencesAny exVars x')
+      then do
+        (,[]) . TSMT.toUnsafe <$> lift (alloc (TSMT.fromUnsafe (bindingWrapper x'))) -- No
+      else lift $ do
+        mv <- allocLocal (TSMT.fromUnsafe (bindingWrapper x'))
+        pure (SMT.const (unpack $ mv_varName mv), mv : localMemVars)
+  unsafeMemoryRemoval (SMT.List l) = do
+    res <- traverse unsafeMemoryRemoval l
+    let l' = map fst res
+        localMemVars = concatMap snd res
+    pure (SMT.List l', localMemVars)
+  unsafeMemoryRemoval expr' = pure (expr', [])
+
 mkInstructionConstraints :: TSExpr Integer -> Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
 mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
-  dstReg <- prepare pc fp (regToTSExpr i_dstRegister)
+  dstReg <- prepare pc fp (regToSTSExpr i_dstRegister)
   let dst = memory (dstReg + fromInteger i_dstOffset)
   case i_opCode of
     Call -> do
@@ -160,13 +242,21 @@ mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
       let calleePc = uncheckedCallDestination inst
           nextPc = getNextPc inst
       calleeFpAsAp <- (2 +) <$> getAp pc
-      setNewFp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
-      saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
-      setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
-      preparedPre <- getPreByCall inst >>= prepare calleePc calleeFpAsAp
-      preparedPost <- getPostByCall inst >>= prepare nextPc calleeFpAsAp
-      expect preparedPre
-      assert (TSMT.and [setNewFp, saveOldFp, setNextPc, preparedPost])
+      setNewFp <- prepare pc calleeFp (withEmptyScope $ Util.fp .== Util.ap + 2)
+      saveOldFp <- prepare pc fp (withEmptyScope $ memory Util.ap .== Util.fp)
+      setNextPc <-
+        prepare pc fp (withEmptyScope $ memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
+      pre <- getPreByCall inst
+      post <- getPostByCall inst
+      let lvar_suff = "+" <> tShowLabel pc
+          pre' = addLVarSuffix lvar_suff pre
+          post' = addLVarSuffix lvar_suff post
+      preparedPre <- prepare calleePc calleeFpAsAp pre'
+      preparedPost <- prepare nextPc calleeFpAsAp post'
+      preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFpAsAp pre
+      assert (TSMT.and [setNewFp, saveOldFp, setNextPc])
+      checkPoint preparedPreCheckPoint
+      assert (preparedPre .&& preparedPost)
     AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
     Nop -> case jnzOracle Map.!? pc of
       Just False -> assert (dst .== 0)
@@ -247,12 +337,12 @@ checkBuiltinNotRequired b = traverse_ check
 
 getRes :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (TSExpr Integer)
 getRes fp (pc, Instruction{..}) = do
-  op0Reg <- prepare pc fp (regToTSExpr i_op0Register)
+  op0Reg <- prepare pc fp (regToSTSExpr i_op0Register)
   let op0 = memory (op0Reg + fromInteger i_op0Offset)
   op1 <- case i_op1Source of
     Op0 -> pure (memory (op0 + fromInteger i_op1Offset))
     RegisterSource reg -> do
-      op1Reg <- prepare pc fp (regToTSExpr reg)
+      op1Reg <- prepare pc fp (regToSTSExpr reg)
       pure (memory (op1Reg + fromInteger i_op1Offset))
     Imm -> pure (fromInteger i_imm)
   pure $ case i_resLogic of
