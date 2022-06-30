@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-top-binds #-}
 module SMTSettings (
   SMT(..),
   SmtTag(..),
@@ -48,7 +47,8 @@ instance (SMT SmtTag) where
   runCmd MathS = "mathsat"
 
   addtnlArgs Cvc   seed = if seed < 0 then []
-                                      else ["--seed=" ++ show seed, "--sat-random-seed=" ++ show seed]
+                                      else ["--seed=" ++ show seed,
+                                            "--sat-random-seed=" ++ show seed]
   addtnlArgs Yices _    = []
   addtnlArgs Z3    _    = []
   addtnlArgs MathS seed = ["-random_seed=" ++ show seed | seed > 0]
@@ -74,6 +74,7 @@ instance (SMT SmtTag) where
         ]
       MathS -> [logic MathS]
     where mkSeededLibCmd str = SmtLibCommand $ "(" ++ str ++ " " ++ show seed ++ ")"
-          mkSeededIteLibCmd str = SmtLibCommand $ "(" ++ str ++ " " ++ (if seed <= 0 then "true" else "false") ++ ")"
+          mkSeededIteLibCmd str = SmtLibCommand $ "(" ++ str ++ " " ++
+                                                  (if seed <= 0 then "true" else "false") ++ ")"
 
   suffix _ = [smtLIBcheckSat, smtLIBprintStats]
