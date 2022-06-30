@@ -93,3 +93,23 @@ executable horus-disasm
       horus-check,
       mtl,
       text,
+
+test-suite lib-test
+    import:                  deps
+    type:                    exitcode-stdio-1.0
+    hs-source-dirs:          test
+    main-is:                 Main.hs
+    other-modules:
+      Lib
+      Wheels
+      SMTSettings
+    ghc-options:
+      -threaded
+    build-depends:
+      horus-check,
+      hspec,
+      process,
+      filepath,
+      directory,
+      containers,
+      mtl,

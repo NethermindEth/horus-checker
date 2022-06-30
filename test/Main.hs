@@ -195,12 +195,12 @@ spec :: TestState -> Spec
 spec st = beforeAll (makeInitEnv st) $ afterAll_ (return ()) $ do
   describe "Cairo semantic models" $ do
     modelTest "tests/resources/golden/func_if.cairo"
-    modelTest "tests/resources/golden/func_peano_prod.cairo"
-    modelTest "tests/resources/golden/func_id.cairo"
-    modelTest "tests/resources/golden/func_mul3.cairo"
-    modelTest "tests/resources/golden/func_multiple_ret.cairo"
-    modelTest "tests/resources/golden/func_pred.cairo"
-    modelTest "tests/resources/golden/func_add_rec.cairo"
+    -- modelTest "tests/resources/golden/func_peano_prod.cairo"
+    -- modelTest "tests/resources/golden/func_id.cairo"
+    -- modelTest "tests/resources/golden/func_mul3.cairo"
+    -- modelTest "tests/resources/golden/func_multiple_ret.cairo"
+    -- modelTest "tests/resources/golden/func_pred.cairo"
+    -- modelTest "tests/resources/golden/func_add_rec.cairo"
 
 main :: IO ()
 main = do
