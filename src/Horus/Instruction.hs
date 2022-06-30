@@ -14,7 +14,9 @@ module Horus.Instruction
   , FpUpdate (..)
   , readAllInstructions
   , instructionSize
+  , getNextPc
   , callDestination
+  , jumpDestination
   , toSemiAsm
   )
 where
@@ -83,11 +85,25 @@ instructionSize :: Instruction -> Int
 instructionSize Instruction{i_op1Source = Imm} = 2
 instructionSize _ = 1
 
+getNextPc :: LabeledInst -> Label
+getNextPc (pc, i) = moveLabel pc (instructionSize i)
+
 callDestination :: Label -> Instruction -> Maybe Label
 callDestination pc i@Instruction{i_opCode = Call}
   | JumpRel <- i_pcUpdate i = pure (moveLabel pc (fromInteger (i_imm i)))
   | otherwise = pure (Label (fromInteger (i_imm i)))
 callDestination _ _ = Nothing
+
+jumpDestination :: LabeledInst -> Maybe Label
+jumpDestination (pc, i@Instruction{i_opCode = Nop}) = case i_pcUpdate i of
+  JumpRel -> pure relDst
+  JumpAbs -> pure absDst
+  Jnz -> pure relDst
+  _ -> Nothing
+ where
+  relDst = moveLabel pc (fromInteger (i_imm i))
+  absDst = Label (fromInteger (i_imm i))
+jumpDestination _ = Nothing
 
 n15, n16 :: Int
 (n15, n16) = (15, 16)
