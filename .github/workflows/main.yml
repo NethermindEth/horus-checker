@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      horus_compile_version: 0.0.1
+      horus_compile_version: 0.0.2
 
     steps:
       - uses: actions/checkout@v2
