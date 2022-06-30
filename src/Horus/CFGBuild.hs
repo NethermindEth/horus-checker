@@ -26,7 +26,15 @@ import Lens.Micro (at, ix, non, (^.))
 import Lens.Micro.GHC ()
 
 import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
-import Horus.Instruction (Instruction (..), LabeledInst, OpCode (..), PcUpdate (..), instructionSize)
+import Horus.Instruction
+  ( Instruction (..)
+  , LabeledInst
+  , OpCode (..)
+  , PcUpdate (..)
+  , getNextPc
+  , instructionSize
+  , jumpDestination
+  )
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc, getLabelPc)
@@ -109,13 +117,9 @@ buildFrame rows identifiers = do
  where
   funLabels = identifiers & Map.elems & mapMaybe getFunctionPc & coerce
   namedLabels = identifiers & Map.elems & mapMaybe getLabelPc & coerce
-  inducedLabels =
-    [ moveLabel pc (instructionSize inst)
-    | (pc, inst) <- rows
-    , isControlFlow inst && not (isCall inst)
-    ]
+  jumpLabels = concat [[jmpDst, getNextPc i] | i <- rows, Just jmpDst <- [jumpDestination i]]
   retLabels = [pc | (pc, inst) <- rows, isRet inst]
-  labels = sort (funLabels `union` namedLabels `union` inducedLabels `union` retLabels)
+  labels = sort (funLabels `union` namedLabels `union` jumpLabels `union` retLabels)
 
 breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
@@ -184,7 +188,3 @@ mapFunsToRets funByLabel rows =
 isRet :: Instruction -> Bool
 isRet Instruction{i_opCode = Ret} = True
 isRet _ = False
-
-isCall :: Instruction -> Bool
-isCall Instruction{i_opCode = Call} = True
-isCall _ = False
