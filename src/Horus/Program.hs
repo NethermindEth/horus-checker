@@ -23,7 +23,6 @@ data Program = Program
   { p_attributes :: [String]
   , p_builtins :: [String]
   , p_code :: [Integer]
-  , p_hints :: Map String String
   , p_identifiers :: Identifiers
   , p_mainScope :: String
   , p_prime :: Integer
@@ -53,7 +52,6 @@ instance FromJSON Program where
       <$> v .: "attributes"
       <*> v .: "builtins"
       <*> (v .: "data" >>= traverse parseHexInteger)
-      <*> v .: "hints"
       <*> v .: "identifiers"
       <*> v .: "main_scope"
       <*> (v .: "prime" >>= parseHexInteger)
