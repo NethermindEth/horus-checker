@@ -3,3 +3,5 @@
 dist-newstyle/
 **/__pycache__
 tests/resources/golden/**.out
+test/benchmark_src/build/
+test/benchmark_src/lean_packages/
