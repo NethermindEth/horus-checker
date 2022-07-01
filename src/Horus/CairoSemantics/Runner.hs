@@ -106,14 +106,15 @@ debugFriendlyModel ConstraintsState{..} =
  where
   memoryPairs = [name <> "=[" <> SMT.showTSExpr addr <> "]" | (name, addr) <- cs_memoryVariables]
 
-makeModel :: ConstraintsState -> Text
-makeModel ConstraintsState{..} =
+makeModel :: Text -> ConstraintsState -> Text
+makeModel rawSmt ConstraintsState{..} =
   let declStmts = SMT.declareInt "prime" : map SMT.declareInt cs_decls
       feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- cs_decls]
       memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
       restrictions = concat [feltRestrictions, memRestrictions, cs_exprs]
    in (declStmts <> map SMT.assert restrictions)
         & map showTSStmt
+        & (rawSmt :)
         & Text.intercalate "\n"
  where
   restrictMemTail [] = []
