@@ -86,7 +86,8 @@ compileCairo file = do
   let compiled :: CompiledFilePath = mkCompiledFilePath (ts_outDir st) file
   liftIO . createDirectoryIfMissing True . dropFileName . base $ compiled
   when (isToolRequested st Compiler) $
-    liftIO $ callProcess horusCompileCmd [relativePath file, "--output", relativePath compiled]
+    liftIO $
+      callProcess horusCompileCmd [relativePath file, "--output", relativePath compiled]
   return compiled
 
 makeGeneralSegments :: CompiledFilePath -> TestIO [SmtLibFilePath]
@@ -95,7 +96,8 @@ makeGeneralSegments file =
    in do
         st <- ask
         when (isToolRequested st Segmentizer) $
-          liftIO $ callProcess horusCheckCmd [relativePath file, generalSegRoot]
+          liftIO $
+            callProcess horusCheckCmd [relativePath file, generalSegRoot]
         segmentFiles <- liftIO $ listDirectory generalSegRoot
         return $ map (mkSmtLibFilePath . (</>) generalSegRoot) segmentFiles
 

@@ -1,15 +1,15 @@
 module Lib
-  ( StructuredFilePath (..),
-    CairoFilePath,
-    CompiledFilePath,
-    SmtLibFilePath,
-    ResultFilePath,
-    mkCairoFilePath,
-    mkCompiledFilePath,
-    mkSmtLibFilePath,
-    mkResultFilePath,
-    relativePath,
-    smtModelFileName,
+  ( StructuredFilePath (..)
+  , CairoFilePath
+  , CompiledFilePath
+  , SmtLibFilePath
+  , ResultFilePath
+  , mkCairoFilePath
+  , mkCompiledFilePath
+  , mkSmtLibFilePath
+  , mkResultFilePath
+  , relativePath
+  , smtModelFileName
   )
 where
 

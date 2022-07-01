@@ -1,9 +1,9 @@
 module SMTSettings
-  ( SMT (..),
-    SmtTag (..),
-    SMTResult (..),
-    SmtLibCommand (..),
-    allSmts,
+  ( SMT (..)
+  , SmtTag (..)
+  , SMTResult (..)
+  , SmtLibCommand (..)
+  , allSmts
   )
 where
 
@@ -82,7 +82,9 @@ instance (SMT SmtTag) where
     mkSeededLibCmd str = SmtLibCommand $ "(" ++ str ++ " " ++ show seed ++ ")"
     mkSeededIteLibCmd str =
       SmtLibCommand $
-        "(" ++ str ++ " "
+        "("
+          ++ str
+          ++ " "
           ++ (if seed <= 0 then "true" else "false")
           ++ ")"
 
