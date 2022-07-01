@@ -20,11 +20,11 @@ jobs:
 
       - name: Run fourmolu
         run: |
-          find app src -name *.hs -exec fourmolu --mode 'check' {} +
+          find app src test -name *.hs -exec fourmolu --mode 'check' {} +
 
       - name: Run HLint
         run: |
-          curl -sSL https://raw.github.com/ndmitchell/hlint/master/misc/run.sh | sh -s src app
+          curl -sSL https://raw.github.com/ndmitchell/hlint/master/misc/run.sh | sh -s src app test
 
   test:
     runs-on: ubuntu-latest

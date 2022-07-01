@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-name-shadowing #-}
-{-# OPTIONS_GHC -Wno-incomplete-uni-patterns #-}
 module Main(main) where
 
 import Test.Hspec(Spec, describe, shouldBe, it, hspec, SpecWith, beforeAll, parallel, afterAll_)
@@ -49,28 +47,28 @@ toolchainSequence begin end = [tool | tool <- [Compiler ..], begin <= tool && to
 type SmtTagged a = Map.Map SmtTag a
 
 data TestState = TestState {
-  toolsToRun      :: [ToolchainPart],
-  outDir          :: FilePath,
-  timeoutInMillis :: Int,
-  smts            :: [SmtTag],
-  seed            :: Int,
-  compileBmarker  :: Bool
+  ts_toolsToRun      :: [ToolchainPart],
+  ts_outDir          :: FilePath,
+  ts_timeoutInMillis :: Int,
+  ts_smts            :: [SmtTag],
+  ts_seed            :: Int,
+  ts_compileBmarker  :: Bool
 }
 
 defaultTestState :: TestState
 defaultTestState = TestState{
-  toolsToRun      = toolchainSequence Compiler Verifier,
-  outDir          = "out",
-  timeoutInMillis = 5000,
-  smts            = allSmts,
-  seed            = 0,
-  compileBmarker  = True
+  ts_toolsToRun      = toolchainSequence Compiler Verifier,
+  ts_outDir          = "out",
+  ts_timeoutInMillis = 5000,
+  ts_smts            = allSmts,
+  ts_seed            = 0,
+  ts_compileBmarker  = True
 }
 
 type TestIO a = ReaderT TestState IO a
 
 isToolRequested :: TestState -> ToolchainPart -> Bool
-isToolRequested st part = part `elem` toolsToRun st
+isToolRequested st part = part `elem` ts_toolsToRun st
 
 smtRoot :: FilePath -> SmtTag -> FilePath
 smtRoot file smt = (</> name smt) . dropFileName . takeDirectory $ file
@@ -82,7 +80,7 @@ smtFileName file smt = mkSmtLibFilePath $ smtRoot filePath smt </> takeFileName 
 compileCairo :: CairoFilePath -> TestIO CompiledFilePath
 compileCairo file = do
   st <- ask
-  let compiled :: CompiledFilePath = mkCompiledFilePath (outDir st) file
+  let compiled :: CompiledFilePath = mkCompiledFilePath (ts_outDir st) file
   liftIO . createDirectoryIfMissing True . dropFileName . base $ compiled
   when (isToolRequested st Compiler) $
     liftIO $ callProcess horusCompileCmd [relativePath file, "--output", relativePath compiled]
@@ -157,9 +155,11 @@ postprocessResults smtToResults =
       result <- readFile $ relativePath path
       let processed = if null result
                       then "X"
-                      else let (smtResult : smtTimeLine : _) = lines result
-                               smtTime = last $ words smtTimeLine in
-                        concat [smtResult, " ", smtTime, "s"]
+                      else let resLines = lines result in
+                           case resLines of
+                              (smtResult : smtTimeLine : _) ->
+                                concat [smtResult, " ", last $ words smtTimeLine, "s"]
+                              _ -> fail "Processed SMT result has incorrect format"
       return $ acc ++ [concat [name smt, ": ", processed]]
       ) [] resultPaths
     return $ Map.insert smt x res
@@ -181,14 +181,14 @@ modelTest file =
 
 makeInitEnv :: TestState -> IO TestState
 makeInitEnv st = do
-  when (compileBmarker st) $
+  when (ts_compileBmarker st) $
     -- StdOut and StdErr stolen and ignored on purpose in order to discard compiler output.
     do (_, _, _, h) <- createProcess (proc lake ["build"]) { cwd = Just benchmarkerRoot,
                                                              std_out = CreatePipe,
                                                              std_err = CreatePipe }
        _ <- waitForProcess h
        return ()
-  createDirectoryIfMissing True $ outDir st
+  createDirectoryIfMissing True $ ts_outDir st
   return st
 
 spec :: TestState -> Spec
