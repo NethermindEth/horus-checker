@@ -21,8 +21,10 @@ fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
 
 toSignedFelt :: Integer -> Integer
 toSignedFelt x
-  | x <= fieldPrime `div` 2 = x
-  | otherwise = x - fieldPrime
+  | moddedX > fieldPrime `div` 2 = moddedX - fieldPrime
+  | otherwise = moddedX
+ where
+  moddedX = x `mod` fieldPrime
 
 whenJust :: Applicative f => Maybe a -> (a -> f ()) -> f ()
 whenJust Nothing _ = pure ()
