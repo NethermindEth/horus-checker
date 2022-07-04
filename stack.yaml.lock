@@ -11,6 +11,17 @@ packages:
       sha256: ddbb8343712ef5d96480180f4df7113db80ecb41336ec3e02876ccdb6ff6b547
   original:
     hackage: simple-smt-0.9.7@sha256:a93eba88f8177e13b39bf664b53ad65ca8eea976f00cae443c081b3ea3c26fb3,736
+- completed:
+    name: z3
+    version: '408.2'
+    git: https://github.com/ElijahVlasov/haskell-z3.git
+    pantry-tree:
+      size: 2204
+      sha256: 839604cc4a50b889232329150b7f981d941751d98c0a4b278a82da62fe8070d5
+    commit: 9d635925d17419174dee1b8d3e7bf87aa763f402
+  original:
+    git: https://github.com/ElijahVlasov/haskell-z3.git
+    commit: 9d635925d17419174dee1b8d3e7bf87aa763f402
 snapshots:
 - completed:
     size: 618884
