@@ -1,22 +1,32 @@
-module Horus.Module (Module (..), runModuleL, traverseCFG) where
+module Horus.Module (Module (..), runModuleL, traverseCFG, nameOfModule) where
 
+import Control.Applicative ((<|>))
 import Control.Monad (unless)
 import Control.Monad.Reader (Reader, ask, local, runReader)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
+import Data.Coerce (coerce)
 import Data.DList (DList)
 import Data.DList qualified as D (singleton)
 import Data.Foldable (for_, toList)
 import Data.Map (Map)
-import Data.Map qualified as Map (empty, insert)
+import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
+import Data.Text (Text)
+import Data.Text qualified as Text (concat, cons, intercalate, length, take)
+import Data.Text qualified as TextText
 import Lens.Micro (ix, (^.))
 
-import Horus.CFGBuild (ArcCondition (..))
+import Horus.CFGBuild (ArcCondition (..), Label (..))
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.Instruction (LabeledInst)
-import Horus.Label (Label)
+import Horus.Program (Identifiers)
 import Horus.SMTUtil (ap, fp)
+import Horus.SW.Identifier
+  ( getFunctionPc
+  , getLabelPc
+  )
+import Horus.SW.ScopedName (ScopedName (..))
 import SimpleSMT.Typed (TSExpr, (.&&), (.==))
 import SimpleSMT.Typed qualified as SMT (and)
 
@@ -27,6 +37,53 @@ data Module = Module
   , m_jnzOracle :: Map Label Bool
   }
   deriving (Show)
+
+beginOfModule :: [LabeledInst] -> Maybe Label
+beginOfModule [] = Nothing
+beginOfModule ((lbl, _) : _) = Just lbl
+
+labelNamesOfPc :: Identifiers -> Label -> [ScopedName]
+labelNamesOfPc idents lblpc =
+  [ name
+  | (name, ident) <- Map.toList idents
+  , Just pc <- [getFunctionPc ident <|> getLabelPc ident]
+  , pc == lblpc
+  ]
+
+normalizedName :: [ScopedName] -> (Text, Text)
+normalizedName scopedNames =
+  let names :: [[Text]]
+      names = map coerce scopedNames
+      scopes = map (Text.intercalate "." . tail . init) names
+      labels = map last names
+   in (Text.concat scopes, summarizeLabels labels)
+ where
+  summarizeLabels labels =
+    let prettyLabels = Text.intercalate "|" labels
+     in if length labels == 1
+          then prettyLabels
+          else Text.concat ["{", prettyLabels, "}"]
+
+descrOfBool :: Bool -> Text
+descrOfBool True = "T"
+descrOfBool False = "F"
+
+descrOfOracle :: Map Label Bool -> Text
+descrOfOracle oracle =
+  if Map.null oracle
+    then ""
+    else Text.cons '+' . Text.concat . map descrOfBool . Map.elems $ oracle
+
+nameOfModule :: Identifiers -> Module -> Text
+nameOfModule idents (Module _ post prog oracle) =
+  case beginOfModule prog of
+    Nothing -> "empty: " <> (Text.take preDigestLen . TextText.pack . show) post
+    Just label ->
+      let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
+          noPrefix = Text.length prefix == 0
+       in Text.concat [prefix, if noPrefix then "" else ".", labelsDigest, descrOfOracle oracle]
+ where
+  preDigestLen = 64 :: Int
 
 type ModuleL = WriterT (DList Module) (Reader (Set Label))
 
