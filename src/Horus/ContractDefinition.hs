@@ -3,6 +3,7 @@ module Horus.ContractDefinition
   , Checks (..)
   , cdProgram
   , cdChecks
+  , cdRawSmt
   , cPreConds
   , cPostConds
   , cInvariants
@@ -25,6 +26,7 @@ import SimpleSMT.Typed (TSExpr, parseAssertion)
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_checks :: Checks
+  , cd_rawSmt :: Text
   }
   deriving (Show)
 
@@ -33,6 +35,9 @@ cdProgram lMod g = fmap (\x -> g{cd_program = x}) (lMod (cd_program g))
 
 cdChecks :: Lens' ContractDefinition Checks
 cdChecks lMod g = fmap (\x -> g{cd_checks = x}) (lMod (cd_checks g))
+
+cdRawSmt :: Lens' ContractDefinition Text
+cdRawSmt lMod g = fmap (\x -> g{cd_rawSmt = x}) (lMod (cd_rawSmt g))
 
 data Checks = Checks
   { c_preConds :: Map ScopedName (TSExpr Bool)
@@ -57,6 +62,7 @@ instance FromJSON ContractDefinition where
     ContractDefinition
       <$> v .: "program"
       <*> v .:? "checks" .!= emptyChecks
+      <*> v .:? "smt" .!= ""
 
 newtype HSExpr a = HSExpr (TSExpr a)
   deriving newtype (Show)

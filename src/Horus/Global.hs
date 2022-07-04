@@ -111,7 +111,7 @@ produceSMT2Models cd = do
     print' cfg
     print' modules
     print' (map debugFriendlyModel constraints)
-  pure (map makeModel constraints)
+  pure (map (makeModel (cd_rawSmt cd)) constraints)
 
 mkSemanticsEnv :: ContractDefinition -> [LabeledInst] -> SemanticsEnv
 mkSemanticsEnv cd labeledInsts =
