@@ -36,24 +36,22 @@ runModuleL = toList . flip runReader Set.empty . execWriterT
 emitModule :: Module -> ModuleL ()
 emitModule = tell . D.singleton
 
-visiting :: Label -> ModuleL () -> ModuleL ()
-visiting l a = do
-  visited <- ask
-  unless (Set.member l visited) $
-    local (Set.insert l) a
-
 traverseCFG :: [(Label, TSExpr Bool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(l, pre) ->
   visit Map.empty [] (pre .&& ap .== fp) l ACNone
  where
   visit :: Map Label Bool -> [LabeledInst] -> TSExpr Bool -> Label -> ArcCondition -> ModuleL ()
-  visit oracle acc pre l arcCond = visiting l $ do
+  visit oracle acc pre l arcCond = do
     let oracle' = updateOracle arcCond oracle
-    case cfg_assertions cfg ^. ix l of
-      [] -> visitArcs oracle' acc pre l
-      conjuncts -> do
-        emitModule (Module pre (SMT.and conjuncts) acc oracle')
-        visitArcs Map.empty [] (SMT.and conjuncts) l
+        assertions = cfg_assertions cfg ^. ix l
+    unless (null assertions) $ do
+      emitModule (Module pre (SMT.and assertions) acc oracle')
+    visited <- ask
+    unless (Set.member l visited) $
+      local (Set.insert l) $ do
+        if null assertions
+          then visitArcs oracle' acc pre l
+          else visitArcs Map.empty [] (SMT.and assertions) l
   visitArcs oracle acc pre l = do
     for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
       visit oracle (acc <> insts) pre lTo test
