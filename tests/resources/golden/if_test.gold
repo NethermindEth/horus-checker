@@ -1,6 +1,12 @@
+main+TTT
 Unsat
+main+TTF
 Unsat
+main+TFT
 Unsat
+main+TFF
 Unsat
+main+FT
 Unsat
+main+FF
 Unsat
