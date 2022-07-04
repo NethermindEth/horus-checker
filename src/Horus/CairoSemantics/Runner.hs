@@ -16,13 +16,13 @@ import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
-import qualified Data.List as List (tails, union)
+import qualified Data.List as List (find, tails, union)
 import Data.Map (Map)
 import Data.Text (Text)
 import qualified Data.Text as Text (intercalate)
-import Lens.Micro (Lens', at, ix, non, (^.), (^?!))
+import Lens.Micro (Lens', at, ix, non, (%~), (<&>), (^.), (^?!))
 import Lens.Micro.GHC ()
-import Lens.Micro.Mtl ((%=), (<%=))
+import Lens.Micro.Mtl (use, (%=), (<%=))
 
 import Horus.CFGBuild (Label)
 import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, CairoSemanticsT)
@@ -30,7 +30,7 @@ import Horus.Program (ApTracking)
 import Horus.SMTUtil (prime)
 import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
-import qualified SimpleSMT.Typed as SMT (assert, const, declareInt, ppTSExpr, showTSExpr, true)
+import qualified SimpleSMT.Typed as SMT (TSExpr (True), assert, const, declareInt, ppTSExpr, showTSExpr)
 
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [(Text, TSExpr Integer)]
@@ -86,16 +86,21 @@ interpret = iterTM exec
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
     cont (SMT.const name)
-  exec (GetFreshName cont) = do
-    freshCount <- csNameCounter <%= (+ 1)
-    cont (tShow freshCount)
-  exec (MarkAsMem name address cont) = csMemoryVariables %= ((name, address) :) >> cont
+  exec (DeclareMem address cont) = do
+    memVars <- use csMemoryVariables
+    case List.find ((address ==) . snd) memVars of
+      Just (name, _) -> cont (SMT.const name)
+      Nothing -> do
+        freshCount <- csNameCounter <%= (+ 1)
+        let name = "MEM!" <> tShow freshCount
+        csMemoryVariables %= ((name, address) :)
+        cont (SMT.const name)
   exec (GetPreByCall label cont) = do
     pres <- asks se_pres
-    cont (pres ^. at label . non SMT.true)
+    cont (pres ^. at label . non SMT.True)
   exec (GetPostByCall label cont) = do
     posts <- asks se_posts
-    cont (posts ^. at label . non SMT.true)
+    cont (posts ^. at label . non SMT.True)
   exec (GetApTracking label cont) = do
     trackings <- asks se_apTracking
     cont (trackings ^?! ix label)
@@ -108,11 +113,12 @@ debugFriendlyModel ConstraintsState{..} =
 
 makeModel :: Text -> ConstraintsState -> Text
 makeModel rawSmt ConstraintsState{..} =
-  let declStmts = SMT.declareInt "prime" : map SMT.declareInt cs_decls
-      feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- cs_decls]
+  let names = "prime" : cs_decls <> map fst cs_memoryVariables
+      decls = map SMT.declareInt names
+      feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- tail names]
       memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
       restrictions = concat [feltRestrictions, memRestrictions, cs_exprs]
-   in (declStmts <> map SMT.assert restrictions)
+   in (decls <> map SMT.assert restrictions)
         & map showTSStmt
         & (rawSmt :)
         & Text.intercalate "\n"
@@ -125,7 +131,12 @@ runImplT :: Monad m => SemanticsEnv -> ImplT m a -> m ConstraintsState
 runImplT env (ImplT m) = runReaderT m env & flip execStateT emptyConstraintsState
 
 runT :: Monad m => SemanticsEnv -> CairoSemanticsT m a -> m ConstraintsState
-runT env = runImplT env . interpret
+runT env a = do
+  cs <- runImplT env (interpret a)
+  pure cs
+    <&> csMemoryVariables %~ reverse
+    <&> csExprs %~ reverse
+    <&> csDecls %~ reverse
 
 run :: SemanticsEnv -> CairoSemanticsL a -> ConstraintsState
 run env = runIdentity . runT env
