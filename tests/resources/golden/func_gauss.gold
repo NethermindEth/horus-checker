@@ -11,6 +11,8 @@ Program: resources/golden/func_gauss.out
 MathS: unsat
 MathS: unsat
 MathS: unsat
+MathS: unsat
+Z3: unsat
 Z3: unsat
 Z3: unsat
 Z3: unsat
