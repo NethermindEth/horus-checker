@@ -30,6 +30,8 @@ common deps
       -Wno-prepositive-qualified-module
       -Wno-unticked-promoted-constructors
       -Wno-unused-packages
+    extra-libraries:
+      z3
 
 library
     import:                  deps
@@ -49,6 +51,8 @@ library
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
       Horus.Module
+      Horus.Preprocessor
+      Horus.Preprocessor.Solvers
       Horus.SMTUtil
       Horus.SW.CairoType
       Horus.SW.IdentifierDefinition
@@ -71,6 +75,7 @@ library
       simple-smt,
       text,
       transformers,
+      z3
 
 executable horus-check
     import:                  deps
