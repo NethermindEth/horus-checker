@@ -17,6 +17,7 @@ common deps
       OverloadedStrings
       ScopedTypeVariables
       StandaloneDeriving
+      TupleSections
     ghc-options:
       -Weverything -Werror
       -Wno-safe -Wno-unsafe -Wno-implicit-prelude
