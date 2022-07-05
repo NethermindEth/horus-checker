@@ -15,6 +15,7 @@ module Horus.Instruction
   , readAllInstructions
   , instructionSize
   , getNextPc
+  , uncheckedCallDestination
   , callDestination
   , jumpDestination
   , toSemiAsm
@@ -88,11 +89,14 @@ instructionSize _ = 1
 getNextPc :: LabeledInst -> Label
 getNextPc (pc, i) = moveLabel pc (instructionSize i)
 
-callDestination :: Label -> Instruction -> Maybe Label
-callDestination pc i@Instruction{i_opCode = Call}
-  | JumpRel <- i_pcUpdate i = pure (moveLabel pc (fromInteger (i_imm i)))
-  | otherwise = pure (Label (fromInteger (i_imm i)))
-callDestination _ _ = Nothing
+uncheckedCallDestination :: LabeledInst -> Label
+uncheckedCallDestination (pc, i)
+  | JumpRel <- i_pcUpdate i = moveLabel pc (fromInteger (i_imm i))
+  | otherwise = Label (fromInteger (i_imm i))
+
+callDestination :: LabeledInst -> Maybe Label
+callDestination i@(_, Instruction{i_opCode = Call}) = pure (uncheckedCallDestination i)
+callDestination _ = Nothing
 
 jumpDestination :: LabeledInst -> Maybe Label
 jumpDestination (pc, i@Instruction{i_opCode = Nop}) = case i_pcUpdate i of
