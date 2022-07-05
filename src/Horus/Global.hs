@@ -35,16 +35,18 @@ import Horus.CairoSemantics.Runner
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Module (Module, runModuleL, traverseCFG)
-import Horus.Preprocessor (SolverResult, fetchModelFromSolver)
-import qualified Horus.Preprocessor.Solvers as Solvers (mathsat)
+import Horus.Preprocessor (fetchModelFromSolver, toSMTResult)
+import Horus.Preprocessor.Solvers (Solver)
 import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.IdentifierDefinition (getFunctionPc)
-import Horus.Util (Box (..), topmostStepFT)
+import Horus.Util (Box (..), tShow, topmostStepFT)
 import qualified SimpleSMT.Typed as SMT (TSExpr (True))
 import Z3.Monad (Z3)
 
 data Config = Config
   { cfg_verbose :: Bool
+  , cfg_printModels :: Bool
+  , cfg_solver :: Solver
   }
 
 data GlobalF m a
@@ -108,7 +110,7 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
 extractConstraints :: SemanticsEnv -> Module -> GlobalT m ConstraintsState
 extractConstraints env = runCairoSemanticsT env . encodeSemantics
 
-produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m [SolverResult]
+produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m [Text]
 produceSMT2Models cd = do
   config <- askConfig
   insts <- readAllInstructions (p_code (cd_program cd))
@@ -123,16 +125,21 @@ produceSMT2Models cd = do
     print' modules
     print' (map debugFriendlyModel constraints)
   let sexprs = map (makeModel (cd_rawSmt cd)) constraints
-  runZ3 $
-    traverse
-      (uncurry $ fetchModelFromSolver Solvers.mathsat)
-      ( zip
-          ( map
-              (map (\MemoryVariable{..} -> (mv_varName, mv_addrName)) . cs_memoryVariables)
-              constraints
-          )
-          sexprs
-      )
+  models <-
+    runZ3 $
+      traverse
+        (uncurry $ fetchModelFromSolver (cfg_solver config))
+        ( zip
+            ( map
+                (map (\MemoryVariable{..} -> (mv_varName, mv_addrName)) . cs_memoryVariables)
+                constraints
+            )
+            sexprs
+        )
+  pure $
+    if cfg_printModels config
+      then fmap tShow models
+      else fmap (tShow . toSMTResult) models
 
 mkSemanticsEnv :: ContractDefinition -> [LabeledInst] -> SemanticsEnv
 mkSemanticsEnv cd labeledInsts =
