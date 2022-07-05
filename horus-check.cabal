@@ -38,6 +38,7 @@ library
     hs-source-dirs:          src
     build-tool-depends:      alex:alex, happy:happy
     exposed-modules:
+      Horus.Arguments
       Horus.ContractDefinition
       Horus.Global
       Horus.Global.Runner
@@ -71,6 +72,7 @@ library
       microlens-ghc,
       microlens-mtl,
       mtl,
+      optparse-applicative,
       pretty-simple,
       simple-smt,
       text,
@@ -87,6 +89,7 @@ executable horus-check
       filepath,
       horus-check,
       mtl,
+      optparse-applicative,
       pretty-simple,
       text,
 
