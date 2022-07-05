@@ -125,21 +125,21 @@ produceSMT2Models cd = do
     print' modules
     print' (map debugFriendlyModel constraints)
   let sexprs = map (makeModel (cd_rawSmt cd)) constraints
+  let memAndAddrNames = map extractMemAndAddrNames constraints
+  let namesAndQueries = zip memAndAddrNames sexprs
   models <-
     runZ3 $
       traverse
         (uncurry $ fetchModelFromSolver (cfg_solver config))
-        ( zip
-            ( map
-                (map (\MemoryVariable{..} -> (mv_varName, mv_addrName)) . cs_memoryVariables)
-                constraints
-            )
-            sexprs
-        )
+        namesAndQueries
   pure $
     if cfg_printModels config
       then fmap tShow models
       else fmap (tShow . toSMTResult) models
+ where
+  extractMemAndAddrNames :: ConstraintsState -> [(Text, Text)]
+  extractMemAndAddrNames ConstraintsState{..} =
+    map (\MemoryVariable{..} -> (mv_varName, mv_addrName)) cs_memoryVariables
 
 mkSemanticsEnv :: ContractDefinition -> [LabeledInst] -> SemanticsEnv
 mkSemanticsEnv cd labeledInsts =
