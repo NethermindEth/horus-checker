@@ -1,6 +1,12 @@
 {-# LANGUAGE RecordWildCards #-}
 
-module Horus.Preprocessor (Model (..), SolverResult (..), fetchModelFromSolver) where
+module Horus.Preprocessor
+  ( Model (..)
+  , SolverResult (..)
+  , fetchModelFromSolver
+  , toSMTResult
+  )
+where
 
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, runReaderT)
@@ -27,6 +33,11 @@ data Model = Model
   { m_regs :: [(Text, Integer)]
   , m_mem :: Map Integer Integer
   }
+
+toSMTResult :: SolverResult -> SMT.Result
+toSMTResult Unsat = SMT.Unsat
+toSMTResult (Sat _) = SMT.Sat
+toSMTResult (Unknown _) = SMT.Unknown
 
 instance Show SolverResult where
   show Unsat = "Unsat"
