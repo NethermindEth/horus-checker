@@ -1,14 +1,1 @@
 Sat
-     ap0	=	0
-     ap1	=	1
-     ap2	=	2
-     ap3	=	3
-     fp0	=	0
-     fp1	=	0
-     fp2	=	0
-     fp3	=	0
-mem[ -1]	=	0
-mem[  0]	=	1
-mem[  1]	=	2
-mem[  2]	=	3
-
