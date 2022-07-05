@@ -157,7 +157,7 @@ mkSemanticsEnv cd labeledInsts =
   getTracking = ftd_apTracking . il_flowTrackingData
   funByCall =
     [ (pc, fun)
-    | (pc, inst) <- labeledInsts
-    , Just callDst <- [callDestination pc inst]
+    | inst@(pc, _) <- labeledInsts
+    , Just callDst <- [callDestination inst]
     , Just fun <- [pcToFun ^. at callDst]
     ]
