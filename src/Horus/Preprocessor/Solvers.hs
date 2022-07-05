@@ -22,7 +22,13 @@ import qualified SimpleSMT as SMT
   , stop
   )
 
-newtype Solver = Solver {runSolver :: Text -> IO (SMT.Result, Maybe Text)}
+data Solver = Solver
+  { s_name :: Text
+  , runSolver :: Text -> IO (SMT.Result, Maybe Text)
+  }
+
+instance Show Solver where
+  show solver = unpack (s_name solver)
 
 cvc5 :: Solver
 cvc5 = sideSolver (Text.tail . Text.init) "cvc5" ["--produce-models"]
@@ -41,7 +47,7 @@ z3 :: Solver
 z3 = sideSolver (Text.tail . Text.init) "z3" ["-in", "-model"]
 
 sideSolver :: (Text -> Text) -> Text -> [Text] -> Solver
-sideSolver adjustifier solverName args = Solver $ \sexpr -> do
+sideSolver adjustifier solverName args = Solver solverName $ \sexpr -> do
   solver <- SMT.newSolver (unpack solverName) (map unpack args) Nothing
   SMT.loadString solver (unpack sexpr)
   res <- SMT.check solver
