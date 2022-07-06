@@ -25,7 +25,7 @@ import qualified SimpleSMT as SMT
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 import Z3.Base (Goal, Tactic)
-import qualified Z3.Base (Model, modelTranslate)
+import qualified Z3.Base (Model)
 import Z3.Monad (MonadZ3)
 import qualified Z3.Monad as Z3
 
@@ -94,12 +94,11 @@ mkFullModel :: MonadZ3 z3 => Goal -> Text -> PreprocessorT z3 SolverResult
 mkFullModel goal tModel = do
   realContext <- Z3.getContext
   model' <- Z3.local $ do
-    context <- Z3.getContext
     Z3.solverFromString (unpack tModel)
     _ <- Z3.solverCheck -- tModel consists of (declare-fun ...) expressions
     -- so should be okay to ignore the result.
     model <- Z3.solverGetModel
-    liftIO $ Z3.Base.modelTranslate context model realContext
+    Z3.modelTranslate model realContext
   fullModel <- Z3.convertModel goal model'
   model <- z3ModelToHorusModel fullModel
   pure $ Sat model
