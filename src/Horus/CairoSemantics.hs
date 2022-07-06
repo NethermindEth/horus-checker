@@ -9,10 +9,8 @@ module Horus.CairoSemantics
 where
 
 import Control.Monad (when)
-import Control.Monad.Reader (ReaderT, ask, lift, local, runReaderT)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_, toList)
-import Data.Function ((&))
 import Data.Functor.Identity (Identity)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty (last, tail)
@@ -117,23 +115,14 @@ alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
 alloc address = declareMem (address `TSMT.mod` prime)
 
 memoryRemoval :: TSExpr a -> CairoSemanticsT m (TSExpr a)
-memoryRemoval expr =
-  TSMT.toUnsafe expr
-    & unsafeMemoryRemoval
-    & flip runReaderT id
-    & fmap TSMT.fromUnsafe
+memoryRemoval = fmap TSMT.fromUnsafe . unsafeMemoryRemoval . TSMT.toUnsafe
  where
-  unsafeMemoryRemoval :: SMT.SExpr -> ReaderT (SMT.SExpr -> SMT.SExpr) (CairoSemanticsT m) SMT.SExpr
-  unsafeMemoryRemoval (SMT.List [SMT.Atom "let", SMT.List bindings, x]) = do
-    bindings' <- traverse unsafeMemoryRemoval bindings
-    let wrapper x' = SMT.List [SMT.Atom "let", SMT.List bindings', x']
-    local (. wrapper) (fmap wrapper (unsafeMemoryRemoval x))
+  unsafeMemoryRemoval :: SMT.SExpr -> CairoSemanticsT m SMT.SExpr
   unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
     x' <- unsafeMemoryRemoval x
-    bindingWrapper <- ask
-    TSMT.toUnsafe <$> lift (alloc (TSMT.fromUnsafe (bindingWrapper x')))
+    TSMT.toUnsafe <$> alloc (TSMT.fromUnsafe x')
   unsafeMemoryRemoval (SMT.List l) = SMT.List <$> traverse unsafeMemoryRemoval l
-  unsafeMemoryRemoval expr' = return expr'
+  unsafeMemoryRemoval expr = return expr
 
 mkInstructionConstraints :: Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
 mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
