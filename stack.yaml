@@ -42,8 +42,8 @@ packages:
 #
 extra-deps:
   - simple-smt-0.9.7@sha256:a93eba88f8177e13b39bf664b53ad65ca8eea976f00cae443c081b3ea3c26fb3,736
-  - git: https://github.com/ElijahVlasov/haskell-z3.git
-    commit: 9d635925d17419174dee1b8d3e7bf87aa763f402
+  - git: https://github.com/IagoAbal/haskell-z3.git
+    commit: fff21420216dd7f501b99ce5b1cbc42aea1339a9
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
