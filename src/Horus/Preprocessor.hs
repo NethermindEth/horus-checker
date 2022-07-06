@@ -8,18 +8,22 @@ module Horus.Preprocessor
   )
 where
 
+import Control.Applicative ((<|>))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Foldable (foldlM, traverse_)
-import Data.List (sortOn)
+import Data.Function ((&))
+import Data.List (sort)
+import qualified Data.List as List (stripPrefix)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
-import Data.Text as Text (Text, pack, unpack)
+import Data.Text (Text, pack, unpack)
 import Data.Traversable (for)
 import Lens.Micro (Lens')
 import Lens.Micro.Mtl (view)
 import qualified SimpleSMT as SMT
 import Text.Printf (printf)
+import Text.Read (readMaybe)
 import Z3.Base (Goal, Tactic)
 import qualified Z3.Base (Model, modelTranslate)
 import Z3.Monad (MonadZ3)
@@ -100,16 +104,26 @@ mkFullModel goal tModel = do
   model <- z3ModelToHorusModel fullModel
   pure $ Sat model
 
+data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
+  deriving stock (Eq, Ord)
+
+parseRegKind :: String -> Maybe RegKind
+parseRegKind "fp!" = Just MainFp
+parseRegKind "ap!" = Just SingleAp
+parseRegKind t =
+  fmap CallFp (List.stripPrefix "fp@" t >>= readMaybe)
+    <|> fmap ApGroup (List.stripPrefix "ap!" t >>= readMaybe)
+
 z3ModelToHorusModel :: MonadZ3 z3 => Z3.Base.Model -> PreprocessorT z3 Model
 z3ModelToHorusModel model =
   Model
     <$> do
       consts <- Z3.getConsts model
-      apsMb <- for consts interpRegVar
+      mbRegs <- for consts parseRegVar
       pure $
-        sortOn
-          (parseRegVar . unpack . fst)
-          (catMaybes apsMb)
+        catMaybes mbRegs
+          & sort
+          & map (\(_regKind, regName, regVal) -> (regName, regVal))
     <*> do
       memVars <- view peMemsAndAddrs
       addrValueList <- for memVars $ \(memName, addrName) -> do
@@ -125,25 +139,19 @@ z3ModelToHorusModel model =
           _ -> liftIO $ fail "This was supposed to be unreachable"
       pure $ fromList addrValueList
  where
-  interpRegVar :: MonadZ3 z3 => Z3.FuncDecl -> z3 (Maybe (Text, Integer))
-  interpRegVar constDecl = do
+  parseRegVar :: MonadZ3 z3 => Z3.FuncDecl -> z3 (Maybe (RegKind, Text, Integer))
+  parseRegVar constDecl = do
     nameSymbol <- Z3.getDeclName constDecl
     name <- Z3.getSymbolString nameSymbol
-    for (parseRegVar name) $
-      const $ do
+    case parseRegKind name of
+      Nothing -> pure Nothing
+      Just regKind -> do
         mbVal <- Z3.getConstInterp model constDecl
         case mbVal of
-          Nothing -> liftIO $ fail "This was supposed to be unreachable"
+          Nothing -> liftIO $ fail "The model should have interpretation for all of its constants"
           Just val -> do
             intVal <- Z3.getInt val
-            pure (pack name, toSignedFelt intVal)
-  parseRegVar :: String -> Maybe (Char, Integer)
-  parseRegVar name
-    | firstLetter : 'p' : ind <- name
-    , '+' `notElem` ind
-    , firstLetter `elem` ['a', 'f'] =
-        Just (firstLetter, read ind :: Integer)
-    | otherwise = Nothing
+            pure (Just (regKind, pack name, toSignedFelt intVal))
 
 mkMagicTactic :: MonadZ3 z3 => z3 Tactic
 mkMagicTactic = do
