@@ -17,10 +17,10 @@ import qualified SimpleSMT as SMT
   , check
   , command
   , loadString
-  , newSolver
   , ppSExpr
-  , stop
   )
+
+import Horus.SMTUtil (withSolver)
 
 data Solver = Solver
   { s_name :: Text
@@ -47,8 +47,7 @@ z3 :: Solver
 z3 = sideSolver (Text.tail . Text.init) "z3" ["-in", "-model"]
 
 sideSolver :: (Text -> Text) -> Text -> [Text] -> Solver
-sideSolver adjustifier solverName args = Solver solverName $ \sexpr -> do
-  solver <- SMT.newSolver (unpack solverName) (map unpack args) Nothing
+sideSolver adjustifier solverName args = solving $ \sexpr solver -> do
   SMT.loadString solver (unpack sexpr)
   res <- SMT.check solver
   mbModelOrReason <- case res of
@@ -59,8 +58,9 @@ sideSolver adjustifier solverName args = Solver solverName $ \sexpr -> do
       reason <- SMT.command solver (SMT.List [SMT.Atom "get-info", SMT.Atom ":reason-unknown"])
       return $ Just $ pack (SMT.ppSExpr reason "")
     SMT.Unsat -> return Nothing
-  _ <- SMT.stop solver
   return (res, mbModelOrReason)
+ where
+  solving f = Solver solverName (withSolver solverName args . f)
 
 sideSolver' :: Text -> [Text] -> Solver
 sideSolver' = sideSolver id

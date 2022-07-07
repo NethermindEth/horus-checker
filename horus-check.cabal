@@ -74,10 +74,11 @@ library
       mtl,
       optparse-applicative,
       pretty-simple,
+      safe-exceptions,
       simple-smt,
       text,
       transformers,
-      z3
+      z3,
 
 executable horus-check
     import:                  deps
