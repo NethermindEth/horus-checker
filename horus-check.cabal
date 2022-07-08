@@ -52,6 +52,8 @@ library
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
+      Horus.Expr
+      Horus.Expr.SMT
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Solvers
@@ -79,8 +81,10 @@ library
       pretty-simple,
       safe-exceptions,
       simple-smt,
+      singletons,
       text,
       transformers,
+      vinyl,
       z3,
 
 executable horus-check
