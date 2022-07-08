@@ -7,6 +7,9 @@ common deps
     build-depends:           base
     default-language:        Haskell2010
     default-extensions:
+      AllowAmbiguousTypes
+      ConstraintKinds
+      DataKinds
       DeriveFunctor
       DerivingStrategies
       FlexibleContexts
@@ -14,13 +17,20 @@ common deps
       GADTs
       GeneralizedNewtypeDeriving
       ImportQualifiedPost
+      KindSignatures
       MultiParamTypeClasses
       OverloadedStrings
       PatternSynonyms
+      PolyKinds
+      RankNTypes
       RecordWildCards
       ScopedTypeVariables
       StandaloneDeriving
+      StandaloneKindSignatures
       TupleSections
+      TypeApplications
+      TypeFamilies
+      TypeOperators
       ViewPatterns
     ghc-options:
       -Weverything -Werror
@@ -54,12 +64,19 @@ library
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
+      Horus.Command.SMT
       Horus.ContractInfo
+      Horus.Expr
+      Horus.Expr.SMT
+      Horus.Expr.Std
+      Horus.Expr.Type
+      Horus.Expr.Type.SMT
+      Horus.Expr.Util
+      Horus.Expr.Vars
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner
       Horus.Preprocessor.Solvers
-      Horus.SMTUtil
       Horus.SW.Builtin
       Horus.SW.CairoType
       Horus.SW.CairoType.JSON
@@ -69,10 +86,10 @@ library
       Horus.SW.ScopedName
       Horus.SW.Std
       Horus.Z3Util
-      SimpleSMT.Typed
     build-depends:
       aeson,
       array,
+      constraints,
       containers,
       dlist,
       free,
@@ -85,8 +102,11 @@ library
       pretty-simple,
       safe-exceptions,
       simple-smt,
+      singletons,
+      some,
       text,
       transformers,
+      vinyl,
       z3,
 
 executable horus-check

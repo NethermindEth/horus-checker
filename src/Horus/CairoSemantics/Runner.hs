@@ -12,9 +12,13 @@ import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
 import Control.Monad.State (MonadState, StateT, runStateT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
+import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
-import Data.List qualified as List (find, tails, union)
+import Data.List qualified as List (find, tails)
+import Data.Maybe (mapMaybe)
+import Data.Singletons (sing)
+import Data.Some (foldSome)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
@@ -22,38 +26,39 @@ import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (<%=))
 
 import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsT)
+import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
-import Horus.SMTUtil (builtinEnd, builtinStart, prime, rcBound)
+import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>))
+import Horus.Expr qualified as Expr
+import Horus.Expr.SMT (pprExpr)
+import Horus.Expr.Std (Function (..))
+import Horus.Expr.Type (STy (..))
+import Horus.Expr.Util (gatherNonStdFunctions)
+import Horus.Expr.Vars (prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
-import Horus.Util (enumerate, fieldPrime, tShow)
-import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
-import SimpleSMT.Typed qualified as SMT
+import Horus.Util (fieldPrime, tShow)
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
   , mv_addrName :: Text
-  , mv_addrExpr :: TSExpr Integer
+  , mv_addrExpr :: Expr TFelt
   }
 
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [MemoryVariable]
-  , cs_asserts :: [TSExpr Bool]
-  , cs_expects :: [TSExpr Bool]
-  , cs_decls :: [Text]
+  , cs_asserts :: [Expr TBool]
+  , cs_expects :: [Expr TBool]
   , cs_nameCounter :: Int
   }
 
 csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
 csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
-csAsserts :: Lens' ConstraintsState [TSExpr Bool]
+csAsserts :: Lens' ConstraintsState [Expr TBool]
 csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
 
-csExpects :: Lens' ConstraintsState [TSExpr Bool]
+csExpects :: Lens' ConstraintsState [Expr TBool]
 csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
-
-csDecls :: Lens' ConstraintsState [Text]
-csDecls lMod g = fmap (\x -> g{cs_decls = x}) (lMod (cs_decls g))
 
 csNameCounter :: Lens' ConstraintsState Int
 csNameCounter lMod g = fmap (\x -> g{cs_nameCounter = x}) (lMod (cs_nameCounter g))
@@ -64,7 +69,6 @@ emptyConstraintsState =
     { cs_memoryVariables = []
     , cs_asserts = []
     , cs_expects = []
-    , cs_decls = []
     , cs_nameCounter = 0
     }
 
@@ -88,19 +92,16 @@ interpret = iterTM exec
   exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
   exec (Assert' a cont) = csAsserts %= (a :) >> cont
   exec (Expect' a cont) = csExpects %= (a :) >> cont
-  exec (DeclareFelt name cont) = do
-    csDecls %= List.union [name]
-    cont (SMT.const name)
   exec (DeclareMem address cont) = do
     memVars <- use csMemoryVariables
     case List.find ((address ==) . mv_addrExpr) memVars of
-      Just MemoryVariable{..} -> cont (SMT.const mv_varName)
+      Just MemoryVariable{..} -> cont (Expr.const mv_varName)
       Nothing -> do
         freshCount <- csNameCounter <%= (+ 1)
         let name = "MEM!" <> tShow freshCount
         let addrName = "ADDR!" <> tShow freshCount
         csMemoryVariables %= (MemoryVariable name addrName address :)
-        cont (SMT.const name)
+        cont (Expr.const name)
   exec (GetPreByCall inst cont) = do
     getPreByCall <- asks ci_getPreByCall
     getPreByCall inst & cont
@@ -125,57 +126,58 @@ debugFriendlyModel ConstraintsState{..} =
       [ ["# Memory"]
       , memoryPairs
       , ["# Assert"]
-      , map SMT.showTSExpr cs_asserts
+      , map pprExpr cs_asserts
       , ["# Expect"]
-      , map SMT.showTSExpr cs_expects
+      , map pprExpr cs_expects
       ]
  where
   memoryPairs =
-    [ mv_varName <> "=[" <> SMT.showTSExpr mv_addrExpr <> "]"
+    [ mv_varName <> "=[" <> pprExpr mv_addrExpr <> "]"
     | MemoryVariable{..} <- cs_memoryVariables
     ]
 
+constants :: [(Text, Integer)]
+constants = [(pprExpr prime, fieldPrime), (pprExpr rcBound, Builtin.rcBound)]
+
 makeModel :: Text -> ConstraintsState -> Text
 makeModel rawSmt ConstraintsState{..} =
-  let names =
-        concat
-          [ map SMT.showTSExpr [prime, rcBound]
-          , cs_decls
-          , map mv_varName cs_memoryVariables
-          , map mv_addrName cs_memoryVariables
-          , map (SMT.showTSExpr . builtinStart) enumerate
-          , map (SMT.showTSExpr . builtinEnd) enumerate
-          ]
-      decls = map SMT.declareInt names
-      feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- tail names]
-      memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-      addrDefinitions =
-        [ SMT.const mv_addrName .== mv_addrExpr
-        | MemoryVariable{..} <- cs_memoryVariables
-        ]
-      restrictions =
-        concat
-          [ [prime .== fromInteger fieldPrime]
-          , [rcBound .== fromInteger Builtin.rcBound]
-          , feltRestrictions
-          , memRestrictions
-          , addrDefinitions
-          , cs_asserts
-          , [SMT.not (SMT.and cs_expects)]
-          ]
-   in (decls <> map SMT.assert restrictions)
-        & map showTSStmt
-        & (rawSmt :)
-        & Text.intercalate "\n"
+  (decls <> map Command.assert restrictions)
+    & (rawSmt :)
+    & Text.intercalate "\n"
  where
+  functions =
+    toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
+  decls = map (foldSome Command.declare) functions
+  rangeRestrictions = mapMaybe (foldSome restrictRange) functions
+  memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
+  addrRestrictions =
+    [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
+  generalRestrictions =
+    concat
+      [ memRestrictions
+      , addrRestrictions
+      , cs_asserts
+      , [Expr.not (Expr.and cs_expects)]
+      ]
+  restrictions = rangeRestrictions <> generalRestrictions
+
+  restrictRange :: forall ty. Function ty -> Maybe (Expr TBool)
+  restrictRange (Function name) = case sing @ty of
+    SFelt
+      | Just value <- name `lookup` constants -> Just (ExitField (var .== fromInteger value))
+      | otherwise -> Just (0 .<= var .&& var .< prime)
+     where
+      var = Fun name
+    _ -> Nothing
+
   restrictMemTail [] = []
   restrictMemTail (mv0 : rest) =
-    [ addr0 .== SMT.const mv_addrName .-> mem0 .== SMT.const mv_varName
+    [ addr0 .== Expr.const mv_addrName .=> mem0 .== Expr.const mv_varName
     | MemoryVariable{..} <- rest
     ]
    where
-    mem0 = SMT.const (mv_varName mv0)
-    addr0 = SMT.const (mv_addrName mv0)
+    mem0 = Expr.const (mv_varName mv0)
+    addr0 = Expr.const (mv_addrName mv0)
 
 runImplT :: Monad m => ContractInfo -> ImplT m a -> m (Either Text ConstraintsState)
 runImplT contractInfo (ImplT m) = do
@@ -193,4 +195,3 @@ runT contractInfo a = do
       <&> csMemoryVariables %~ reverse
       <&> csAsserts %~ reverse
       <&> csExpects %~ reverse
-      <&> csDecls %~ reverse

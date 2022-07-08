@@ -18,21 +18,18 @@ import Lens.Micro (ix, (^.))
 
 import Horus.CFGBuild (ArcCondition (..), Label (..))
 import Horus.CFGBuild.Runner (CFG (..))
+import Horus.Expr (Expr, Ty (..), (.&&), (.==))
+import Horus.Expr qualified as Expr (and)
+import Horus.Expr.SMT (pprExpr)
+import Horus.Expr.Vars (ap, fp)
 import Horus.Instruction (LabeledInst)
 import Horus.Program (Identifiers)
-import Horus.SMTUtil (ap, fp)
-import Horus.SW.Identifier
-  ( getFunctionPc
-  , getLabelPc
-  )
+import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..))
-import Horus.Util (tShow)
-import SimpleSMT.Typed (TSExpr, (.&&), (.==))
-import SimpleSMT.Typed qualified as SMT (and)
 
 data Module = Module
-  { m_pre :: TSExpr Bool
-  , m_post :: TSExpr Bool
+  { m_pre :: Expr TBool
+  , m_post :: Expr TBool
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map Label Bool
   }
@@ -77,7 +74,7 @@ descrOfOracle oracle =
 nameOfModule :: Identifiers -> Module -> Text
 nameOfModule idents (Module _ post prog oracle) =
   case beginOfModule prog of
-    Nothing -> "empty: " <> tShow post
+    Nothing -> "empty: " <> pprExpr post
     Just label ->
       let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
           noPrefix = Text.length prefix == 0
@@ -91,22 +88,22 @@ runModuleL = toList . flip runReader Set.empty . execWriterT
 emitModule :: Module -> ModuleL ()
 emitModule = tell . D.singleton
 
-traverseCFG :: [(Label, TSExpr Bool)] -> CFG -> ModuleL ()
+traverseCFG :: [(Label, Expr TBool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(l, pre) ->
   visit Map.empty [] (pre .&& ap .== fp) l ACNone
  where
-  visit :: Map Label Bool -> [LabeledInst] -> TSExpr Bool -> Label -> ArcCondition -> ModuleL ()
+  visit :: Map Label Bool -> [LabeledInst] -> Expr TBool -> Label -> ArcCondition -> ModuleL ()
   visit oracle acc pre l arcCond = do
     let oracle' = updateOracle arcCond oracle
         assertions = cfg_assertions cfg ^. ix l
     unless (null assertions) $ do
-      emitModule (Module pre (SMT.and assertions) acc oracle')
+      emitModule (Module pre (Expr.and assertions) acc oracle')
     visited <- ask
     unless (Set.member l visited) $
       local (Set.insert l) $ do
         if null assertions
           then visitArcs oracle' acc pre l
-          else visitArcs Map.empty [] (SMT.and assertions) l
+          else visitArcs Map.empty [] (Expr.and assertions) l
   visitArcs oracle acc pre l = do
     for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
       visit oracle (acc <> insts) pre lTo test
