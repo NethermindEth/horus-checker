@@ -3,3 +3,4 @@
 dist-newstyle/
 **/__pycache__
 tests/resources/golden/**.out
+.DS_Store*
