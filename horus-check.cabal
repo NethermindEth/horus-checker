@@ -55,6 +55,7 @@ library
       Horus.Preprocessor
       Horus.Preprocessor.Solvers
       Horus.SMTUtil
+      Horus.Expr
       Horus.SW.CairoType
       Horus.SW.IdentifierDefinition
       Horus.SW.Lexer
