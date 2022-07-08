@@ -1,11 +1,11 @@
 module Horus.SW.Std (FuncSpec (..), stdFuncs) where
 
-import qualified Data.List as List (sortOn)
+import Data.List qualified as List (sortOn)
 
 import Horus.SMTUtil (ap, fp, memory, prime)
 import Horus.SW.ScopedName (ScopedName)
 import SimpleSMT.Typed (TSExpr, (.&&), (.==))
-import qualified SimpleSMT.Typed as SMT
+import SimpleSMT.Typed qualified as SMT
 
 data FuncSpec = FuncSpec
   { fs_name :: ScopedName
