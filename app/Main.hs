@@ -8,7 +8,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.Foldable (traverse_)
 import Data.Text (Text, pack, unpack)
-import qualified Data.Text.IO as Text (putStrLn)
+import Data.Text.IO qualified as Text (putStrLn)
 import Lens.Micro ((%~), (<&>))
 import Options.Applicative
   ( execParser
@@ -22,7 +22,7 @@ import Options.Applicative
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdChecks, stdChecks)
 import Horus.Global (produceSMT2Models)
-import qualified Horus.Global.Runner as Global (runT)
+import Horus.Global.Runner qualified as Global (runT)
 
 type EIO = ExceptT Text IO
 
