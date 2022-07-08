@@ -12,9 +12,9 @@ import Control.Exception.Safe (bracket)
 import Data.Text (Text, unpack)
 
 import Horus.Instruction (PointerRegister (..))
-import qualified SimpleSMT (Solver, newSolver, stop)
+import SimpleSMT qualified (Solver, newSolver, stop)
 import SimpleSMT.Typed (TSExpr)
-import qualified SimpleSMT.Typed as SMT
+import SimpleSMT.Typed qualified as SMT
 
 prime :: TSExpr Integer
 prime = SMT.const "prime"

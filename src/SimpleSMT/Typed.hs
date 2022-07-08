@@ -38,13 +38,13 @@ import Prelude hiding (False, True, and, const, mod, not)
 import Control.Monad.Reader (Reader, local, runReader)
 import Data.Coerce (coerce)
 import Data.Map (Map)
-import qualified Data.Map as Map (empty, fromList)
+import Data.Map qualified as Map (empty, fromList)
 import Data.Text (Text, pack, unpack)
 import Lens.Micro (at, non, (&))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (view)
 import SimpleSMT (SExpr, readSExpr)
-import qualified SimpleSMT as SMT
+import SimpleSMT qualified as SMT
 
 newtype TSExpr a = TSExpr SExpr
   deriving newtype (Eq)
