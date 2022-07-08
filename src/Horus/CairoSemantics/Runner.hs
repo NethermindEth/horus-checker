@@ -94,8 +94,8 @@ interpret :: forall m a. Monad m => CairoSemanticsT m a -> ImplT m a
 interpret = iterTM exec
  where
   exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
-  exec (Assert a cont) = csAsserts %= (a :) >> cont
-  exec (Expect a cont) = csExpects %= (a :) >> cont
+  exec (Assert' a cont) = csAsserts %= (a :) >> cont
+  exec (Expect' a cont) = csExpects %= (a :) >> cont
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
     cont (SMT.const name)

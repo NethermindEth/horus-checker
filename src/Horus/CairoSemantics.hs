@@ -39,8 +39,8 @@ import SimpleSMT.Typed (TSExpr, (./=), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
 data CairoSemanticsF a
-  = Assert (TSExpr Bool) a
-  | Expect (TSExpr Bool) a
+  = Assert' (TSExpr Bool) a
+  | Expect' (TSExpr Bool) a
   | DeclareFelt Text (TSExpr Integer -> a)
   | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
   | GetPreByCall Label (TSExpr Bool -> a)
@@ -51,11 +51,11 @@ data CairoSemanticsF a
 type CairoSemanticsT = FT CairoSemanticsF
 type CairoSemanticsL = CairoSemanticsT Identity
 
-assert :: TSExpr Bool -> CairoSemanticsT m ()
-assert a = liftF (Assert a ())
+assert' :: TSExpr Bool -> CairoSemanticsT m ()
+assert' a = liftF (Assert' a ())
 
-expect :: TSExpr Bool -> CairoSemanticsT m ()
-expect a = liftF (Expect a ())
+expect' :: TSExpr Bool -> CairoSemanticsT m ()
+expect' a = liftF (Expect' a ())
 
 declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
 declareFelt t = liftF (DeclareFelt t id)
@@ -72,16 +72,32 @@ getPostByCall l = liftF (GetPostByCall l id)
 getApTracking :: Label -> CairoSemanticsT m ApTracking
 getApTracking l = liftF (GetApTracking l id)
 
+assert :: TSExpr Bool -> CairoSemanticsT m ()
+assert a = assert' =<< memoryRemoval a
+
+expect :: TSExpr Bool -> CairoSemanticsT m ()
+expect a = expect' =<< memoryRemoval a
+
+memoryRemoval :: TSExpr a -> CairoSemanticsT m (TSExpr a)
+memoryRemoval = fmap TSMT.fromUnsafe . unsafeMemoryRemoval . TSMT.toUnsafe
+ where
+  unsafeMemoryRemoval :: SMT.SExpr -> CairoSemanticsT m SMT.SExpr
+  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
+    x' <- unsafeMemoryRemoval x
+    TSMT.toUnsafe <$> declareMem (TSMT.fromUnsafe x' `TSMT.mod` prime)
+  unsafeMemoryRemoval (SMT.List l) = SMT.List <$> traverse unsafeMemoryRemoval l
+  unsafeMemoryRemoval expr = return expr
+
 {- | Prepare the expression for usage in the model.
 
-That is, replace the memory UF calls with variables, deduce AP from
-the ApTracking data by PC, replace FP name with the given one.
+That is, deduce AP from the ApTracking data by PC and replace FP name
+with the given one.
 -}
 prepare :: Label -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
-prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
+prepare pc fp expr = prepare' <$> getAp pc <*> pure fp <*> pure expr
 
-prepare' :: TSExpr Integer -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
-prepare' ap fp expr = memoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr))
+prepare' :: TSExpr Integer -> TSExpr Integer -> TSExpr a -> TSExpr a
+prepare' ap fp expr = TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr)
 
 encodeApTracking :: ApTracking -> CairoSemanticsT m (TSExpr Integer)
 encodeApTracking ApTracking{..} =
@@ -105,30 +121,17 @@ encodeSemantics m@Module{..} = do
   apStart <- moduleStartAp m
   apEnd <- moduleEndAp m
   assert (fp .<= apStart)
-  assert =<< prepare' apStart fp m_pre
-  expect =<< prepare' apEnd fp m_post
+  assert (prepare' apStart fp m_pre)
+  expect (prepare' apEnd fp m_post)
   for_ m_prog $ \inst -> do
     mkInstructionConstraints m_jnzOracle inst
   whenJust (nonEmpty m_prog) (mkApConstraints fp apEnd)
-
-alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
-alloc address = declareMem (address `TSMT.mod` prime)
-
-memoryRemoval :: TSExpr a -> CairoSemanticsT m (TSExpr a)
-memoryRemoval = fmap TSMT.fromUnsafe . unsafeMemoryRemoval . TSMT.toUnsafe
- where
-  unsafeMemoryRemoval :: SMT.SExpr -> CairoSemanticsT m SMT.SExpr
-  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
-    x' <- unsafeMemoryRemoval x
-    TSMT.toUnsafe <$> alloc (TSMT.fromUnsafe x')
-  unsafeMemoryRemoval (SMT.List l) = SMT.List <$> traverse unsafeMemoryRemoval l
-  unsafeMemoryRemoval expr = return expr
 
 mkInstructionConstraints :: Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
 mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
   fp <- declareFelt "fp!"
   dstReg <- prepare pc fp (regToTSExpr i_dstRegister)
-  dst <- alloc (dstReg + fromInteger i_dstOffset)
+  let dst = memory (dstReg + fromInteger i_dstOffset)
   case i_opCode of
     Call -> do
       calleeFp <- declareFelt ("fp@" <> tShow (unLabel pc))
@@ -167,13 +170,13 @@ mkApConstraints fp apEnd insts = do
 getRes :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (TSExpr Integer)
 getRes fp (pc, Instruction{..}) = do
   op0Reg <- prepare pc fp (regToTSExpr i_op0Register)
-  op0 <- alloc (op0Reg + fromInteger i_op0Offset)
+  let op0 = memory (op0Reg + fromInteger i_op0Offset)
   op1 <- case i_op1Source of
-    Op0 -> alloc (op0 + fromInteger i_op1Offset)
+    Op0 -> pure (memory (op0 + fromInteger i_op1Offset))
     RegisterSource reg -> do
       op1Reg <- prepare pc fp (regToTSExpr reg)
-      alloc (op1Reg + fromInteger i_op1Offset)
-    Imm -> return $ fromInteger i_imm
+      pure (memory (op1Reg + fromInteger i_op1Offset))
+    Imm -> pure (fromInteger i_imm)
   pure $ case i_resLogic of
     Op1 -> op1
     Add -> (op0 + op1) `TSMT.mod` prime
