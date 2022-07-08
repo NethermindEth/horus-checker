@@ -13,6 +13,7 @@ common deps
       FlexibleInstances
       GADTs
       GeneralizedNewtypeDeriving
+      ImportQualifiedPost
       MultiParamTypeClasses
       OverloadedStrings
       ScopedTypeVariables
@@ -27,7 +28,6 @@ common deps
       -Wno-missing-import-lists
       -Wno-missing-local-signatures
       -Wno-missing-safe-haskell-mode
-      -Wno-prepositive-qualified-module
       -Wno-unticked-promoted-constructors
       -Wno-unused-packages
     extra-libraries:

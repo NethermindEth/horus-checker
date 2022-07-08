@@ -13,11 +13,11 @@ import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_, toList)
 import Data.Functor.Identity (Identity)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
-import qualified Data.List.NonEmpty as NonEmpty (last, tail)
+import Data.List.NonEmpty qualified as NonEmpty (last, tail)
 import Data.Map (Map)
-import qualified Data.Map as Map ((!?))
+import Data.Map qualified as Map ((!?))
 import Data.Text (Text)
-import qualified SimpleSMT as SMT (SExpr (..))
+import SimpleSMT qualified as SMT (SExpr (..))
 
 import Horus.Instruction
   ( ApUpdate (..)
@@ -33,10 +33,10 @@ import Horus.Label (Label (..))
 import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
 import Horus.SMTUtil (memory, prime, regToTSExpr)
-import qualified Horus.SMTUtil as Util (ap, fp)
+import Horus.SMTUtil qualified as Util (ap, fp)
 import Horus.Util (fieldPrime, tShow, whenJust, whenJustM)
 import SimpleSMT.Typed (TSExpr, (./=), (.<=), (.==))
-import qualified SimpleSMT.Typed as TSMT
+import SimpleSMT.Typed qualified as TSMT
 
 data CairoSemanticsF a
   = Assert' (TSExpr Bool) a
