@@ -32,7 +32,6 @@ data ContractDefinition = ContractDefinition
   , cd_checks :: Checks
   , cd_rawSmt :: Text
   }
-  deriving (Show)
 
 cdProgram :: Lens' ContractDefinition Program
 cdProgram lMod g = fmap (\x -> g{cd_program = x}) (lMod (cd_program g))
