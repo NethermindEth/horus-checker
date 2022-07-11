@@ -4,6 +4,7 @@ module Horus.Util
   ( fieldPrime
   , toSignedFelt
   , whenJust
+  , whenJustM
   , safeLast
   , Box (..)
   , topmostStepFT
@@ -29,6 +30,9 @@ toSignedFelt x
 whenJust :: Applicative f => Maybe a -> (a -> f ()) -> f ()
 whenJust Nothing _ = pure ()
 whenJust (Just a) f = f a
+
+whenJustM :: Monad m => m (Maybe a) -> (a -> m ()) -> m ()
+whenJustM a f = a >>= flip whenJust f
 
 safeLast :: [a] -> Maybe a
 safeLast [] = Nothing
