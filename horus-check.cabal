@@ -56,9 +56,10 @@ library
       Horus.Preprocessor.Solvers
       Horus.SMTUtil
       Horus.SW.CairoType
-      Horus.SW.IdentifierDefinition
-      Horus.SW.Lexer
-      Horus.SW.Parser
+      Horus.SW.CairoType.JSON
+      Horus.SW.CairoType.Lexer
+      Horus.SW.CairoType.Parser
+      Horus.SW.Identifier
       Horus.SW.ScopedName
       Horus.SW.Std
       SimpleSMT.Typed
