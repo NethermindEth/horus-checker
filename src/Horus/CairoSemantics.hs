@@ -36,7 +36,7 @@ import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
 import Horus.SMTUtil (prime, regToTSExpr)
 import qualified Horus.SMTUtil as Util (ap, fp)
-import Horus.Util (fieldPrime, tShow, whenJust)
+import Horus.Util (fieldPrime, tShow, whenJust, whenJustM)
 import SimpleSMT.Typed (TSExpr, (.&&), (.->), (./=), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
@@ -160,11 +160,11 @@ mkApConstraints fp apEnd insts = do
     when (at_group at1 /= at_group at2) $ do
       ap1 <- encodeApTracking at1
       ap2 <- encodeApTracking at2
-      apIncrement <- getApIncrement fp inst
-      assert (ap1 + apIncrement .== ap2)
+      whenJustM (getApIncrement fp inst) $ \apIncrement ->
+        assert (ap1 + apIncrement .== ap2)
   lastAp <- encodeApTracking =<< getApTracking (fst lastInst)
-  lastApIncrement <- getApIncrement fp lastInst
-  assert (lastAp + lastApIncrement .== apEnd)
+  whenJustM (getApIncrement fp lastInst) $ \lastApIncrement ->
+    assert (lastAp + lastApIncrement .== apEnd)
  where
   lastInst = NonEmpty.last insts
 
@@ -184,9 +184,11 @@ getRes fp (pc, Instruction{..}) = do
     Mult -> (op0 * op1) `TSMT.mod` prime
     Unconstrained -> 0
 
-getApIncrement :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (TSExpr Integer)
-getApIncrement fp inst = case i_apUpdate (snd inst) of
-  NoUpdate -> pure 0
-  Add1 -> pure 1
-  Add2 -> pure 2
-  AddRes -> getRes fp inst
+getApIncrement :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (Maybe (TSExpr Integer))
+getApIncrement fp inst
+  | Call <- i_opCode (snd inst) = pure Nothing
+  | otherwise = fmap Just $ case i_apUpdate (snd inst) of
+      NoUpdate -> pure 0
+      Add1 -> pure 1
+      Add2 -> pure 2
+      AddRes -> getRes fp inst
