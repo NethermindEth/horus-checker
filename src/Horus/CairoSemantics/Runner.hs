@@ -31,7 +31,7 @@ import Horus.Program (ApTracking)
 import Horus.SMTUtil (prime)
 import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
-import qualified SimpleSMT.Typed as SMT (TSExpr (True), assert, const, declareInt, ppTSExpr, showTSExpr)
+import qualified SimpleSMT.Typed as SMT
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -41,7 +41,8 @@ data MemoryVariable = MemoryVariable
 
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [MemoryVariable]
-  , cs_exprs :: [TSExpr Bool]
+  , cs_asserts :: [TSExpr Bool]
+  , cs_expects :: [TSExpr Bool]
   , cs_decls :: [Text]
   , cs_nameCounter :: Int
   }
@@ -49,8 +50,11 @@ data ConstraintsState = ConstraintsState
 csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
 csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
-csExprs :: Lens' ConstraintsState [TSExpr Bool]
-csExprs lMod g = fmap (\x -> g{cs_exprs = x}) (lMod (cs_exprs g))
+csAsserts :: Lens' ConstraintsState [TSExpr Bool]
+csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
+
+csExpects :: Lens' ConstraintsState [TSExpr Bool]
+csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
 
 csDecls :: Lens' ConstraintsState [Text]
 csDecls lMod g = fmap (\x -> g{cs_decls = x}) (lMod (cs_decls g))
@@ -62,7 +66,8 @@ emptyConstraintsState :: ConstraintsState
 emptyConstraintsState =
   ConstraintsState
     { cs_memoryVariables = []
-    , cs_exprs = []
+    , cs_asserts = []
+    , cs_expects = []
     , cs_decls = []
     , cs_nameCounter = 0
     }
@@ -89,7 +94,8 @@ interpret :: forall m a. Monad m => CairoSemanticsT m a -> ImplT m a
 interpret = iterTM exec
  where
   exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
-  exec (Assert a cont) = csExprs %= (a :) >> cont
+  exec (Assert a cont) = csAsserts %= (a :) >> cont
+  exec (Expect a cont) = csExpects %= (a :) >> cont
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
     cont (SMT.const name)
@@ -115,18 +121,45 @@ interpret = iterTM exec
 
 debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
-  Text.intercalate "\n" (memoryPairs <> map SMT.ppTSExpr cs_exprs)
+  Text.intercalate "\n" $
+    concat
+      [ ["# Memory"]
+      , memoryPairs
+      , ["# Assert"]
+      , map SMT.ppTSExpr cs_asserts
+      , ["# Expect"]
+      , map SMT.ppTSExpr cs_expects
+      ]
  where
-  memoryPairs = [mv_varName <> "=[" <> SMT.showTSExpr mv_addrExpr <> "]" | MemoryVariable{..} <- cs_memoryVariables]
+  memoryPairs =
+    [ mv_varName <> "=[" <> SMT.showTSExpr mv_addrExpr <> "]"
+    | MemoryVariable{..} <- cs_memoryVariables
+    ]
 
 makeModel :: Text -> ConstraintsState -> Text
 makeModel rawSmt ConstraintsState{..} =
-  let names = "prime" : cs_decls <> map mv_varName cs_memoryVariables <> map mv_addrName cs_memoryVariables
+  let names =
+        concat
+          [ ["prime"]
+          , cs_decls
+          , map mv_varName cs_memoryVariables
+          , map mv_addrName cs_memoryVariables
+          ]
       decls = map SMT.declareInt names
       feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- tail names]
       memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-      addrDefinitions = [SMT.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
-      restrictions = concat [feltRestrictions, memRestrictions, addrDefinitions, cs_exprs]
+      addrDefinitions =
+        [ SMT.const mv_addrName .== mv_addrExpr
+        | MemoryVariable{..} <- cs_memoryVariables
+        ]
+      restrictions =
+        concat
+          [ feltRestrictions
+          , memRestrictions
+          , addrDefinitions
+          , cs_asserts
+          , [SMT.not (SMT.and cs_expects)]
+          ]
    in (decls <> map SMT.assert restrictions)
         & map showTSStmt
         & (rawSmt :)
@@ -144,7 +177,8 @@ runT env a = do
   cs <- runImplT env (interpret a)
   pure cs
     <&> csMemoryVariables %~ reverse
-    <&> csExprs %~ reverse
+    <&> csAsserts %~ reverse
+    <&> csExpects %~ reverse
     <&> csDecls %~ reverse
 
 run :: SemanticsEnv -> CairoSemanticsL a -> ConstraintsState
