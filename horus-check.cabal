@@ -55,13 +55,13 @@ library
       Horus.Preprocessor
       Horus.Preprocessor.Solvers
       Horus.SMTUtil
-      Horus.Expr
       Horus.SW.CairoType
       Horus.SW.IdentifierDefinition
       Horus.SW.Lexer
       Horus.SW.Parser
       Horus.SW.ScopedName
       SimpleSMT.Typed
+      SimpleSMT.Expr
     build-depends:
       aeson,
       array,
