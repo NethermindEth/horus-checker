@@ -1,6 +1,6 @@
 {
 {-# OPTIONS_GHC -w #-}
-module Horus.SW.Lexer where
+module Horus.SW.CairoType.Lexer where
 
 import Data.Text (Text, pack)
 
@@ -21,8 +21,8 @@ tokens :-
     \(                          { \s -> TokenLParen }
     \)                          { \s -> TokenRParen }
 
-{ 
-data Token 
+{
+data Token
     = TokenDot
     | TokenComma
     | TokenColon

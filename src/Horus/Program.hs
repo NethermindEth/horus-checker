@@ -14,10 +14,10 @@ import Data.Map (Map)
 import Numeric (readHex)
 
 import Horus.Label (Label (..))
-import Horus.SW.IdentifierDefinition (IdentifierDefinition)
+import Horus.SW.Identifier (Identifier)
 import Horus.SW.ScopedName (ScopedName)
 
-type Identifiers = Map ScopedName IdentifierDefinition
+type Identifiers = Map ScopedName Identifier
 
 data Program = Program
   { p_attributes :: [String]
@@ -28,7 +28,6 @@ data Program = Program
   , p_prime :: Integer
   , p_debugInfo :: DebugInfo
   }
-  deriving (Show)
 
 data DebugInfo = DebugInfo
   {di_instructionLocations :: Map Label ILInfo}
