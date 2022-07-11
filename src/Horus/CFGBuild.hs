@@ -36,7 +36,7 @@ import Horus.Instruction
   )
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
-import Horus.SW.IdentifierDefinition (getFunctionPc, getLabelPc)
+import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.Util (Box (..), appendList, safeLast, topmostStepFT, whenJust)
 import SimpleSMT.Typed (TSExpr)
 import SimpleSMT.Typed qualified as SMT (TSExpr (True))
