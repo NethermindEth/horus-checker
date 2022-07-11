@@ -64,6 +64,7 @@ library
     build-depends:
       aeson,
       array,
+      async,
       containers,
       dlist,
       free,

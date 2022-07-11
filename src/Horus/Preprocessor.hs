@@ -9,12 +9,15 @@ module Horus.Preprocessor
 where
 
 import Control.Applicative ((<|>))
+import Control.Concurrent.Async (wait, waitEither, withAsync)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Foldable (foldlM, traverse_)
 import Data.Function ((&))
 import Data.List (sort)
 import qualified Data.List as List (stripPrefix)
+import Data.List.NonEmpty (NonEmpty (..))
+import qualified Data.List.NonEmpty as NonEmpty (fromList)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack, unpack)
@@ -84,11 +87,27 @@ fetchModelFromSolver' goal = do
   subgoals <- preprocess goal
   tGoals <- traverse goalToSExpr subgoals
   externalSolver <- view peSolver
-  results <- liftIO $ traverse (runSolver externalSolver) tGoals
-  let satGoals = [(subgoal, model) | ((SMT.Sat, Just model), subgoal) <- zip results subgoals]
-  case satGoals of
-    [] -> pure Unsat
-    (subgoal, model) : _ -> mkFullModel subgoal model
+  ((res, mbText), satGoal) <- liftIO $ runAsync externalSolver (NonEmpty.fromList $ zip tGoals subgoals)
+  case (res, mbText) of
+    (SMT.Unknown, Just text) -> pure (Unknown text)
+    (SMT.Unsat, _) -> pure Unsat
+    (SMT.Sat, Just model) -> mkFullModel satGoal model
+    _ -> liftIO $ fail "Wrong solver response"
+ where
+  runAsync :: Solver -> NonEmpty (Text, Goal) -> IO ((SMT.Result, Maybe Text), Goal)
+  runAsync solver ((tGoal, subgoal) :| []) = do
+    res <- runSolver solver tGoal
+    pure (res, subgoal)
+  runAsync solver (a :| (x : rst)) = withAsync (runAsync solver (a :| [])) $ \a1 ->
+    withAsync (runAsync solver (x :| rst)) $ \a2 -> do
+      eitherRes <- waitEither a1 a2
+      case eitherRes of
+        Left ((SMT.Unknown, _), _) -> wait a2
+        Left ((SMT.Unsat, _), _) -> wait a2
+        Left res -> pure res
+        Right ((SMT.Unknown, _), _) -> wait a1
+        Right ((SMT.Unsat, _), _) -> wait a1
+        Right res -> pure res
 
 mkFullModel :: MonadZ3 z3 => Goal -> Text -> PreprocessorT z3 SolverResult
 mkFullModel goal tModel = do

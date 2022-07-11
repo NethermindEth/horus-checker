@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module Horus.Preprocessor.Solvers
   ( Solver
   , runSolver
@@ -10,6 +12,7 @@ module Horus.Preprocessor.Solvers
   )
 where
 
+import Control.Concurrent.Async (wait, waitEither, withAsync)
 import Data.Text as Text (Text, drop, init, pack, tail, unpack)
 import qualified SimpleSMT as SMT
   ( Result (..)
@@ -64,3 +67,16 @@ sideSolver adjustifier solverName args = solving $ \sexpr solver -> do
 
 sideSolver' :: Text -> [Text] -> Solver
 sideSolver' = sideSolver id
+
+instance Semigroup Solver where
+  s <> s' = Solver (s_name s <> "+" <> s_name s') $ \expr ->
+    withAsync (runSolver s expr) $ \a1 ->
+      withAsync (runSolver s' expr) $ \a2 -> do
+        eitherRes <- waitEither a1 a2
+        case eitherRes of
+          Left (SMT.Unknown, _) -> wait a2
+          Left res -> do
+            pure res
+          Right (SMT.Unknown, _) -> wait a1
+          Right res -> do
+            pure res
