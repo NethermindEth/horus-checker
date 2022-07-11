@@ -37,11 +37,12 @@ import Horus.Program (ApTracking (..))
 import Horus.SMTUtil (prime, regToTSExpr)
 import qualified Horus.SMTUtil as Util (ap, fp)
 import Horus.Util (fieldPrime, tShow, whenJust, whenJustM)
-import SimpleSMT.Typed (TSExpr, (.&&), (.->), (./=), (.<=), (.==))
+import SimpleSMT.Typed (TSExpr, (.&&), (./=), (.<=), (.==))
 import qualified SimpleSMT.Typed as TSMT
 
 data CairoSemanticsF a
   = Assert (TSExpr Bool) a
+  | Expect (TSExpr Bool) a
   | DeclareFelt Text (TSExpr Integer -> a)
   | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
   | GetPreByCall Label (TSExpr Bool -> a)
@@ -54,6 +55,9 @@ type CairoSemanticsL = CairoSemanticsT Identity
 
 assert :: TSExpr Bool -> CairoSemanticsT m ()
 assert a = liftF (Assert a ())
+
+expect :: TSExpr Bool -> CairoSemanticsT m ()
+expect a = liftF (Expect a ())
 
 declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
 declareFelt t = liftF (DeclareFelt t id)
@@ -104,7 +108,7 @@ encodeSemantics m@Module{..} = do
   apEnd <- moduleEndAp m
   assert (fp .<= apStart)
   assert =<< prepare' apStart fp m_pre
-  assert =<< prepare' apEnd fp (TSMT.not m_post)
+  expect =<< prepare' apEnd fp m_post
   for_ m_prog $ \inst -> do
     mkInstructionConstraints m_jnzOracle inst
   whenJust (nonEmpty m_prog) (mkApConstraints fp apEnd)
@@ -144,7 +148,8 @@ mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
       fpCond <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
       preparedPre <- getPreByCall pc >>= prepare calleePc calleeFp
       preparedPost <- getPostByCall pc >>= prepare nextPc calleeFp
-      assert (fpCond .&& (preparedPre .-> preparedPost))
+      expect preparedPre
+      assert (fpCond .&& preparedPost)
     AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
     Nop -> case jnzOracle Map.!? pc of
       Just False -> assert (dst .== 0)
