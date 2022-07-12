@@ -1,9 +1,11 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Horus.Arguments 
+module Horus.Arguments
   ( Arguments (..)
   , argParser
-  , fileArgument) where
+  , fileArgument
+  )
+where
 
 import Control.Monad.Except (throwError)
 import Data.Text (Text, unpack)
