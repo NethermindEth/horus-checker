@@ -2,10 +2,8 @@ module Horus.Global
   ( GlobalT (..)
   , GlobalF (..)
   , Config (..)
-  , runCFGBuildT
-  , makeCFG
-  , makeModules
-  , produceSMT2Models
+  , solveContract
+  , SolvingInfo (..)
   )
 where
 
@@ -16,6 +14,7 @@ import Data.Function ((&))
 import Data.Map qualified as Map (toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
+import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 
@@ -31,13 +30,13 @@ import Horus.CairoSemantics.Runner
 import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdChecks)
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
 import Horus.Instruction (labelInsructions, readAllInstructions)
-import Horus.Module (Module, m_prog, nameOfModule, runModuleL, traverseCFG)
-import Horus.Preprocessor (PreprocessorL, SolverResult, solve)
+import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
+import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
-import Horus.Util (Box (..), tShow, topmostStepFT)
+import Horus.Util (tShow)
 import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data Config = Config
@@ -50,9 +49,10 @@ data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
   | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
   | AskConfig (Config -> a)
-  | forall b. Show b => Print' b a
+  | PutStrLn' Text a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
+  | forall b. Catch (GlobalT m b) (Text -> GlobalT m b) (b -> a)
 
 deriving instance Functor (GlobalF m)
 
@@ -62,13 +62,9 @@ newtype GlobalT m a = GlobalT {runGlobalT :: FT (GlobalF m) m a}
 instance MonadTrans GlobalT where
   lift = GlobalT . lift
 
-instance Monad m => MonadError Text (GlobalT m) where -- TODO deriving via
+instance MonadError Text (GlobalT m) where
   throwError = throw
-  catchError m handler = do
-    step <- lift (topmostStepFT (runGlobalT m))
-    case step of
-      Just (Box (Throw t)) -> handler t
-      _ -> m
+  catchError = catch
 
 liftF' :: GlobalF m a -> GlobalT m a
 liftF' = GlobalT . liftF
@@ -86,11 +82,22 @@ runPreprocessor :: PreprocessorEnv -> PreprocessorL a -> GlobalT m a
 runPreprocessor penv preprocessor =
   liftF' (RunPreprocessor penv preprocessor id)
 
-print' :: Show a => a -> GlobalT m ()
-print' what = liftF' (Print' what ())
+putStrLn' :: Text -> GlobalT m ()
+putStrLn' what = liftF' (PutStrLn' what ())
 
 throw :: Text -> GlobalT m a
 throw t = liftF' (Throw t)
+
+catch :: GlobalT m a -> (Text -> GlobalT m a) -> GlobalT m a
+catch m h = liftF' (Catch m h id)
+
+verbosePutStrLn :: Text -> GlobalT m ()
+verbosePutStrLn what = do
+  config <- askConfig
+  when (cfg_verbose config) (putStrLn' what)
+
+verbosePrint :: Show a => a -> GlobalT m ()
+verbosePrint what = verbosePutStrLn (tShow what)
 
 makeCFG :: Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
 makeCFG checks identifiers labelToFun labeledInsts =
@@ -109,35 +116,43 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
 extractConstraints env m = runCairoSemanticsT env (encodeSemantics m)
 
-solveSMT :: Config -> Text -> ConstraintsState -> GlobalT m SolverResult
-solveSMT Config{..} smtPrefix cs =
+data SolvingInfo = SolvingInfo
+  { si_moduleName :: Text
+  , si_result :: SolverResult
+  }
+
+solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
+solveModule contractInfo smtPrefix m = do
+  result <- mkResult
+  pure SolvingInfo{si_moduleName = moduleName, si_result = result}
+ where
+  mkResult = printingErrors $ do
+    verbosePrint m
+    constraints <- extractConstraints contractInfo m
+    verbosePrint (debugFriendlyModel constraints)
+    solveSMT smtPrefix constraints
+  printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
+  moduleName = nameOfModule (ci_identifiers contractInfo) m
+
+solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
+solveSMT smtPrefix cs = do
+  Config{..} <- askConfig
   runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
   query = makeModel smtPrefix cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m ([Text], [Text])
-produceSMT2Models cd = do
-  config <- askConfig
+solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
+solveContract cd = do
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
+  verbosePrint labeledInsts
   cfg <- makeCFG checks identifiers getFunPc labeledInsts
+  verbosePrint cfg
   modules <- makeModules cd cfg
-  let names = map (nameOfModule (p_identifiers (cd_program cd))) modules
-  constraints <- traverse (extractConstraints contractInfo) modules
-  when (cfg_verbose config) $ do
-    print' labeledInsts
-    print' cfg
-    print' modules
-    print' (map debugFriendlyModel constraints)
-    print' (map getModulePc modules)
-  results <- traverse (solveSMT config (cd_rawSmt cd)) constraints
-  pure (fmap tShow results, names)
+  for modules (solveModule contractInfo (cd_rawSmt cd))
  where
   contractInfo = mkContractInfo cd
   getFunPc = ci_getFunPc contractInfo
   identifiers = p_identifiers (cd_program cd)
   checks = cd_checks cd
-  getModulePc m = case m_prog m of
-    [] -> "unknown pc"
-    ((pc, _) : _) -> tShow pc
