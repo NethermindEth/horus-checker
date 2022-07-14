@@ -86,8 +86,12 @@ fetchModelFromSolver' goal = do
   externalSolver <- view peSolver
   results <- liftIO $ traverse (runSolver externalSolver) tGoals
   let satGoals = [(subgoal, model) | ((SMT.Sat, Just model), subgoal) <- zip results subgoals]
+  let unsatGoals = [subgoal | ((SMT.Unsat, Nothing), subgoal) <- zip results subgoals]
+  let unknownReasons = [reason | ((SMT.Unknown, Just reason), _) <- zip results subgoals]
   case satGoals of
-    [] -> pure Unsat
+    [] -> case unsatGoals of
+      [] -> pure $ Unknown $ head unknownReasons
+      _ -> pure Unsat
     (subgoal, model) : _ -> mkFullModel subgoal model
 
 mkFullModel :: MonadZ3 z3 => Goal -> Text -> PreprocessorT z3 SolverResult
