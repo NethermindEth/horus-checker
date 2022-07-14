@@ -3,6 +3,11 @@
 ##########################
 
 
-# Sometimes we create a record type with just one field, that is meant
-# to be extend later. In such cases, this warning is non-helpful.
+# Sometimes we create a record type with just one field, that is meant to be
+# extended later. In such cases, this warning is non-helpful.
 - ignore: {name: "Use newtype instead of data"}
+
+# Due to simplified subsumption[1] sometimes eta-expansion is necessary.
+#
+# [1]: https://gitlab.haskell.org/ghc/ghc/-/wikis/migration/9.0#simplified-subsumption
+- ignore: {name: "Avoid lambda"}
