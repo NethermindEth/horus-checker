@@ -17,6 +17,8 @@ module Horus.Instruction
   , callDestination
   , jumpDestination
   , toSemiAsm
+  , isRet
+  , isCall
   )
 where
 
@@ -245,3 +247,11 @@ toSemiAsm Instruction{..} = do
     | v < 0 = op <> " - " <> tShow (-v)
     | v == 0 = op
     | otherwise = op <> " + " <> tShow v
+
+isRet :: Instruction -> Bool
+isRet Instruction{i_opCode = Ret} = True
+isRet _ = False
+
+isCall :: Instruction -> Bool
+isCall Instruction{i_opCode = Call} = True
+isCall _ = False

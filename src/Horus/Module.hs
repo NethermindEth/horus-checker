@@ -5,16 +5,31 @@ import Control.Monad (unless, when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Coerce (coerce)
+import Data.DList (DList)
+import Data.DList qualified as D (singleton, toList)
 import Data.Foldable (for_)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
 import Data.Text qualified as Text
 import Lens.Micro (ix, over, (^.))
 
-import Horus.CFGBuild (ArcCondition (..), Label (..))
+import Horus.CFGBuild (ArcCondition (..), Label)
 import Horus.CFGBuild.Runner (CFG (..))
+import Horus.CallStack
+  ( CallStack
+  , calledFOfCallEntry
+  , callerPcOfCallEntry
+  , initialWithFunc
+  , pop
+  , push
+  , stackTrace
+  , top
+  )
+import Horus.FunctionAnalysis (FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall)
 import Horus.Instruction (LabeledInst)
+import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SMTUtil (ap, fp)
 import Horus.SW.Identifier
@@ -30,7 +45,8 @@ data Module = Module
   { m_pre :: ScopedTSExpr Bool
   , m_post :: ScopedTSExpr Bool
   , m_prog :: [LabeledInst]
-  , m_jnzOracle :: Map Label Bool
+  , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
+  , m_calledF :: Label
   }
   deriving (Show)
 
@@ -49,7 +65,7 @@ labelNamesOfPc idents lblpc =
 normalizedName :: [ScopedName] -> (Text, Text)
 normalizedName scopedNames =
   let names :: [[Text]]
-      names = map coerce scopedNames
+      names = map sn_Path scopedNames
       scopes = map (Text.intercalate "." . tail . init) names
       labels = map last names
    in (Text.concat scopes, summarizeLabels labels)
@@ -64,14 +80,14 @@ descrOfBool :: Bool -> Text
 descrOfBool True = "T"
 descrOfBool False = "F"
 
-descrOfOracle :: Map Label Bool -> Text
+descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
   if Map.null oracle
     then ""
     else Text.cons '+' . Text.concat . map descrOfBool . Map.elems $ oracle
 
 nameOfModule :: Identifiers -> Module -> Text
-nameOfModule idents (Module _ post prog oracle) =
+nameOfModule idents (Module _ post prog oracle _) =
   case beginOfModule prog of
     Nothing -> "empty: " <> tShow post
     Just label ->
@@ -116,28 +132,48 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Text -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
+-- TODO?: Technically, we could abuse CallStack to keep track 'uniformally' here,
+-- for both ifs and callers. The 'caller pc' would be the 'if pc' instead,
+-- e.g. something like (State CallStack) instead of the Reader (...) here
+-- with push / pop. However, it reads easier for me having a callstack explicitly turned into
+-- an explicitly visited set of labels.
 traverseCFG :: [(Label, ScopedTSExpr Bool)] -> CFG -> ModuleL ()
-traverseCFG sources cfg = for_ sources $ \(l, pre) ->
-  visit Map.empty [] (over stsexprExpr (.&& ap .== fp) pre) l ACNone
+traverseCFG sources cfg = for_ sources $ \(fLabel, fpre) ->
+  visit Map.empty (initialWithFunc fLabel) [] (fover stsexprExpr (.&& ap .== fp) pre) fLabel ACNone Nothing
  where
-  visit :: Map Label Bool -> [LabeledInst] -> ScopedTSExpr Bool -> Label -> ArcCondition -> ModuleL ()
-  visit oracle acc pre l arcCond = visiting l $ \alreadyVisited -> do
-    when (alreadyVisited && null assertions) $ do
-      throwError ("There is a loop at PC " <> tShow (unLabel l) <> " with no invariant")
-    unless (null assertions) $ do
-      emitModule (Module pre conjSTS acc oracle')
-    unless alreadyVisited $ do
-      if null assertions
-        then visitArcs oracle' acc pre l
-        else visitArcs Map.empty [] conjSTS l
-   where
-    oracle' = updateOracle arcCond oracle
-    assertions = cfg_assertions cfg ^. ix l
-    conjSTS = conjunctSTS assertions
-  visitArcs oracle acc pre l = do
-    for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
-      visit oracle (acc <> insts) pre lTo test
+  visit oracle callstack acc pre l arcCond f = do
+    let callstack' = case f of
+          Nothing -> callstack
+          Just (ArcCall fCallerPc fCalledF) -> push (fCallerPc, fCalledF) callstack
+          Just ArcRet -> snd $ pop callstack
+        oracle' = updateOracle arcCond callstack' oracle
+        assertions = cfg_assertions cfg ^. ix l
+        stackTraceAndLbl = (stackTrace callstack', l)
+    unless (null assertions) $
+      emitModule
+        ( Module pre (SMT.and assertions) acc oracle' $
+            calledFOfCallEntry $
+              top callstack'
+        )
+    visited <- ask
+    unless (stackTraceAndLbl `Set.member` visited) $
+      local (Set.insert stackTraceAndLbl) $
+        if null assertions
+          then visitArcs oracle' callstack' acc pre l
+          else visitArcs Map.empty callstack' [] (SMT.and assertions) l
+  visitArcs oracle' callstack' acc pre l = do
+    let outArcs = cfg_arcs cfg ^. ix l
+    unless (null outArcs) $
+      let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==)
+          outArcs' = filter (\(dst, _, _, f) -> not (isRetArc f) || isCalledBy dst) outArcs
+       in for_ outArcs' $ \(lTo, insts, test, f) ->
+            visit oracle' callstack' (acc <> insts) pre lTo test f
 
-updateOracle :: ArcCondition -> Map Label Bool -> Map Label Bool
-updateOracle ACNone = id
-updateOracle (ACJnz jnzPc isSat) = Map.insert jnzPc isSat
+updateOracle ::
+  ArcCondition ->
+  CallStack ->
+  Map (NonEmpty Label, Label) Bool ->
+  Map (NonEmpty Label, Label) Bool
+updateOracle ACNone _ = id
+updateOracle (ACJnz jnzPc isSat) callstack =
+  Map.insert (stackTrace callstack, jnzPc) isSat

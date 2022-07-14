@@ -18,6 +18,7 @@ where
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map (Map, fromListWith, toList)
 import Data.Text (Text, pack)
 import Data.Text qualified as Text
 
@@ -64,6 +65,8 @@ enumerate = [minBound ..]
 
 maybeToError :: MonadError e m => e -> Maybe a -> m a
 maybeToError e = maybe (throwError e) pure
+invert :: Ord v => Map k v -> Map v [k]
+invert m = fromListWith (++) [(v, [k]) | (k, v) <- Data.Map.toList m]
 
 onSnd :: (b -> c) -> (a, b) -> (a, c)
 onSnd f (a, b) = (a, f b)

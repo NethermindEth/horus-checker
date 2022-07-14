@@ -7,16 +7,19 @@ module Horus.Global
   )
 where
 
-import Control.Monad (when)
+import Control.Monad (ap, forM, guard, when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_)
 import Data.Function ((&))
-import Data.Map qualified as Map (toList)
+import Data.List ((\\))
+import Data.Map qualified as Map (fromList, keys, map, toList)
 import Data.Maybe (mapMaybe)
+import Data.Set (Set, fromList)
+import Data.Set qualified as Set
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
-import Lens.Micro (at, non, (^.))
+import Lens.Micro (at, non, (<&>), (^.))
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
@@ -25,20 +28,17 @@ import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
+  , ExecutionState
   , MemoryVariable (..)
   , debugFriendlyModel
   , makeModel
   )
-import Horus.ContractDefinition
-  ( Checks
-  , ContractDefinition (..)
-  , cPreConds
-  , cdChecks
-  )
-import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
-import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
-import Horus.Module (Module (m_prog), ModuleL, nameOfModule, traverseCFG)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
+import Horus.CallStack (CallStack, initialWithFunc)
+import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
+import Horus.FunctionAnalysis (inlinableFuns)
+import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
+import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
+import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (..))
@@ -56,7 +56,7 @@ data Config = Config
 
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
-  | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
+  | forall b. RunCairoSemanticsT CallStack SemanticsEnv (CairoSemanticsT m b) (ExecutionState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | AskConfig (Config -> a)
   | SetConfig Config a
@@ -84,8 +84,8 @@ liftF' = GlobalT . liftF
 runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
 runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
 
-runCairoSemanticsT :: ContractInfo -> CairoSemanticsT m a -> GlobalT m ConstraintsState
-runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder id)
+runCairoSemanticsT :: CallStack -> SemanticsEnv -> CairoSemanticsT m a -> GlobalT m ExecutionState
+runCairoSemanticsT initStack env smt2Builder = liftF' (RunCairoSemanticsT initStack env smt2Builder id)
 
 runModuleL :: ModuleL a -> GlobalT m [Module]
 runModuleL builder = liftF' (RunModuleL builder id)
@@ -120,22 +120,23 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalT m ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeCFG :: Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
-makeCFG checks identifiers labelToFun labeledInsts =
-  runCFGBuildT (buildCFG checks identifiers labelToFun labeledInsts)
+makeCFG :: [Label] -> ContractDefinition -> [LabeledInst] -> GlobalT m CFG
+makeCFG inlinable cd labeledInsts = runCFGBuildT (buildCFG (fromList inlinable) cd labeledInsts)
 
-makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules cd cfg = runModuleL (traverseCFG sources cfg)
+makeModules :: (Label -> Bool) -> ContractDefinition -> CFG -> GlobalT m [Module]
+makeModules allow cd cfg = pure (runModuleL (traverseCFG sources cfg))
  where
   sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
-    let pre = preConds ^. at name . non emptyScopedTSExpr
+    guard (allow pc)
+    let pre = preConds ^. at name . non SMT.True
     pure (pc, pre)
 
-extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
-extractConstraints env m = runCairoSemanticsT env (encodeSemantics m)
+extractConstraints :: SemanticsEnv -> Module -> GlobalT m ExecutionState
+extractConstraints env mdl =
+  runCairoSemanticsT (initialWithFunc $ m_calledF mdl) env $ encodeSemantics mdl
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
@@ -206,8 +207,8 @@ solveSMT smtPrefix cs = do
   Config{..} <- askConfig
   runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
-  query = makeModel smtPrefix cs
-  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
+  query = makeModel smtPrefix es
+  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables es)
 
 solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
