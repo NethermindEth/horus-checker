@@ -50,7 +50,7 @@ data FlowTrackingData = FlowTrackingData
   deriving stock (Show)
 
 data ApTracking = ApTracking {at_group :: Int, at_offset :: Int}
-  deriving stock (Show)
+  deriving stock (Show, Eq)
 
 instance FromJSON Program where
   parseJSON = withObject "Program" $ \v ->
