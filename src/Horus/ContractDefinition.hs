@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 module Horus.ContractDefinition
   ( ContractDefinition (..)
   , Checks (..)
@@ -7,19 +9,21 @@ module Horus.ContractDefinition
   , cPreConds
   , cPostConds
   , cInvariants
+  , stdChecks
   )
 where
 
 import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
 import Data.Coerce (coerce)
 import Data.Map (Map)
-import qualified Data.Map as Map (empty)
+import qualified Data.Map as Map (empty, fromAscList)
 import Data.Text (Text)
 import qualified Data.Text as Text (intercalate)
 import Lens.Micro (Lens')
 
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
+import Horus.SW.Std (FuncSpec (..), stdFuncs)
 import Horus.Util (whenJust)
 import SimpleSMT.Typed (TSExpr, inlineLets, parseAssertion)
 
@@ -54,14 +58,21 @@ cPostConds lMod g = fmap (\x -> g{c_postConds = x}) (lMod (c_postConds g))
 cInvariants :: Lens' Checks (Map ScopedName (TSExpr Bool))
 cInvariants lMod g = fmap (\x -> g{c_invariants = x}) (lMod (c_invariants g))
 
-emptyChecks :: Checks
-emptyChecks = Checks Map.empty Map.empty Map.empty
+stdChecks :: Checks
+stdChecks =
+  Checks
+    { c_preConds = Map.fromAscList pres
+    , c_postConds = Map.fromAscList posts
+    , c_invariants = Map.empty
+    }
+ where
+  (pres, posts) = unzip [((fs_name, fs_pre), (fs_name, fs_post)) | FuncSpec{..} <- stdFuncs]
 
 instance FromJSON ContractDefinition where
   parseJSON = withObject "ContractDefinition" $ \v ->
     ContractDefinition
       <$> v .: "program"
-      <*> v .:? "checks" .!= emptyChecks
+      <*> v .:? "checks" .!= mempty
       <*> v .:? "smt" .!= ""
 
 newtype HSExpr a = HSExpr (TSExpr a)
@@ -106,3 +117,14 @@ instance Show Checks where
       <> show (introHSExpr (c_invariants cs))
       <> "\n"
       <> "}"
+
+instance Semigroup Checks where
+  a <> b =
+    Checks
+      { c_preConds = c_preConds a <> c_preConds b
+      , c_postConds = c_postConds a <> c_postConds b
+      , c_invariants = c_invariants a <> c_invariants b
+      }
+
+instance Monoid Checks where
+  mempty = Checks Map.empty Map.empty Map.empty
