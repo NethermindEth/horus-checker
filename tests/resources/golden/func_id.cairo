@@ -5,8 +5,8 @@ func main():
     ret
 end
 
-# @post [ap - 1] == [fp - 3]
-func id(x):
+# @post res == x
+func id(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1]; ap++
     ret

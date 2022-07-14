@@ -7,8 +7,8 @@ func main():
 end
 
 # @pre True
-# @post (x == 42 && [ap - 1] == 24601) || ((x > 42 || x < 42) && [ap - 1] == 1337)
-func f(x):
+# @post (x == 42 && res == 24601) || ((x > 42 || x < 42) && res == 1337)
+func f(x) -> (res):
     [ap] = x; ap++
     [ap] = [ap - 1] - 42; ap++
     if [ap - 1] != 0:
