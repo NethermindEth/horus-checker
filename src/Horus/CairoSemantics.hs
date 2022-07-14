@@ -9,7 +9,7 @@ module Horus.CairoSemantics
   )
 where
 
-import Control.Monad (when)
+import Control.Monad (forM_, unless, when)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity)
@@ -17,9 +17,14 @@ import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import SimpleSMT qualified as SMT (SExpr (..))
 
+import Horus.CallStack as CS
+  ( CallEntry
+  , callerOfRoot
+  )
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -29,6 +34,8 @@ import Horus.Instruction
   , ResLogic (..)
   , callDestination
   , getNextPc
+  , isCall
+  , isRet
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..))
@@ -61,6 +68,12 @@ data CairoSemanticsF a
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
+  | GetStackTraceDescr (Text -> a)
+  | GetOracle (NonEmpty Label -> a)
+  | IsInlinable Label (Bool -> a)
+  | Push CallEntry a
+  | Pop a
+  | Top (CallEntry -> a)
   | Throw Text
   deriving stock (Functor)
 
@@ -110,6 +123,24 @@ memoryRemoval = TSMT.transform' step
     TSMT.toUnsafe <$> declareMem (TSMT.fromUnsafe x `TSMT.mod` prime)
   step e = pure e
 
+isInlinable :: Label -> CairoSemanticsT m Bool
+isInlinable l = liftF (IsInlinable l id)
+
+getStackTraceDescr :: CairoSemanticsT m Text
+getStackTraceDescr = liftF (GetStackTraceDescr id)
+
+getOracle :: CairoSemanticsT m (NonEmpty Label)
+getOracle = liftF (GetOracle id)
+
+push :: CallEntry -> CairoSemanticsT m ()
+push l = liftF (Push l ())
+
+pop :: CairoSemanticsT m ()
+pop = liftF (Pop ())
+
+top :: CairoSemanticsT m CallEntry
+top = liftF (Top id)
+
 {- | Prepare the expression for usage in the model.
 
 That is, deduce AP from the ApTracking data by PC and replace FP name
@@ -121,76 +152,115 @@ prepare pc fp expr = prepare' <$> getAp pc <*> pure fp <*> pure expr
 prepare' :: TSExpr Integer -> TSExpr Integer -> TSExpr a -> TSExpr a
 prepare' ap fp expr = TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr)
 
-encodeApTracking :: ApTracking -> CairoSemanticsT m (TSExpr Integer)
-encodeApTracking ApTracking{..} =
-  fmap (+ fromIntegral at_offset) (declareFelt ("ap!" <> tShow at_group))
+encodeApTracking :: Text -> ApTracking -> CairoSemanticsT m (TSExpr Integer)
+encodeApTracking traceDescr ApTracking{..} =
+  fmap (+ fromIntegral at_offset) (declareFelt ("ap!" <> traceDescr <> "@" <> tShow at_group))
 
 getAp :: Label -> CairoSemanticsT m (TSExpr Integer)
-getAp pc = getApTracking pc >>= encodeApTracking
+getAp pc = getStackTraceDescr >>= \trace -> getApTracking pc >>= encodeApTracking trace
+
+getFp :: Maybe Label -> CairoSemanticsT m (TSExpr Integer)
+getFp mbLabel = do
+  stackTrace <- getStackTraceDescr
+  (_, currentF) <- top
+  let trace = "fp!" <> stackTrace <> "@"
+  declareFelt $ trace <> tShow (unLabel $ fromMaybe currentF mbLabel)
 
 moduleStartAp :: Module -> CairoSemanticsT m (TSExpr Integer)
-moduleStartAp Module{m_prog = []} = declareFelt "ap!"
+moduleStartAp Module{m_prog = []} = do
+  trace <- getStackTraceDescr
+  declareFelt $ "ap!" <> trace
 moduleStartAp Module{m_prog = (pc0, _) : _} = getAp pc0
 
 moduleEndAp :: Module -> CairoSemanticsT m (TSExpr Integer)
-moduleEndAp Module{m_prog = []} = declareFelt "ap!"
+moduleEndAp Module{m_prog = []} = do
+  trace <- getStackTraceDescr
+  declareFelt $ "ap!" <> trace
 moduleEndAp Module{m_prog = m_prog} = getAp (getNextPc (last m_prog))
 
 encodeSemantics :: Module -> CairoSemanticsT m ()
 encodeSemantics m@Module{..} = do
-  fp <- declareFelt "fp!"
   apStart <- moduleStartAp m
   apEnd <- moduleEndAp m
+  fp <- getFp Nothing
   assert (fp .<= apStart)
   assert (prepare' apStart fp m_pre)
   expect (prepare' apEnd fp m_post)
   for_ m_prog $ \inst -> do
-    mkInstructionConstraints fp m_jnzOracle inst
+    mkInstructionConstraints m_jnzOracle inst
   whenJust (nonEmpty m_prog) $ \neInsts -> do
     mkApConstraints fp apEnd neInsts
     mkBuiltinConstraints fp neInsts
 
-mkInstructionConstraints :: TSExpr Integer -> Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
-mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
+withExecutionCtx :: CallEntry -> FT CairoSemanticsF m b -> FT CairoSemanticsF m b
+withExecutionCtx ctx action = do
+  push ctx
+  res <- action
+  pop
+  pure res
+
+mkInstructionConstraints :: Map (NonEmpty Label, Label) Bool -> LabeledInst -> CairoSemanticsT m ()
+mkInstructionConstraints jnzOracle lInst@(pc, inst@Instruction{..}) = do
+  fp <- getFp (Just pc)
+  lastFp <- getFp Nothing
+  unless (isRet inst) $ assert (fp .== lastFp)
   dstReg <- prepare pc fp (regToTSExpr i_dstRegister)
   let dst = memory (dstReg + fromInteger i_dstOffset)
   case i_opCode of
-    Call -> do
-      calleeFp <- declareFelt ("fp@" <> tShow (unLabel pc))
-      let calleePc = uncheckedCallDestination inst
-          nextPc = getNextPc inst
-      calleeFpAsAp <- (2 +) <$> getAp pc
-      setNewFp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
-      saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
-      setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
-      preparedPre <- getPreByCall inst >>= prepare calleePc calleeFpAsAp
-      preparedPost <- getPostByCall inst >>= prepare nextPc calleeFpAsAp
-      expect preparedPre
-      assert (TSMT.and [setNewFp, saveOldFp, setNextPc, preparedPost])
-    AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
-    Nop -> case jnzOracle Map.!? pc of
-      Just False -> assert (dst .== 0)
-      Just True -> assert (dst ./= 0)
-      Nothing -> pure ()
-    _ -> pure ()
+    Call ->
+      let calleePc = uncheckedCallDestination lInst
+          nextPc = getNextPc lInst
+          stackFrame = (pc, calleePc)
+       in do
+            calleeFp <- withExecutionCtx stackFrame $ getFp (Just calleePc)
+            nextAp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
+            saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
+            setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
+            assert (TSMT.and [nextAp, saveOldFp, setNextPc])
+            canInline <- isInlinable $ uncheckedCallDestination lInst
+            push stackFrame
+            unless canInline $ do
+              preparedPre <- getPreByCall pc >>= prepare calleePc calleeFp
+              pop
+              preparedPost <- getPostByCall pc >>= prepare nextPc calleeFp
+              expect preparedPre
+              assert preparedPost
+    AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
+    Nop -> do
+      trace <- getOracle
+      case jnzOracle Map.!? (trace, pc) of
+        Just False -> assert (dst .== 0)
+        Just True -> assert (dst ./= 0)
+        Nothing -> pure ()
+    Ret -> do
+      (callerPc, _) <- top
+      unless (callerPc == callerOfRoot) $
+        prepare callerPc fp (Util.fp .== Util.memory (Util.fp - 2)) >>= assert >> pop
 
 mkApConstraints :: TSExpr Integer -> TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
 mkApConstraints fp apEnd insts = do
-  for_ (zip (toList insts) (NonEmpty.tail insts)) $ \(inst, nextInst) -> do
-    at1 <- getApTracking (fst inst)
-    at2 <- getApTracking (fst nextInst)
+  forM_ (zip (toList insts) (NonEmpty.tail insts)) $ \(lInst@(pc, inst), (pcNext, _)) -> do
+    at1 <- getApTracking pc
+    at2 <- getApTracking pcNext
+    canInline <- isInlinable (uncheckedCallDestination lInst)
     when (at_group at1 /= at_group at2) $ do
-      ap1 <- encodeApTracking at1
-      ap2 <- encodeApTracking at2
-      getApIncrement fp inst >>= \case
+      oldTrace <- getStackTraceDescr
+      ap1 <- encodeApTracking oldTrace at1
+      when (isCall inst && canInline) $ push (pc, uncheckedCallDestination lInst)
+      when (isRet inst) pop
+      newTrace <- getStackTraceDescr
+      ap2 <- encodeApTracking newTrace at2
+      getApIncrement fp lInst >>= \case
         Just apIncrement -> assert (ap1 + apIncrement .== ap2)
-        Nothing -> assert (ap1 .< ap2)
-  lastAp <- encodeApTracking =<< getApTracking (fst lastInst)
+        Nothing | not canInline -> assert (ap1 .< ap2)
+        Nothing -> pure ()
+  trace <- getStackTraceDescr
+  lastAp <- encodeApTracking trace =<< getApTracking lastPc
   getApIncrement fp lastInst >>= \case
     Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
     Nothing -> assert (lastAp .< apEnd)
  where
-  lastInst = NonEmpty.last insts
+  lastInst@(lastPc, _) = NonEmpty.last insts
 
 mkBuiltinConstraints :: TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
 mkBuiltinConstraints fp insts = do

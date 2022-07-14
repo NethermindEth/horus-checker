@@ -55,6 +55,8 @@ library
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
       Horus.ContractInfo
+      Horus.CallStack
+      Horus.FunctionAnalysis
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner

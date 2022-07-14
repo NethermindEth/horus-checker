@@ -2,19 +2,23 @@ module Horus.CairoSemantics.Runner
   ( runT
   , MemoryVariable (..)
   , ConstraintsState (..)
+  , ExecutionState
   , makeModel
   , debugFriendlyModel
   )
 where
 
+import Control.Arrow qualified as Bifunc
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import Control.Monad.State (MonadState, StateT, runStateT)
+import Control.Monad.State (MonadState (get), StateT, execStateT, modify)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails, union)
+import Data.Map (Map)
+import Data.Set (Set)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
@@ -26,6 +30,13 @@ import Horus.ContractInfo (ContractInfo (..))
 import Horus.SMTUtil (builtinEnd, builtinStart, prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.Util (enumerate, fieldPrime, tShow)
+import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, CairoSemanticsT)
+import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
+import Horus.Label (Label)
+import Horus.Program (ApTracking)
+import Horus.SMTUtil (prime)
+import Horus.SW.ScopedName (ScopedName)
+import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as SMT
 
@@ -43,20 +54,22 @@ data ConstraintsState = ConstraintsState
   , cs_nameCounter :: Int
   }
 
-csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
-csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
+type ExecutionState = (CallStack, ConstraintsState)
 
-csAsserts :: Lens' ConstraintsState [TSExpr Bool]
-csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
+csMemoryVariables :: Lens' ExecutionState [MemoryVariable]
+csMemoryVariables lMod (st, g) = fmap (\x -> (st, g{cs_memoryVariables = x})) (lMod (cs_memoryVariables g))
 
-csExpects :: Lens' ConstraintsState [TSExpr Bool]
-csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
+csAsserts :: Lens' ExecutionState [TSExpr Bool]
+csAsserts lMod (st, g) = fmap (\x -> (st, g{cs_asserts = x})) (lMod (cs_asserts g))
 
-csDecls :: Lens' ConstraintsState [Text]
-csDecls lMod g = fmap (\x -> g{cs_decls = x}) (lMod (cs_decls g))
+csExpects :: Lens' ExecutionState [TSExpr Bool]
+csExpects lMod (st, g) = fmap (\x -> (st, g{cs_expects = x})) (lMod (cs_expects g))
 
-csNameCounter :: Lens' ConstraintsState Int
-csNameCounter lMod g = fmap (\x -> g{cs_nameCounter = x}) (lMod (cs_nameCounter g))
+csDecls :: Lens' ExecutionState [Text]
+csDecls lMod (st, g) = fmap (\x -> (st, g{cs_decls = x})) (lMod (cs_decls g))
+
+csNameCounter :: Lens' ExecutionState Int
+csNameCounter lMod (st, g) = fmap (\x -> (st, g{cs_nameCounter = x})) (lMod (cs_nameCounter g))
 
 emptyConstraintsState :: ConstraintsState
 emptyConstraintsState =
@@ -68,14 +81,17 @@ emptyConstraintsState =
     , cs_nameCounter = 0
     }
 
+emptyExecutionState :: CallStack -> ExecutionState
+emptyExecutionState initStack = (initStack, emptyConstraintsState)
+
 newtype ImplT m a
-  = ImplT (ReaderT ContractInfo (ExceptT Text (StateT ConstraintsState m)) a)
+  = ImplT (ReaderT ContractInfo (ExceptT Text (StateT ExecutionState m)) a)
   deriving newtype
     ( Functor
     , Applicative
     , Monad
     , MonadReader ContractInfo
-    , MonadState ConstraintsState
+    , MonadState ExecutionState
     , MonadError Text
     )
 
@@ -108,8 +124,23 @@ interpret = iterTM exec
     getPostByCall <- asks ci_getPostByCall
     getPostByCall inst & cont
   exec (GetApTracking label cont) = do
-    getApTracking <- asks (\ci -> ci_getApTracking ci)
-    getApTracking label >>= cont
+    trackings <- asks se_apTracking
+    cont (trackings ^?! ix label)
+  exec (IsInlinable label cont) = do
+    inlinableFs <- asks se_inlinableFs
+    cont (label `elem` inlinableFs)
+  exec (GetStackTraceDescr cont) = do
+    fNames <- asks se_functionNames
+    get >>= cont . digestOfCallStack fNames . fst
+  exec (GetOracle cont) = do
+    get >>= cont . stackTrace . fst
+  -- TODO? What's the lense incantation for these?
+  exec (Push entry cont) = do
+    modify (Bifunc.first (push entry)) >> cont
+  exec (Pop cont) = do
+    modify (Bifunc.first (snd . pop)) >> cont
+  exec (Top cont) = do
+    get >>= cont . top . fst
   exec (GetFunPc label cont) = do
     getFunPc <- asks (\ci -> ci_getFunPc ci)
     getFunPc label >>= cont
@@ -118,8 +149,8 @@ interpret = iterTM exec
     getBuiltinOffsets label builtin >>= cont
   exec (Throw t) = throwError t
 
-debugFriendlyModel :: ConstraintsState -> Text
-debugFriendlyModel ConstraintsState{..} =
+debugFriendlyModel :: ExecutionState -> Text
+debugFriendlyModel (_, ConstraintsState{..}) =
   Text.intercalate "\n" $
     concat
       [ ["# Memory"]
@@ -135,8 +166,8 @@ debugFriendlyModel ConstraintsState{..} =
     | MemoryVariable{..} <- cs_memoryVariables
     ]
 
-makeModel :: Text -> ConstraintsState -> Text
-makeModel rawSmt ConstraintsState{..} =
+makeModel :: Text -> ExecutionState -> Text
+makeModel rawSmt (_, ConstraintsState{..}) =
   let names =
         concat
           [ map SMT.showTSExpr [prime, rcBound]
@@ -177,20 +208,23 @@ makeModel rawSmt ConstraintsState{..} =
     mem0 = SMT.const (mv_varName mv0)
     addr0 = SMT.const (mv_addrName mv0)
 
-runImplT :: Monad m => ContractInfo -> ImplT m a -> m (Either Text ConstraintsState)
-runImplT contractInfo (ImplT m) = do
+runImplT :: Monad m => CallStack -> ContractInfo -> ImplT m a -> m (Either Text ExecutionState)
+runImplT initStack contractInfo (ImplT m) = do
   (v, cs) <-
     runReaderT m contractInfo
       & runExceptT
-      & flip runStateT emptyConstraintsState
+      & flip runStateT (emptyExecutionState initStack)
   pure (v $> cs)
 
-runT :: Monad m => ContractInfo -> CairoSemanticsT m a -> m (Either Text ConstraintsState)
-runT contractInfo a = do
-  mbCs <- runImplT contractInfo (interpret a)
+runT :: Monad m => CallStack -> ContractInfo -> CairoSemanticsT m a -> m (Either Text ExecutionState)
+runT initStack contractInfo a = do
+  mbCs <- runImplT initStack contractInfo (interpret a)
   pure $
     mbCs
       <&> csMemoryVariables %~ reverse
       <&> csAsserts %~ reverse
       <&> csExpects %~ reverse
       <&> csDecls %~ reverse
+
+run :: CallStack -> SemanticsEnv -> CairoSemanticsL a -> ExecutionState
+run initStack env = runIdentity . runT initStack env
