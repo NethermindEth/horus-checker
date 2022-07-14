@@ -5,15 +5,16 @@ module Horus.CairoSemantics
   , CairoSemanticsF (..)
   , CairoSemanticsT
   , CairoSemanticsL
+  , BuiltinOffsets (..)
   )
 where
 
 import Control.Monad (when)
 import Control.Monad.Trans.Free.Church (FT, liftF)
-import Data.Foldable (for_, toList)
+import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
-import Data.List.NonEmpty qualified as NonEmpty (last, tail)
+import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
 import Data.Text (Text)
@@ -26,16 +27,28 @@ import Horus.Instruction
   , Op1Source (..)
   , OpCode (..)
   , ResLogic (..)
+  , callDestination
   , getNextPc
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..))
 import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
-import Horus.SMTUtil (memory, prime, regToTSExpr)
+import Horus.SMTUtil
+  ( builtinAligned
+  , builtinConstraint
+  , builtinEnd
+  , builtinStart
+  , memory
+  , prime
+  , regToTSExpr
+  , pattern Memory
+  )
 import Horus.SMTUtil qualified as Util (ap, fp)
-import Horus.Util (fieldPrime, tShow, whenJust)
-import SimpleSMT.Typed (TSExpr, (./=), (.<), (.<=), (.==))
+import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
+import Horus.SW.Builtin qualified as Builtin (name)
+import Horus.Util (enumerate, tShow, whenJust, whenJustM)
+import SimpleSMT.Typed (TSExpr (Mod, (:+)), (.&&), (.->), (./=), (.<), (.<=), (.==), (.||))
 import SimpleSMT.Typed qualified as TSMT
 
 data CairoSemanticsF a
@@ -46,6 +59,9 @@ data CairoSemanticsF a
   | GetPreByCall LabeledInst (TSExpr Bool -> a)
   | GetPostByCall LabeledInst (TSExpr Bool -> a)
   | GetApTracking Label (ApTracking -> a)
+  | GetFunPc Label (Label -> a)
+  | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
+  | Throw Text
   deriving stock (Functor)
 
 type CairoSemanticsT = FT CairoSemanticsF
@@ -70,7 +86,16 @@ getPostByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
 getPostByCall inst = liftF (GetPostByCall inst id)
 
 getApTracking :: Label -> CairoSemanticsT m ApTracking
-getApTracking l = liftF (GetApTracking l id)
+getApTracking inst = liftF (GetApTracking inst id)
+
+getFunPc :: Label -> CairoSemanticsT m Label
+getFunPc l = liftF (GetFunPc l id)
+
+getBuiltinOffsets :: Label -> Builtin -> CairoSemanticsT m (Maybe BuiltinOffsets)
+getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
+
+throw :: Text -> CairoSemanticsT m a
+throw t = liftF (Throw t)
 
 assert :: TSExpr Bool -> CairoSemanticsT m ()
 assert a = assert' =<< memoryRemoval a
@@ -79,14 +104,11 @@ expect :: TSExpr Bool -> CairoSemanticsT m ()
 expect a = expect' =<< memoryRemoval a
 
 memoryRemoval :: TSExpr a -> CairoSemanticsT m (TSExpr a)
-memoryRemoval = fmap TSMT.fromUnsafe . unsafeMemoryRemoval . TSMT.toUnsafe
+memoryRemoval = TSMT.transform' step
  where
-  unsafeMemoryRemoval :: SMT.SExpr -> CairoSemanticsT m SMT.SExpr
-  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
-    x' <- unsafeMemoryRemoval x
-    TSMT.toUnsafe <$> declareMem (TSMT.fromUnsafe x' `TSMT.mod` prime)
-  unsafeMemoryRemoval (SMT.List l) = SMT.List <$> traverse unsafeMemoryRemoval l
-  unsafeMemoryRemoval expr = return expr
+  step (SMT.List [SMT.Atom "memory", x]) =
+    TSMT.toUnsafe <$> declareMem (TSMT.fromUnsafe x `TSMT.mod` prime)
+  step e = pure e
 
 {- | Prepare the expression for usage in the model.
 
@@ -116,7 +138,6 @@ moduleEndAp Module{m_prog = m_prog} = getAp (getNextPc (last m_prog))
 
 encodeSemantics :: Module -> CairoSemanticsT m ()
 encodeSemantics m@Module{..} = do
-  assert (prime .== fieldPrime)
   fp <- declareFelt "fp!"
   apStart <- moduleStartAp m
   apEnd <- moduleEndAp m
@@ -124,12 +145,13 @@ encodeSemantics m@Module{..} = do
   assert (prepare' apStart fp m_pre)
   expect (prepare' apEnd fp m_post)
   for_ m_prog $ \inst -> do
-    mkInstructionConstraints m_jnzOracle inst
-  whenJust (nonEmpty m_prog) (mkApConstraints fp apEnd)
+    mkInstructionConstraints fp m_jnzOracle inst
+  whenJust (nonEmpty m_prog) $ \neInsts -> do
+    mkApConstraints fp apEnd neInsts
+    mkBuiltinConstraints fp neInsts
 
-mkInstructionConstraints :: Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
-mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
-  fp <- declareFelt "fp!"
+mkInstructionConstraints :: TSExpr Integer -> Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
+mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
   dstReg <- prepare pc fp (regToTSExpr i_dstRegister)
   let dst = memory (dstReg + fromInteger i_dstOffset)
   case i_opCode of
@@ -137,11 +159,12 @@ mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
       calleeFp <- declareFelt ("fp@" <> tShow (unLabel pc))
       let calleePc = uncheckedCallDestination inst
           nextPc = getNextPc inst
+      calleeFpAsAp <- (2 +) <$> getAp pc
       setNewFp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
       saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
       setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
-      preparedPre <- getPreByCall inst >>= prepare calleePc calleeFp
-      preparedPost <- getPostByCall inst >>= prepare nextPc calleeFp
+      preparedPre <- getPreByCall inst >>= prepare calleePc calleeFpAsAp
+      preparedPost <- getPostByCall inst >>= prepare nextPc calleeFpAsAp
       expect preparedPre
       assert (TSMT.and [setNewFp, saveOldFp, setNextPc, preparedPost])
     AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
@@ -168,6 +191,59 @@ mkApConstraints fp apEnd insts = do
     Nothing -> assert (lastAp .< apEnd)
  where
   lastInst = NonEmpty.last insts
+
+mkBuiltinConstraints :: TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
+mkBuiltinConstraints fp insts = do
+  funPc <- getFunPc (fst (NonEmpty.head insts))
+  apEnd <- getAp (getNextPc (NonEmpty.last insts))
+  for_ enumerate $ \b ->
+    getBuiltinOffsets funPc b >>= \case
+      Just bo -> do
+        let (pre, post) = getBuiltinContract fp apEnd b bo
+        assert pre *> expect post
+        for_ insts (mkBuiltinConstraintsForInst fp b)
+      Nothing -> checkBuiltinNotRequired b (toList insts)
+
+getBuiltinContract ::
+  TSExpr Integer -> TSExpr Integer -> Builtin -> BuiltinOffsets -> (TSExpr Bool, TSExpr Bool)
+getBuiltinContract fp apEnd b bo = (pre, post)
+ where
+  pre = builtinAligned initialPtr b .&& finalPtr .<= builtinEnd b
+  post = initialPtr .<= finalPtr .&& builtinAligned finalPtr b
+  initialPtr = memory (fp - fromIntegral (bo_input bo))
+  finalPtr = memory (apEnd - fromIntegral (bo_output bo))
+
+mkBuiltinConstraintsForInst :: TSExpr Integer -> Builtin -> LabeledInst -> CairoSemanticsT m ()
+mkBuiltinConstraintsForInst fp b inst@(pc, Instruction{..}) = case i_opCode of
+  Call -> do
+    let calleePc = uncheckedCallDestination inst
+    whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
+      calleeFpAsAp <- (2 +) <$> getAp pc
+      calleeApEnd <- getAp (getNextPc inst)
+      let (pre, post) = getBuiltinContract calleeFpAsAp calleeApEnd b bo
+      expect pre *> assert post
+  AssertEqual -> do
+    res <- getRes fp inst
+    case res of
+      Memory resAddr -> assert (builtinConstraint resAddr b)
+      Mod (op0 :+ op1) p -> do
+        let isBuiltin = builtinStart b .<= op0 .|| builtinStart b .<= op1
+        assert (isBuiltin .-> (op0 + op1 .== (op0 + op1) `TSMT.mod` p))
+      _ -> pure ()
+  _ -> pure ()
+
+checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsT m ()
+checkBuiltinNotRequired b = traverse_ check
+ where
+  check inst = whenJust (callDestination inst) $ \calleePc ->
+    whenJustM (getBuiltinOffsets calleePc b) $ \_ ->
+      throw
+        ( "The function doesn't require the '"
+            <> Builtin.name b
+            <> "' builtin, but calls a function (at PC "
+            <> tShow (unLabel calleePc)
+            <> ") that does require it"
+        )
 
 getRes :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (TSExpr Integer)
 getRes fp (pc, Instruction{..}) = do
