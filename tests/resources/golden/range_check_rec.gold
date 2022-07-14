@@ -1,0 +1,12 @@
+stupid_is_zero+TT
+Unsat
+stupid_is_zero+TF
+Unsat
+stupid_is_zero+F
+Unsat
+cairo.common.math.assert_le
+Unsat
+cairo.common.math.assert_nn
+Unsat
+cairo.common.math.unsigned_div_rem
+Unsat
