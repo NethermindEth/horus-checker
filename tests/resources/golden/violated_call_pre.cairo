@@ -6,8 +6,8 @@ func main():
 end
 
 # @pre balanceA >= howMuch
-# @post [ap - 2] == balanceA - howMuch
-# @post [ap - 1] == balanceB + howMuch
+# @post balanceA_ == balanceA - howMuch
+# @post balanceB_ == balanceB + howMuch
 func transfer(howMuch, balanceA, balanceB) -> (balanceA_, balanceB_):
     return (balanceA - howMuch, balanceB + howMuch)
 end

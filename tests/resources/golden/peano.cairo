@@ -1,17 +1,17 @@
 # @pre True
-# @post [ap - 1] == x + 1
+# @post res == x + 1
 func succ(x) -> (res):
     return (res=x + 1)
 end
 
 # @pre True
-# @post [ap - 1] == x - 1
+# @post res == x - 1
 func dec(x) -> (res):
     return (res=x - 1)
 end
 
 # @pre True
-# @post [ap - 1] == x + y
+# @post sum == x + y
 func peano_sum(x,y) -> (sum):
     if y == 0:
      	return (sum=x)
