@@ -9,6 +9,7 @@ import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.Foldable (traverse_)
 import Data.Text (Text, pack, unpack)
 import qualified Data.Text.IO as Text (putStrLn)
+import Lens.Micro ((%~), (<&>))
 import Options.Applicative
   ( execParser
   , fullDesc
@@ -19,6 +20,7 @@ import Options.Applicative
   )
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
+import Horus.ContractDefinition (cdChecks, stdChecks)
 import Horus.Global (produceSMT2Models)
 import qualified Horus.Global.Runner as Global (runT)
 
@@ -26,7 +28,7 @@ type EIO = ExceptT Text IO
 
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
-  contract <- eioDecodeFileStrict arg_fileName
+  contract <- eioDecodeFileStrict arg_fileName <&> cdChecks %~ (<> stdChecks)
   models <- Global.runT arg_config (produceSMT2Models contract)
   liftIO $ traverse_ Text.putStrLn models
 
