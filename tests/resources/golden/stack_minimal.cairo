@@ -10,21 +10,21 @@ namespace _Stack:
         return (cast(0, Stack*))
     end
 
-    # @post [[ap - 1]] == stack.value + stack.next.value
-    # @post [[ap - 1] + 1] == cast(stack.next.next, felt)
+    # @post stack_.value == stack.value + stack.next.value
+    # @post stack_.next == stack.next.next
     func add(stack : Stack*) -> (stack_: Stack*):
         let x = stack.value
         let y = stack.next.value
         return (new Stack(value=x + y, next=stack.next.next))
     end
 
-    # @post [[ap - 1]] == i
-    # @post [[ap - 1] + 1] == cast(stack, felt)
+    # @post stack_.value == i
+    # @post stack_.next == stack
     func lit(stack : Stack*, i : felt) -> (stack_: Stack*):
         return (new Stack(value=i, next=stack))
     end
 
-    # @post [ap - 1] == stack.value
+    # @post res == stack.value
     func top(stack : Stack*) -> (res : felt):
         return (stack.value)
     end

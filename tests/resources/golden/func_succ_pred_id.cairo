@@ -5,14 +5,14 @@ func main():
     ret
 end
 
-# @post [ap - 1] == [fp - 3] + 1
+# @post res == x + 1
 func succ(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] + 1; ap++
     ret
 end
 
-# @post [ap - 1] == [fp - 3] - 1
+# @post res == x - 1
 func pred(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] - 1; ap++
