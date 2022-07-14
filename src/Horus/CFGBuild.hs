@@ -10,43 +10,62 @@ module Horus.CFGBuild
   )
 where
 
-import Control.Monad.Except (MonadError (..), MonadTrans, lift)
+import Control.Monad.Except (MonadError (..), MonadTrans, lift, when)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Coerce (coerce)
-import Data.Foldable (for_, toList)
-import Data.Function ((&))
-import Data.List (sort, union)
+import Data.Foldable (forM_, for_, toList)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
-import Data.Map (Map)
-import Data.Map qualified as Map (elems, fromListWith, toList)
-import Data.Maybe (mapMaybe)
+import Data.Map (Map, (!))
+import Data.Map qualified as Map
+  ( fromListWith
+  , toList
+  , (!)
+  )
+import Data.Maybe (fromMaybe)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
-import Lens.Micro (at, ix, non, (^.))
+import Lens.Micro (at, ix, (^.))
 import Lens.Micro.GHC ()
 
-import Horus.ContractDefinition (Checks (..))
+import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
+import Horus.FunctionAnalysis
+  ( FInfo
+  , FuncOp (ArcCall, ArcRet)
+  , callersOf
+  , pcToFunOfProg
+  , programLabels
+  , sizeOfCall
+  )
 import Horus.Instruction
   ( Instruction (..)
   , LabeledInst
   , OpCode (..)
   , PcUpdate (..)
   , getNextPc
-  , jumpDestination
+  , uncheckedCallDestination
   )
 import Horus.Label (Label (..), moveLabel)
-import Horus.Program (Identifiers)
+import Horus.Program
+  ( Program (..)
+  )
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.ScopedTSExpr (ScopedTSExpr, emptyScopedTSExpr)
-import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
+import Horus.Util
+  ( Box (..)
+  , appendList
+  , topmostStepFT
+  , whenJust
+  )
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
 
 data CFGBuildF a
   = AddVertex Label a
-  | AddArc Label Label [LabeledInst] ArcCondition a
-  | AddAssertion Label (ScopedTSExpr Bool) a
+  | AddArc Label Label [LabeledInst] ArcCondition FInfo a
+  | AddAssertion Label (TSExpr Bool) a
   | Throw Text
   deriving (Functor)
 
@@ -59,8 +78,8 @@ liftF' = CFGBuildT . liftF
 addVertex :: Label -> CFGBuildT m ()
 addVertex l = liftF' (AddVertex l ())
 
-addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> CFGBuildT m ()
-addArc lFrom lTo insts test = liftF' (AddArc lFrom lTo insts test ())
+addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> FInfo -> CFGBuildT m ()
+addArc lFrom lTo insts test f = liftF' (AddArc lFrom lTo insts test f ())
 
 addAssertion :: Label -> ScopedTSExpr Bool -> CFGBuildT m ()
 addAssertion l assertion = liftF' (AddAssertion l assertion ())
@@ -76,12 +95,11 @@ instance Monad m => MonadError Text (CFGBuildT m) where
       Just (Box (Throw t)) -> handler t
       _ -> m
 
-buildCFG ::
-  Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> CFGBuildT m ()
-buildCFG checks identifiers getFunPc labeledInsts = do
-  buildFrame labeledInsts identifiers
-  retsByFun <- mapFunsToRets getFunPc labeledInsts
-  addAssertions retsByFun checks identifiers
+buildCFG :: Set Label -> ContractDefinition -> [LabeledInst] -> CFGBuildT m ()
+buildCFG inlinable cd labeledInsts = do
+  buildFrame inlinable labeledInsts $ cd_program cd
+  let retsByFun = flip mapFunsToRets labeledInsts . pcToFunOfProg $ cd_program cd
+  addAssertions inlinable retsByFun (cd_checks cd) (cd_program cd)
 
 newtype Segment = Segment (NonEmpty LabeledInst)
   deriving (Show)
@@ -98,18 +116,12 @@ segmentInsts (Segment ne) = toList ne
 isControlFlow :: Instruction -> Bool
 isControlFlow i = i_opCode i == Call || i_pcUpdate i /= Regular
 
-buildFrame :: [LabeledInst] -> Identifiers -> CFGBuildT m ()
-buildFrame rows identifiers = do
-  let segments = breakIntoSegments labels rows
+buildFrame :: Set Label -> [LabeledInst] -> Program -> CFGBuildT m ()
+buildFrame inlinable rows prog = do
+  let segments = breakIntoSegments (programLabels rows $ p_identifiers prog) rows
   for_ segments $ \s -> do
     addVertex (segmentLabel s)
-    addArcsFrom s
- where
-  funLabels = identifiers & Map.elems & mapMaybe getFunctionPc & coerce
-  namedLabels = identifiers & Map.elems & mapMaybe getLabelPc & coerce
-  jumpLabels = concat [[jmpDst, getNextPc i] | i <- rows, Just jmpDst <- [jumpDestination i]]
-  retLabels = [pc | (pc, inst) <- rows, isRet inst]
-  labels = sort (funLabels `union` namedLabels `union` jumpLabels `union` retLabels)
+    addArcsFrom inlinable prog rows s
 
 breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
@@ -123,41 +135,52 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
     | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
 
 addArc' :: Label -> Label -> [LabeledInst] -> CFGBuildT m ()
-addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone
+addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
 
-addArcsFrom :: Segment -> CFGBuildT m ()
-addArcsFrom s
-  | not (isControlFlow endInst) = do
+addArcsFrom :: Set Label -> Program -> [LabeledInst] -> Segment -> CFGBuildT m ()
+addArcsFrom inlinable prog rows s
+  | not (isControlFlow endInst) =
       let lTo = nextSegmentLabel s
-      addArc' lFrom lTo insts
-  | Call <- i_opCode endInst = do
-      let lTo = nextSegmentLabel s
-      addArc' lFrom lTo insts
-  | Ret <- i_opCode endInst = do
-      pure ()
-  | JumpAbs <- i_pcUpdate endInst = do
+       in addArc' lFrom lTo insts
+  | Call <- i_opCode endInst =
+      let calleePc = uncheckedCallDestination lIinst
+       in if calleePc `Set.member` inlinable
+            then addArc lFrom calleePc insts ACNone . Just $ ArcCall endPc calleePc
+            else addArc' lFrom (nextSegmentLabel s) insts
+  | Ret <- i_opCode endInst =
+      let owner = pcToFunOfProg prog ! endPc
+          callers = callersOf rows owner
+          returnAddrs = map (`moveLabel` sizeOfCall) callers
+       in forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
+  | JumpAbs <- i_pcUpdate endInst =
       let lTo = Label (fromInteger (i_imm endInst))
-      addArc' lFrom lTo (init insts)
-  | JumpRel <- i_pcUpdate endInst = do
+       in addArc' lFrom lTo (init insts)
+  | JumpRel <- i_pcUpdate endInst =
       let lTo = moveLabel endPc (fromInteger (i_imm endInst))
-      addArc' lFrom lTo (init insts)
-  | Jnz <- i_pcUpdate endInst = do
+       in addArc' lFrom lTo (init insts)
+  | Jnz <- i_pcUpdate endInst =
       let lTo1 = nextSegmentLabel s
           lTo2 = moveLabel endPc (fromInteger (i_imm endInst))
-      addArc lFrom lTo1 insts (ACJnz endPc False)
-      addArc lFrom lTo2 insts (ACJnz endPc True)
+       in do
+            addArc lFrom lTo1 insts (ACJnz endPc False) Nothing
+            addArc lFrom lTo2 insts (ACJnz endPc True) Nothing
   | otherwise = pure ()
  where
   lFrom = segmentLabel s
-  (endPc, endInst) = NonEmpty.last (coerce s)
+  lIinst@(endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
 
-addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildT m ()
-addAssertions retsByFun checks identifiers = do
-  for_ (Map.toList identifiers) $ \(idName, def) -> do
+addAssertions :: Set Label -> Map Label [Label] -> Checks -> Program -> CFGBuildT m ()
+addAssertions inlinable retsByFun checks prog = do
+  for_ (Map.toList $ p_identifiers prog) $ \(idName, def) -> do
     whenJust (getFunctionPc def) $ \pc -> do
-      let post = c_postConds checks ^. at idName . non emptyScopedTSExpr
-      for_ (retsByFun ^. ix pc) (`addAssertion` post)
+      let mbPre = c_preConds checks ^. at idName
+      let mbPost = c_postConds checks ^. at idName
+      case (mbPre, mbPost) of
+        (Nothing, Nothing) ->
+          when (pc `Set.notMember` inlinable) $
+            for_ (retsByFun ^. ix pc) (`addAssertion` SMT.True)
+        _ -> for_ (retsByFun ^. ix pc) (`addAssertion` fromMaybe SMT.True mbPost)
     whenJust (getLabelPc def) $ \pc ->
       whenJust (c_invariants checks ^. at idName) (pc `addAssertion`)
 
