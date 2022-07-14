@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Horus.CairoSemantics
@@ -34,8 +35,8 @@ import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
 import Horus.SMTUtil (memory, prime, regToTSExpr)
 import Horus.SMTUtil qualified as Util (ap, fp)
-import Horus.Util (fieldPrime, tShow, whenJust, whenJustM)
-import SimpleSMT.Typed (TSExpr, (./=), (.<=), (.==))
+import Horus.Util (fieldPrime, tShow, whenJust)
+import SimpleSMT.Typed (TSExpr, (./=), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as TSMT
 
 data CairoSemanticsF a
@@ -159,11 +160,13 @@ mkApConstraints fp apEnd insts = do
     when (at_group at1 /= at_group at2) $ do
       ap1 <- encodeApTracking at1
       ap2 <- encodeApTracking at2
-      whenJustM (getApIncrement fp inst) $ \apIncrement ->
-        assert (ap1 + apIncrement .== ap2)
+      getApIncrement fp inst >>= \case
+        Just apIncrement -> assert (ap1 + apIncrement .== ap2)
+        Nothing -> assert (ap1 .< ap2)
   lastAp <- encodeApTracking =<< getApTracking (fst lastInst)
-  whenJustM (getApIncrement fp lastInst) $ \lastApIncrement ->
-    assert (lastAp + lastApIncrement .== apEnd)
+  getApIncrement fp lastInst >>= \case
+    Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
+    Nothing -> assert (lastAp .< apEnd)
  where
   lastInst = NonEmpty.last insts
 
