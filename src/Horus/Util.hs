@@ -1,5 +1,3 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
 module Horus.Util
   ( fieldPrime
   , toSignedFelt
@@ -11,15 +9,17 @@ module Horus.Util
   , appendList
   , tShow
   , commonPrefix
+  , maybeToError
   )
 where
 
+import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text, pack)
 import Data.Text qualified as Text
 
-fieldPrime :: Integer
+fieldPrime :: Num a => a
 fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
 
 toSignedFelt :: Integer -> Integer
@@ -56,3 +56,6 @@ commonPrefix = foldr (\x acc -> unspoon $ Text.commonPrefixes x acc) ""
  where
   unspoon :: Maybe (Text, Text, Text) -> Text
   unspoon = maybe "" $ \(prefix, _, _) -> prefix
+
+maybeToError :: MonadError e m => e -> Maybe a -> m a
+maybeToError e = maybe (throwError e) pure
