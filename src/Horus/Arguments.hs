@@ -1,13 +1,18 @@
 {-# LANGUAGE LambdaCase #-}
 
-module Horus.Arguments (Arguments (..), argParser, fileArgument) where
+module Horus.Arguments
+  ( Arguments (..)
+  , argParser
+  , fileArgument
+  )
+where
 
 import Control.Monad.Except (throwError)
 import Data.Text (Text, unpack)
 import Options.Applicative
 
 import Horus.Global (Config (..))
-import Horus.Preprocessor.Solvers (Solver, cvc5, mathsat, z3)
+import Horus.Preprocessor.Solvers (Solver, cvc5, mathsat, setTimeout, z3)
 
 data Arguments = Arguments
   { arg_fileName :: FilePath
@@ -16,6 +21,9 @@ data Arguments = Arguments
 
 fileArgument :: Text
 fileArgument = "COMPILED_FILE"
+
+defaultTimeoutMs :: Int
+defaultTimeoutMs = 3000
 
 solverReader :: ReadM Solver
 solverReader = eitherReader $ \case
@@ -44,12 +52,22 @@ configParser =
           <> showDefault
           <> help "Print models for SAT results."
       )
-    <*> option
-      solverReader
-      ( long "solver"
-          <> short 's'
-          <> metavar "SOLVER"
-          <> value z3
-          <> showDefault
-          <> help "Solver to check the resulting smt queries."
-      )
+    <*> ( setTimeout
+            <$> option
+              solverReader
+              ( long "solver"
+                  <> short 's'
+                  <> metavar "SOLVER"
+                  <> value z3
+                  <> showDefault
+                  <> help "Solver to check the resulting smt queries."
+              )
+            <*> option
+              auto
+              ( long "timeout"
+                  <> short 't'
+                  <> metavar "TIMEOUT"
+                  <> value defaultTimeoutMs
+                  <> help "Time limit (ms) for the smt solver."
+              )
+        )
