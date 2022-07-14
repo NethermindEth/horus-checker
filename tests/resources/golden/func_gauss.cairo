@@ -5,8 +5,8 @@ func main():
     ret
 end
 # @pre [fp - 3] > 0
-# @post 2 * [ap - 1] == (([fp - 3] + 1) * [fp - 3])
-func gauss(n):
+# @post res == (([fp - 3] + 1) * [fp - 3]) / 2
+func gauss(n) -> (res):
     [ap] = 0; ap++                       # sum
     [ap] = 1; ap++                       # i
     [ap] = [fp - 3]; ap++                # n

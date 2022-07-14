@@ -8,8 +8,8 @@ func main():
     ret
 end
 
-# @post [ap - 1] == [fp - 3] * [fp - 4]
-func prod(x, y):
+# @post res == x * y
+func prod(x, y) -> (res):
   [ap] = [fp - 3]; ap++
   [ap] = [fp - 4]; ap++
   [ap] = 0; ap++
@@ -21,8 +21,8 @@ func prod(x, y):
   ret
 end
 
-# @post [ap - 1] == 3 * [fp - 3]
-func mul(x):
+# @post res == 3 * x
+func mul(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] * 3; ap++
     ret

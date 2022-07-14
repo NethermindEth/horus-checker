@@ -4,8 +4,8 @@ func main():
     call succ
     ret
 end
-# @pre [fp - 3] > 20
-# @post [ap - 1] == [fp - 3] + 1
+# @pre x > 20
+# @post res == x + 1
 func succ(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] + 1; ap++

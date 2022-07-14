@@ -5,30 +5,30 @@ func main():
     ret
 end
 
-# @post [ap - 1] == [fp - 3] + 1
+# @post res == x + 1
 func succ(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] + 1; ap++
     ret
 end
-# @pre [fp - 3] > 254 || [fp - 3] == 0
-# @post [ap - 1] == [fp - 3] - 1
+# @pre x > 254 || x == 0
+# @post res == x - 1
 func pred(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] - 1; ap++
     ret
 end
 
-# @post [ap - 1] == [fp - 3]
-func id(x):
+# @post res == x
+func id(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1]; ap++
     ret
 end
 
-# @pre [fp - 3] > 254
-# @post [ap - 1] == [fp - 3]
-func comp_id(x):
+# @pre x > 254
+# @post res == x
+func comp_id(x) -> (res):
     [ap] = [fp - 3]; ap++
     call succ
     call pred
