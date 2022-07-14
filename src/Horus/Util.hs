@@ -9,6 +9,7 @@ module Horus.Util
   , appendList
   , tShow
   , commonPrefix
+  , enumerate
   , maybeToError
   )
 where
@@ -19,7 +20,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text, pack)
 import Data.Text qualified as Text
 
-fieldPrime :: Num a => a
+fieldPrime :: Integer
 fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
 
 toSignedFelt :: Integer -> Integer
@@ -56,6 +57,9 @@ commonPrefix = foldr (\x acc -> unspoon $ Text.commonPrefixes x acc) ""
  where
   unspoon :: Maybe (Text, Text, Text) -> Text
   unspoon = maybe "" $ \(prefix, _, _) -> prefix
+
+enumerate :: (Enum a, Bounded a) => [a]
+enumerate = [minBound ..]
 
 maybeToError :: MonadError e m => e -> Maybe a -> m a
 maybeToError e = maybe (throwError e) pure
