@@ -7,8 +7,11 @@ module Horus.Preprocessor.Solvers
   , z3
   , sideSolver
   , sideSolver'
+  , setTimeout
   )
 where
+
+import System.Timeout (timeout)
 
 import Data.Text as Text (Text, drop, init, pack, tail, unpack)
 import qualified SimpleSMT as SMT
@@ -64,3 +67,10 @@ sideSolver adjustifier solverName args = solving $ \sexpr solver -> do
 
 sideSolver' :: Text -> [Text] -> Solver
 sideSolver' = sideSolver id
+
+setTimeout :: Solver -> Int -> Solver
+setTimeout solver tms = Solver (s_name solver) $ \sexpr -> do
+  mbResult <- timeout (tms * 1000) $ runSolver solver sexpr
+  case mbResult of
+    Nothing -> pure (SMT.Unknown, Just $ s_name solver <> ": Time is out.")
+    Just result -> pure result
