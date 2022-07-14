@@ -43,8 +43,8 @@ data CairoSemanticsF a
   | Expect' (TSExpr Bool) a
   | DeclareFelt Text (TSExpr Integer -> a)
   | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
-  | GetPreByCall Label (TSExpr Bool -> a)
-  | GetPostByCall Label (TSExpr Bool -> a)
+  | GetPreByCall LabeledInst (TSExpr Bool -> a)
+  | GetPostByCall LabeledInst (TSExpr Bool -> a)
   | GetApTracking Label (ApTracking -> a)
   deriving stock (Functor)
 
@@ -63,11 +63,11 @@ declareFelt t = liftF (DeclareFelt t id)
 declareMem :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
 declareMem address = liftF (DeclareMem address id)
 
-getPreByCall :: Label -> CairoSemanticsT m (TSExpr Bool)
-getPreByCall l = liftF (GetPreByCall l id)
+getPreByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
+getPreByCall inst = liftF (GetPreByCall inst id)
 
-getPostByCall :: Label -> CairoSemanticsT m (TSExpr Bool)
-getPostByCall l = liftF (GetPostByCall l id)
+getPostByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
+getPostByCall inst = liftF (GetPostByCall inst id)
 
 getApTracking :: Label -> CairoSemanticsT m ApTracking
 getApTracking l = liftF (GetApTracking l id)
@@ -116,7 +116,7 @@ moduleEndAp Module{m_prog = m_prog} = getAp (getNextPc (last m_prog))
 
 encodeSemantics :: Module -> CairoSemanticsT m ()
 encodeSemantics m@Module{..} = do
-  assert (prime .== fromIntegral fieldPrime)
+  assert (prime .== fieldPrime)
   fp <- declareFelt "fp!"
   apStart <- moduleStartAp m
   apEnd <- moduleEndAp m
@@ -140,8 +140,8 @@ mkInstructionConstraints jnzOracle inst@(pc, Instruction{..}) = do
       setNewFp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
       saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
       setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
-      preparedPre <- getPreByCall pc >>= prepare calleePc calleeFp
-      preparedPost <- getPostByCall pc >>= prepare nextPc calleeFp
+      preparedPre <- getPreByCall inst >>= prepare calleePc calleeFp
+      preparedPost <- getPostByCall inst >>= prepare nextPc calleeFp
       expect preparedPre
       assert (TSMT.and [setNewFp, saveOldFp, setNextPc, preparedPost])
     AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
