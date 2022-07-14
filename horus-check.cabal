@@ -52,6 +52,7 @@ library
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
+      Horus.ContractInfo
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner
