@@ -7,15 +7,18 @@ module Horus.Global
   )
 where
 
-import Control.Monad (when)
+import Control.Monad (ap, forM, guard, when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Function ((&))
-import Data.Map qualified as Map (toList)
+import Data.List ((\\))
+import Data.Map qualified as Map (fromList, keys, map, toList)
 import Data.Maybe (mapMaybe)
+import Data.Set (Set, fromList)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Traversable (for)
-import Lens.Micro (at, non, (^.))
+import Lens.Micro (at, non, (<&>), (^.))
 import Lens.Micro.GHC ()
 
 import Horus.CFGBuild (CFGBuildT, Label, LabeledInst, buildCFG)
@@ -23,13 +26,15 @@ import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
+  , ExecutionState
   , MemoryVariable (..)
   , debugFriendlyModel
   , makeModel
   )
-import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdChecks)
-import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
-import Horus.Instruction (labelInsructions, readAllInstructions)
+import Horus.CallStack (CallStack, initialWithFunc)
+import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
+import Horus.FunctionAnalysis (inlinableFuns)
+import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
@@ -47,7 +52,7 @@ data Config = Config
 
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
-  | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
+  | forall b. RunCairoSemanticsT CallStack SemanticsEnv (CairoSemanticsT m b) (ExecutionState -> a)
   | AskConfig (Config -> a)
   | PutStrLn' Text a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
@@ -72,8 +77,8 @@ liftF' = GlobalT . liftF
 runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
 runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
 
-runCairoSemanticsT :: ContractInfo -> CairoSemanticsT m a -> GlobalT m ConstraintsState
-runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder id)
+runCairoSemanticsT :: CallStack -> SemanticsEnv -> CairoSemanticsT m a -> GlobalT m ExecutionState
+runCairoSemanticsT initStack env smt2Builder = liftF' (RunCairoSemanticsT initStack env smt2Builder id)
 
 askConfig :: GlobalT m Config
 askConfig = liftF' (AskConfig id)
@@ -99,22 +104,23 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalT m ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeCFG :: Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
-makeCFG checks identifiers labelToFun labeledInsts =
-  runCFGBuildT (buildCFG checks identifiers labelToFun labeledInsts)
+makeCFG :: [Label] -> ContractDefinition -> [LabeledInst] -> GlobalT m CFG
+makeCFG inlinable cd labeledInsts = runCFGBuildT (buildCFG (fromList inlinable) cd labeledInsts)
 
-makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
+makeModules :: (Label -> Bool) -> ContractDefinition -> CFG -> GlobalT m [Module]
+makeModules allow cd cfg = pure (runModuleL (traverseCFG sources cfg))
  where
   sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
+    guard (allow pc)
     let pre = preConds ^. at name . non SMT.True
     pure (pc, pre)
 
-extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
-extractConstraints env m = runCairoSemanticsT env (encodeSemantics m)
+extractConstraints :: SemanticsEnv -> Module -> GlobalT m ExecutionState
+extractConstraints env mdl =
+  runCairoSemanticsT (initialWithFunc $ m_calledF mdl) env $ encodeSemantics mdl
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
@@ -134,13 +140,13 @@ solveModule contractInfo smtPrefix m = do
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
   moduleName = nameOfModule (ci_identifiers contractInfo) m
 
-solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
-solveSMT smtPrefix cs = do
+solveSMT :: Text -> ExecutionState -> GlobalT m SolverResult
+solveSMT smtPrefix es = do
   Config{..} <- askConfig
   runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
-  query = makeModel smtPrefix cs
-  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
+  query = makeModel smtPrefix es
+  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables es)
 
 solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
@@ -151,6 +157,73 @@ solveContract cd = do
   verbosePrint cfg
   modules <- makeModules cd cfg
   for modules (solveModule contractInfo (cd_rawSmt cd))
+
+-- solveSMT :: [(Text, Text)] -> Text -> GlobalT m SolverResult
+-- solveSMT memsAndAddrs smtQuery = do
+--   config <- askConfig
+--   runPreprocessor
+--     ( PreprocessorEnv
+--         memsAndAddrs
+--         (cfg_solver config)
+--         (cfg_solverSettings config)
+--     )
+--     (solve smtQuery)
+
+-- inlineConstraints :: [Label] -> ContractDefinition -> [LabeledInst] -> GlobalT m ([ExecutionState], [Text])
+-- inlineConstraints inlinable cd labeledInsts =
+--   unzip . concat
+--     <$> forM
+--       inlinable
+--       ( \f ->
+--           let inlineSet = inlinable \\ [f]
+--               inlineEnv = mkSemanticsEnv cd labeledInsts $ fromList inlineSet
+--            in makeCFG inlineSet cd labeledInsts
+--                 >>= fmap namedModules . makeModules (== f) cd
+--                 >>= \(mdls, names) ->
+--                   traverse (extractConstraints inlineEnv) mdls <&> flip zip names
+--       )
+--  where
+--   idents = p_identifiers $ cd_program cd
+--   namedModules = ap (,) (map (nameOfModule idents))
+
+-- produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m ([Text], [Text])
+-- produceSMT2Models cd = do
+--   config <- askConfig
+--   insts <- readAllInstructions (p_code (cd_program cd))
+--   let labeledInsts = labelInsructions insts
+--   let inlinable = Map.keys $ inlinableFuns labeledInsts (cd_program cd) (cd_checks cd)
+--   cfg <- makeCFG inlinable cd labeledInsts
+--   modules <- makeModules (`notElem` inlinable) cd cfg
+--   let names = map (nameOfModule (p_identifiers (cd_program cd))) modules
+--   let semanticsEnv = mkSemanticsEnv cd labeledInsts $ Set.fromList inlinable
+--   constraints <- traverse (extractConstraints semanticsEnv) modules
+--   (constraints', names') <- inlineConstraints inlinable cd labeledInsts
+--   let allConstraints = constraints ++ constraints'
+--   when (cfg_verbose config) $ do
+--     print' labeledInsts
+--     print' cfg
+--     print' modules
+--     print' inlinable
+--     print' (map debugFriendlyModel allConstraints)
+--   let sexprs = map (makeModel (cd_rawSmt cd)) allConstraints
+--   let memAndAddrNames = map extractMemAndAddrNames allConstraints
+--   let namesAndQueries = zip memAndAddrNames sexprs
+--   models <- traverse (uncurry solveSMT) namesAndQueries
+--   pure (fmap tShow models, names ++ names')
+--  where
+--   extractMemAndAddrNames :: ExecutionState -> [(Text, Text)]
+--   extractMemAndAddrNames (_, ConstraintsState{..}) =
+--     map (\MemoryVariable{..} -> (mv_varName, mv_addrName)) cs_memoryVariables
+
+mkSemanticsEnv :: ContractDefinition -> [LabeledInst] -> Set Label -> SemanticsEnv
+mkSemanticsEnv cd labeledInsts inlinable =
+  SemanticsEnv
+    { se_pres = Map.fromList [(pc, pre) | (pc, fun) <- funByCall, Just pre <- [getPre fun]]
+    , se_posts = Map.fromList [(pc, post) | (pc, fun) <- funByCall, Just post <- [getPost fun]]
+    , se_apTracking = Map.map getTracking instructionLocations
+    , se_inlinableFs = inlinable
+    , se_functionNames = pcToFun
+    }
  where
   contractInfo = mkContractInfo cd
   getFunPc = ci_getFunPc contractInfo
