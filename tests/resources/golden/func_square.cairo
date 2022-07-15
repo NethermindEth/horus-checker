@@ -5,7 +5,7 @@ func main():
     ret
 end
 
-# @post [ap - 1] == [fp - 3] * [fp - 3]
+# @post res == x * x
 func square(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] * [ap - 1]; ap++
