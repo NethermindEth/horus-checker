@@ -5,9 +5,9 @@ func main():
     ret
 end
 
-# @post [ap - 1] == 3 * [fp - 3]
+# @post res == 3 * [fp - 3]
 func succ(x) -> (res):
-    [ap] = [fp - 3]; ap++
+    [ap] = x; ap++
     [ap] = [ap - 1] * 3; ap++
     ret
 end
