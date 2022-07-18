@@ -16,9 +16,9 @@ where
 import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
 import Data.Coerce (coerce)
 import Data.Map (Map)
-import qualified Data.Map as Map (empty, fromAscList)
+import Data.Map qualified as Map (empty, fromAscList)
 import Data.Text (Text)
-import qualified Data.Text as Text (intercalate)
+import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens')
 
 import Horus.Program (Program)
@@ -32,7 +32,6 @@ data ContractDefinition = ContractDefinition
   , cd_checks :: Checks
   , cd_rawSmt :: Text
   }
-  deriving (Show)
 
 cdProgram :: Lens' ContractDefinition Program
 cdProgram lMod g = fmap (\x -> g{cd_program = x}) (lMod (cd_program g))

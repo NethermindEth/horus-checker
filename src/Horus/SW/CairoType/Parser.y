@@ -1,10 +1,10 @@
 {
 {-# OPTIONS_GHC -w #-}
-module Horus.SW.Parser where
+module Horus.SW.CairoType.Parser where
 
 import Data.Text (pack)
 
-import Horus.SW.Lexer
+import Horus.SW.CairoType.Lexer (Token (..))
 import Horus.SW.ScopedName
 import Horus.SW.CairoType
 
