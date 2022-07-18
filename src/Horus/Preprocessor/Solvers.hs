@@ -14,7 +14,7 @@ where
 import System.Timeout (timeout)
 
 import Data.Text as Text (Text, drop, init, pack, tail, unpack)
-import qualified SimpleSMT as SMT
+import SimpleSMT qualified as SMT
   ( Result (..)
   , SExpr (..)
   , check

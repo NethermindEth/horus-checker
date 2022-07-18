@@ -17,10 +17,10 @@ import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
 import Data.Functor.Identity (runIdentity)
-import qualified Data.List as List (find, tails, union)
+import Data.List qualified as List (find, tails, union)
 import Data.Map (Map)
 import Data.Text (Text)
-import qualified Data.Text as Text (intercalate)
+import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', at, ix, non, (%~), (<&>), (^.), (^?!))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (<%=))
@@ -31,7 +31,7 @@ import Horus.Program (ApTracking)
 import Horus.SMTUtil (prime)
 import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
-import qualified SimpleSMT.Typed as SMT
+import SimpleSMT.Typed qualified as SMT
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -94,8 +94,8 @@ interpret :: forall m a. Monad m => CairoSemanticsT m a -> ImplT m a
 interpret = iterTM exec
  where
   exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
-  exec (Assert a cont) = csAsserts %= (a :) >> cont
-  exec (Expect a cont) = csExpects %= (a :) >> cont
+  exec (Assert' a cont) = csAsserts %= (a :) >> cont
+  exec (Expect' a cont) = csExpects %= (a :) >> cont
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
     cont (SMT.const name)
