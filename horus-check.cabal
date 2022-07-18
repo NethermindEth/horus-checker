@@ -13,6 +13,7 @@ common deps
       FlexibleInstances
       GADTs
       GeneralizedNewtypeDeriving
+      ImportQualifiedPost
       MultiParamTypeClasses
       OverloadedStrings
       ScopedTypeVariables
@@ -27,7 +28,6 @@ common deps
       -Wno-missing-import-lists
       -Wno-missing-local-signatures
       -Wno-missing-safe-haskell-mode
-      -Wno-prepositive-qualified-module
       -Wno-unticked-promoted-constructors
       -Wno-unused-packages
     extra-libraries:
@@ -56,9 +56,10 @@ library
       Horus.Preprocessor.Solvers
       Horus.SMTUtil
       Horus.SW.CairoType
-      Horus.SW.IdentifierDefinition
-      Horus.SW.Lexer
-      Horus.SW.Parser
+      Horus.SW.CairoType.JSON
+      Horus.SW.CairoType.Lexer
+      Horus.SW.CairoType.Parser
+      Horus.SW.Identifier
       Horus.SW.ScopedName
       Horus.SW.Std
       SimpleSMT.Typed

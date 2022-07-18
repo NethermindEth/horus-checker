@@ -14,22 +14,20 @@ import Data.Map (Map)
 import Numeric (readHex)
 
 import Horus.Label (Label (..))
-import Horus.SW.IdentifierDefinition (IdentifierDefinition)
+import Horus.SW.Identifier (Identifier)
 import Horus.SW.ScopedName (ScopedName)
 
-type Identifiers = Map ScopedName IdentifierDefinition
+type Identifiers = Map ScopedName Identifier
 
 data Program = Program
   { p_attributes :: [String]
   , p_builtins :: [String]
   , p_code :: [Integer]
-  , p_hints :: Map String String
   , p_identifiers :: Identifiers
   , p_mainScope :: String
   , p_prime :: Integer
   , p_debugInfo :: DebugInfo
   }
-  deriving (Show)
 
 data DebugInfo = DebugInfo
   {di_instructionLocations :: Map Label ILInfo}
@@ -53,7 +51,6 @@ instance FromJSON Program where
       <$> v .: "attributes"
       <*> v .: "builtins"
       <*> (v .: "data" >>= traverse parseHexInteger)
-      <*> v .: "hints"
       <*> v .: "identifiers"
       <*> v .: "main_scope"
       <*> (v .: "prime" >>= parseHexInteger)
