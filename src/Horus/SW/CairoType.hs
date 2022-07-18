@@ -1,6 +1,6 @@
 module Horus.SW.CairoType (CairoType (..)) where
 
-import Horus.SW.ScopedName
+import Horus.SW.ScopedName (ScopedName)
 
 data CairoType
   = TypeFelt

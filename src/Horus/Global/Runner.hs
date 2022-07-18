@@ -10,8 +10,8 @@ import Data.Function ((&))
 import Data.Text (Text)
 import Text.Pretty.Simple (pPrint)
 
-import qualified Horus.CFGBuild.Runner as CFGBuild (interpret, runImplT)
-import qualified Horus.CairoSemantics.Runner as CairoSemantics (runT)
+import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
+import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 
 import Z3.Monad (evalZ3)

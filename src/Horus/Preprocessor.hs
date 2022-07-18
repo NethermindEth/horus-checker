@@ -14,20 +14,20 @@ import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Foldable (foldlM, traverse_)
 import Data.Function ((&))
 import Data.List (sort)
-import qualified Data.List as List (stripPrefix)
+import Data.List qualified as List (stripPrefix)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack, unpack)
 import Data.Traversable (for)
 import Lens.Micro (Lens')
 import Lens.Micro.Mtl (view)
-import qualified SimpleSMT as SMT
+import SimpleSMT qualified as SMT
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 import Z3.Base (Goal, Tactic)
-import qualified Z3.Base (Model)
+import Z3.Base qualified (Model)
 import Z3.Monad (MonadZ3)
-import qualified Z3.Monad as Z3
+import Z3.Monad qualified as Z3
 
 import Horus.Preprocessor.Solvers (Solver (..))
 import Horus.Util (toSignedFelt)
