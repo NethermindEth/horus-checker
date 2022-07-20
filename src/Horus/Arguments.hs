@@ -12,7 +12,7 @@ import Data.Text (Text, unpack)
 import Options.Applicative
 
 import Horus.Global (Config (..))
-import Horus.Preprocessor.Solvers (Solver, cvc5, mathsat, setTimeout, z3)
+import Horus.Preprocessor.Solvers (Solver, SolverSettings (..), cvc5, mathsat, z3)
 
 data Arguments = Arguments
   { arg_fileName :: FilePath
@@ -47,20 +47,20 @@ configParser =
           <> short 'v'
           <> help "If the flag is set all the intermediate steps are printed out."
       )
-    <*> switch
-      ( long "print-models"
+    <*> option
+      solverReader
+      ( long "solver"
+          <> short 's'
+          <> metavar "SOLVER"
+          <> value z3
           <> showDefault
-          <> help "Print models for SAT results."
+          <> help "Solver to check the resulting smt queries."
       )
-    <*> ( setTimeout
-            <$> option
-              solverReader
-              ( long "solver"
-                  <> short 's'
-                  <> metavar "SOLVER"
-                  <> value z3
+    <*> ( SolverSettings
+            <$> switch
+              ( long "print-models"
                   <> showDefault
-                  <> help "Solver to check the resulting smt queries."
+                  <> help "Print models for SAT results."
               )
             <*> option
               auto
