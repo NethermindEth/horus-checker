@@ -1,16 +1,15 @@
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE GADTs                #-}
-{-# LANGUAGE TypeOperators        #-}
-{-# LANGUAGE TypeFamilies         #-}
-{-# LANGUAGE DataKinds            #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE RankNTypes           #-}
-{-# LANGUAGE ConstraintKinds      #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE TypeOperators          #-}
+{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE DataKinds              #-}
+{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE PolyKinds              #-}
+{-# LANGUAGE StandaloneDeriving     #-}
+{-# LANGUAGE ImportQualifiedPost    #-}
 
 module SimpleSMT.Expr ( Expr (..)
                       , function
@@ -32,8 +31,9 @@ module SimpleSMT.Expr ( Expr (..)
                       , (.==)
                       , (./=)
                       , pprExpr
+                      , toUnsafe
                       , parseAssertion
-                      , parseArithmetic
+                      , parseArith
                       ) where
 
 import Prelude hiding ( not
@@ -45,18 +45,20 @@ import Prelude hiding ( not
                       , div
                       , const
                       )
-import qualified Prelude (Bool (..))
+import Prelude qualified as Prelude (Bool (..))
 import Control.Monad.Reader (Reader, local, runReader)
 import Data.Char (isDigit)
-import Data.Kind (Type)
 import Data.Map (Map)
-import qualified Data.Map as Map (empty, fromList)
+import Data.Map qualified as Map (empty, fromList)
+import Data.Singletons (Sing, SingI (..))
 import Data.Text (Text, unpack, pack)
 import Data.Type.Equality
+import Data.Vinyl.Core (Rec (..), (<+>))
+import Data.Vinyl.TypeLevel
 import Lens.Micro (at, non, (&))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (view)
-import qualified SimpleSMT as SMT
+import SimpleSMT qualified as SMT
 
 -- main expression type
 
@@ -64,48 +66,38 @@ data Expr a where
   Int'  :: Integer -> Expr Integer
   True  :: Expr Bool
   False :: Expr Bool
-  Fun  :: Text -> Expr a
-  (:*) :: Expr (a -> b) -> Expr a -> Expr b
+  Fun   :: Text -> Expr a
+  (:*)  :: Expr (a -> b) -> Expr a -> Expr b
+
+infixl 4 :*
 
 -- types and functions for n-ary function
 
-infixr 4 :>
-
-data NP (f :: k -> Type) (xs :: [k]) where
-  Nil  :: NP f '[]
-  (:>) :: f t -> NP f ts -> NP f (t ': ts)
-
-type family (++) (xs :: [k])(ys :: [k]) where
-  '[] ++ ys = ys
-  (x ': xs) ++ ys = x ': (xs ++ ys)
-
-hApp :: NP f xs -> NP f ys -> NP f (xs ++ ys)
-hApp Nil ys = ys
-hApp (x :> xs) ys = x :> (hApp xs ys)
+-- viny library does not provide a reverse function.
 
 type family Reverse (xs :: [k]) where
   Reverse '[] = '[]
   Reverse (x ': xs) = Reverse xs ++ (x ': '[])
 
-hReverse :: NP f xs -> NP f (Reverse xs)
-hReverse Nil = Nil
-hReverse (x :> xs) = hReverse xs `hApp` (x :> Nil)
+hReverse :: Rec f xs -> Rec f (Reverse xs)
+hReverse RNil = RNil
+hReverse (x :& xs) = hReverse xs <+> (x :& RNil)
 
-fold :: (forall a . Expr a) -> NP Expr xs -> Expr b
-fold v Nil = v
-fold v (x :> xs) = fold (v :* x) xs
+fold :: (forall a . Expr a) -> Rec Expr xs -> Expr b
+fold v RNil = v
+fold v (x :& xs) = fold (v :* x) xs
 
 class Function a where
-  build :: Text -> NP Expr t -> a
+  build :: Text -> Rec Expr t -> a
 
 instance Function (Expr a) where
   build s args = fold (Fun s) (hReverse args)
 
 instance Function res => Function (Expr arg -> res) where
-  build s args a = build s (a :> args)
+  build s args a = build s (a :& args)
 
 function :: Function t => Text -> t
-function s = build s Nil
+function s = build s RNil
 
 const :: Text -> Expr t
 const = function
@@ -116,11 +108,13 @@ transform :: Applicative f => (forall b. Expr b -> f (Expr b)) -> Expr a -> f (E
 transform f (a :* b) = (:*) <$> (transform f a) <*> (transform f b)
 transform f v        = f v
 
+-- smart constructors for basic operations
+
 instance Num (Expr Integer) where
   fromInteger = Int'
-  a + b       = Fun "add" :* a :* b
-  a - b       = Fun "sub" :* a :* b
-  a * b       = Fun "mul" :* a :* b
+  a + b       = Fun "+" :* a :* b
+  a - b       = Fun "-" :* a :* b
+  a * b       = Fun "*" :* a :* b
   abs a       = Fun "abs" :* a
   signum a    = Fun "signum" :* a
 
@@ -143,7 +137,7 @@ foldL acc [] = acc
 foldL acc (x : xs) = foldL (acc :* x) xs
 
 and :: [Expr Bool] -> Expr Bool
-and = foldL (Fun "s")
+and = foldL (Fun "and")
 
 infixr 2 .||
 (.||) :: Expr Bool -> Expr Bool -> Expr Bool
@@ -158,7 +152,7 @@ distinct :: [Expr a] -> Expr Bool
 distinct = foldL (Fun "distinct")
 
 addMany :: [Expr Integer] -> Expr Integer
-addMany = foldL (Fun "add")
+addMany = foldL (Fun "+")
 
 infix 1 .->
 (.->) :: Expr Bool -> Expr Bool -> Expr Bool
@@ -197,7 +191,17 @@ toUnsafe True     = SMT.bool Prelude.True
 toUnsafe False    = SMT.bool Prelude.False
 toUnsafe (Int' v) = SMT.int v
 toUnsafe (Fun s)  = SMT.Atom (unpack s)
-toUnsafe (a :* b) = SMT.List [toUnsafe a, toUnsafe b]
+toUnsafe e@(_ :* _) = SMT.app h args
+  where
+    (h,xs) = splitApp e
+    args = reverse xs
+
+-- deriving instance Show (Expr a)
+
+splitApp :: Expr a -> (SMT.SExpr, [SMT.SExpr])
+splitApp (a :* b) = let (h,args) = splitApp a
+                    in (h, toUnsafe b : args)
+splitApp v        = (toUnsafe v, [])
 
 instance Show a => Show (Expr a) where
   show = unpack . pprExpr
@@ -213,22 +217,16 @@ parseAssertion s
       Just (e , "") ->
         do
           e' <- elab (inlineLets e)
-          typeCheck e' (\ ty e1 ->
-                case testEquality ty SBool of
-                  Just Refl -> Just e1
-                  _ -> Nothing)
+          typeCheck e' SBool
       _             -> Nothing
 
-parseArithmetic :: Text -> Maybe (Expr Integer)
-parseArithmetic s
+parseArith :: Text -> Maybe (Expr Integer)
+parseArith s
   = case SMT.readSExpr (unpack s) of
       Just (e, "") ->
         do
            e' <- elab (inlineLets e)
-           typeCheck e' (\ ty e1 ->
-                 case testEquality ty SInt of
-                   Just Refl -> Just e1
-                   _         -> Nothing)
+           typeCheck e' SInt
       _ -> Nothing
 
 -- let inlining
@@ -243,7 +241,8 @@ inlineLets = flip runReader Map.empty . go
     local (<> extension) (go body)
   go (SMT.List l) = SMT.List <$> traverse go l
 
-  bindingsToMap :: [SMT.SExpr] -> Reader (Map String SMT.SExpr) (Map String SMT.SExpr)
+  bindingsToMap :: [SMT.SExpr] -> Reader (Map String SMT.SExpr)
+                                         (Map String SMT.SExpr)
   bindingsToMap bs =
     [(s, v) | SMT.List [SMT.Atom s, v] <- bs]
       & traverse (\(s, v) -> (s,) <$> go v)
@@ -255,8 +254,8 @@ inlineLets = flip runReader Map.empty . go
 data Ty = TInt | TBool | Ty :-> Ty deriving (Eq, Show)
 
 type family Sem (t :: Ty) = r | r -> t where
-   Sem TInt = Integer
-   Sem TBool = Bool
+   Sem TInt          = Integer
+   Sem TBool         = Bool
    Sem (arg :-> res) = Sem arg -> Sem res
 
 infixr 0 :->
@@ -266,27 +265,11 @@ data STy (t :: Ty) where
   SBool :: STy TBool
   (::->) :: STy arg -> STy res -> STy (arg :-> res)
 
+deriving instance Show (STy t)
+
+type instance Sing = STy
+
 infixr 0 ::->
-
-class SingKind k where
-  type Sing :: k -> Type
-  fromSing :: forall (a :: k) . Sing a -> k
-  toSing :: k -> (forall (a :: k). Sing a -> r) -> r
-
-instance SingKind Ty where
-  type Sing = STy
-  fromSing SInt = TInt
-  fromSing SBool = TBool
-  fromSing (arg ::-> res) = fromSing arg :-> fromSing res
-
-  toSing TInt cont = cont SInt
-  toSing TBool cont = cont SBool
-  toSing (arg :-> res) cont = toSing arg $ \ arg' ->
-                                toSing res $ \ res' ->
-                                    cont (arg' ::-> res')
-
-class SingI (a :: k) where
-  sing :: Sing a
 
 instance SingI TInt where
   sing = SInt
@@ -307,33 +290,42 @@ instance TestEquality STy where
         return Refl
   testEquality _ _ = Nothing
 
-typeCheck :: SingI b => UExpr ->
-                        (forall t. STy t ->
+
+typeCheck :: SingI t => UExpr -> STy t -> Maybe (Expr (Sem t))
+typeCheck e sty
+  = typeCheck' e (\ ty e1 ->
+        case testEquality ty sty of
+          Just Refl -> Just e1
+          _         -> Nothing)
+
+
+typeCheck' :: SingI b => UExpr                            ->
+                        (forall t. STy t        ->
                                    Expr (Sem t) ->
                                    Maybe (Expr (Sem b))) ->
                         Maybe (Expr (Sem b))
-typeCheck (UInt n) k = k sing (Int' n)
-typeCheck UTrue k = k sing True
-typeCheck UFalse k = k sing False
-typeCheck (UFun s) k
+typeCheck' (UInt n) k = k sing (Int' n)
+typeCheck' UTrue k = k sing True
+typeCheck' UFalse k = k sing False
+typeCheck' (UFun s) k
   | s `elem` binArithNames = k sing ((Fun s) :: Expr BinArithTy)
   | s `elem` compareNames = k sing ((Fun s) :: Expr CompareTy)
   | s == "not" = k sing ((Fun s) :: Expr NotTy)
   | s == "abs" = k sing ((Fun s) :: Expr AbsTy)
   | s == "memory" = k sing ((Fun s) :: Expr MemTy)
   | otherwise = k sing ((Fun s) :: Expr Felt)
-typeCheck (e1 :@: e2) k
-  = typeCheck e1 $ \ fun_ty f ->
-    typeCheck e2 $ \ arg_ty arg ->
+typeCheck' (e1 :@: e2) k
+  = typeCheck' e1 $ \ fun_ty f ->
+    typeCheck' e2 $ \ arg_ty arg ->
     case fun_ty of
       (arg_ty' ::-> res_ty') ->
         case arg_ty `testEquality` arg_ty' of
           Just Refl -> k res_ty' (f :* arg)
-          _         -> Nothing
-      _ -> Nothing
+          _         -> error "laalal" -- Nothing
+      t -> error $ show e1 ++ " - " ++ show e2 ++ " - " ++ show t
 
 binArithNames :: [Text]
-binArithNames = ["add", "sub", "mul", "mod", "signum"]
+binArithNames = ["*", "-", "*", "mod", "signum"]
 
 compareNames :: [Text]
 compareNames = ["eq", "lt", "gt", "leq", "geq", "distinct"]
@@ -354,15 +346,18 @@ data UExpr where
   UFun :: Text -> UExpr
   (:@:) :: UExpr -> UExpr -> UExpr
 
+infixl 4 :@:
+
+deriving instance Show UExpr
+
 elab :: SMT.SExpr -> Maybe UExpr
 elab (SMT.Atom s)
   | all isDigit s = pure $ UInt (read s)
   | s == "true" = pure $ UTrue
   | s == "false" = pure $ UFalse
   | otherwise = pure $ UFun (pack s)
-elab (SMT.List xs) = elabList xs
-
-elabList :: [SMT.SExpr] -> Maybe UExpr
-elabList [] = Nothing
-elabList [x] = elab x
-elabList (x : xs) = (:@:) <$> elab x <*> elabList xs
+elab (SMT.List []) = Nothing
+elab (SMT.List (x : xs)) = foldl step (elab x) xs
+  where
+    step Nothing _ = Nothing
+    step (Just e) e' = (e :@:) <$> (elab e')

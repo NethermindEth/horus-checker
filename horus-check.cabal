@@ -60,8 +60,8 @@ library
       Horus.SW.Lexer
       Horus.SW.Parser
       Horus.SW.ScopedName
-      SimpleSMT.Typed
       SimpleSMT.Expr
+      SimpleSMT.Typed
     build-depends:
       aeson,
       array,
@@ -76,8 +76,10 @@ library
       optparse-applicative,
       pretty-simple,
       simple-smt,
+      singletons,
       text,
       transformers,
+      vinyl,
       z3
 
 executable horus-check
