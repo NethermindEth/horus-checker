@@ -33,7 +33,7 @@ module SimpleSMT.Expr ( Expr (..)
                       , pprExpr
                       , toUnsafe
                       , parseAssertion
-                      , parseArith
+                      , parseArithmetic
                       ) where
 
 import Prelude hiding ( not
