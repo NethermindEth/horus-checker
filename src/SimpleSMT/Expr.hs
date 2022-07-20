@@ -310,6 +310,7 @@ typeCheck' UFalse k = k sing False
 typeCheck' (UFun s) k
   | s `elem` binArithNames = k sing ((Fun s) :: Expr BinArithTy)
   | s `elem` compareNames = k sing ((Fun s) :: Expr CompareTy)
+  | s `elem` binLogicNames = k sing ((Fun s) :: Expr BinLogicTy)
   | s == "not" = k sing ((Fun s) :: Expr NotTy)
   | s == "abs" = k sing ((Fun s) :: Expr AbsTy)
   | s == "memory" = k sing ((Fun s) :: Expr MemTy)
@@ -321,8 +322,8 @@ typeCheck' (e1 :@: e2) k
       (arg_ty' ::-> res_ty') ->
         case arg_ty `testEquality` arg_ty' of
           Just Refl -> k res_ty' (f :* arg)
-          _         -> error "laalal" -- Nothing
-      t -> error $ show e1 ++ " - " ++ show e2 ++ " - " ++ show t
+          _         -> Nothing
+      _ -> Nothing
 
 binArithNames :: [Text]
 binArithNames = ["*", "-", "*", "mod", "signum"]
@@ -330,7 +331,11 @@ binArithNames = ["*", "-", "*", "mod", "signum"]
 compareNames :: [Text]
 compareNames = ["eq", "lt", "gt", "leq", "geq", "distinct"]
 
+binLogicNames :: [Text]
+binLogicNames = ["and", "or", "implies"]
+
 type BinArithTy = Integer -> Integer -> Integer
+type BinLogicTy = Bool -> Bool -> Bool
 type CompareTy  = Integer -> Integer -> Bool
 type NotTy      = Bool -> Bool
 type AbsTy      = Integer -> Integer
