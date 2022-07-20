@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Horus.ContractDefinition
   ( ContractDefinition (..)
   , Checks (..)

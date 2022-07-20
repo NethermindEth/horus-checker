@@ -1,76 +1,95 @@
 module Horus.Preprocessor.Solvers
   ( Solver
+  , SolverSettings (..)
+  , defaultSolverSettings
   , runSolver
   , cvc5
-  , yices
   , mathsat
   , z3
-  , sideSolver
-  , sideSolver'
-  , setTimeout
   )
 where
 
-import System.Timeout (timeout)
-
-import Data.Text as Text (Text, drop, init, pack, tail, unpack)
+import Control.Exception.Safe (bracket)
+import Data.Maybe (fromMaybe)
+import Data.Text (Text, unpack)
+import Data.Text as Text (drop, init, pack, tail)
 import SimpleSMT qualified as SMT
-  ( Result (..)
-  , SExpr (..)
-  , check
-  , command
-  , loadString
-  , ppSExpr
-  )
-
-import Horus.SMTUtil (withSolver)
+import System.Timeout (timeout)
 
 data Solver = Solver
   { s_name :: Text
-  , runSolver :: Text -> IO (SMT.Result, Maybe Text)
+  , s_adjustModel :: Text -> Text
+  , s_auxFlags :: [Text]
   }
 
 instance Show Solver where
   show solver = unpack (s_name solver)
 
-cvc5 :: Solver
-cvc5 = sideSolver (Text.tail . Text.init) "cvc5" ["--produce-models"]
+data SolverSettings = SolverSettings
+  { ss_shouldProduceModels :: Bool
+  , ss_timeoutMillis :: Int -- negative for no timeout
+  }
 
-yices :: Solver
-yices = sideSolver' "yices" []
+defaultSolverSettings :: SolverSettings
+defaultSolverSettings =
+  SolverSettings
+    { ss_shouldProduceModels = False
+    , ss_timeoutMillis = -1
+    }
+
+cvc5 :: Solver
+cvc5 =
+  Solver
+    { s_name = "cvc5"
+    , s_adjustModel = Text.tail . Text.init
+    , s_auxFlags = []
+    }
 
 mathsat :: Solver
 mathsat =
-  sideSolver
-    (Text.drop 6 . Text.init) -- extracting ... from (model ...)
-    "mathsat"
-    ["-model_generation=True"]
+  Solver
+    { s_name = "mathsat"
+    , s_adjustModel = Text.drop 6 . Text.init -- extracting ... from (model ...)
+    , s_auxFlags = []
+    }
 
 z3 :: Solver
-z3 = sideSolver (Text.tail . Text.init) "z3" ["-in", "-model"]
+z3 =
+  Solver
+    { s_name = "z3"
+    , s_adjustModel = Text.tail . Text.init
+    , s_auxFlags = ["-in"]
+    }
 
-sideSolver :: (Text -> Text) -> Text -> [Text] -> Solver
-sideSolver adjustifier solverName args = solving $ \sexpr solver -> do
-  SMT.loadString solver (unpack sexpr)
+toSMTBool :: Bool -> String
+toSMTBool True = "true"
+toSMTBool False = "false"
+
+runSolver :: Solver -> SolverSettings -> Text -> IO (SMT.Result, Maybe Text)
+runSolver Solver{..} SolverSettings{..} query = solving $ \solver -> do
+  SMT.setOption solver ":produce-models" (toSMTBool ss_shouldProduceModels)
+  SMT.loadString solver (unpack query)
   res <- SMT.check solver
   mbModelOrReason <- case res of
-    SMT.Sat -> do
-      model <- SMT.command solver (SMT.List [SMT.Atom "get-model"])
-      return $ Just $ adjustifier $ pack (SMT.ppSExpr model "")
+    SMT.Sat
+      | ss_shouldProduceModels -> do
+          model <- SMT.command solver (SMT.List [SMT.Atom "get-model"])
+          pure (Just (s_adjustModel (pack (SMT.ppSExpr model ""))))
+      | otherwise -> pure Nothing
     SMT.Unknown -> do
       reason <- SMT.command solver (SMT.List [SMT.Atom "get-info", SMT.Atom ":reason-unknown"])
-      return $ Just $ pack (SMT.ppSExpr reason "")
-    SMT.Unsat -> return Nothing
-  return (res, mbModelOrReason)
+      pure (Just (pack (SMT.ppSExpr reason "")))
+    SMT.Unsat -> pure Nothing
+  pure (res, mbModelOrReason)
  where
-  solving f = Solver solverName (withSolver solverName args . f)
+  solving f = withTimeout (withSolver s_name s_auxFlags f)
+  withTimeout f = do
+    mbResult <- timeout (ss_timeoutMillis * 1000) f
+    pure (fromMaybe timeoutResult mbResult)
+  timeoutResult = (SMT.Unknown, Just (s_name <> ": Time is out."))
 
-sideSolver' :: Text -> [Text] -> Solver
-sideSolver' = sideSolver id
-
-setTimeout :: Solver -> Int -> Solver
-setTimeout solver tms = Solver (s_name solver) $ \sexpr -> do
-  mbResult <- timeout (tms * 1000) $ runSolver solver sexpr
-  case mbResult of
-    Nothing -> pure (SMT.Unknown, Just $ s_name solver <> ": Time is out.")
-    Just result -> pure result
+withSolver :: Text -> [Text] -> (SMT.Solver -> IO a) -> IO a
+withSolver solverName args =
+  bracket
+    (SMT.newSolver (unpack solverName) (map unpack args) Nothing)
+    SMT.stop
