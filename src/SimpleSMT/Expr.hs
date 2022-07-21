@@ -1,57 +1,48 @@
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE GADTs                  #-}
-{-# LANGUAGE TypeOperators          #-}
-{-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE DataKinds              #-}
-{-# LANGUAGE UndecidableInstances   #-}
-{-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE ConstraintKinds        #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE PolyKinds #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE PolyKinds              #-}
-{-# LANGUAGE StandaloneDeriving     #-}
-{-# LANGUAGE ImportQualifiedPost    #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 
-module SimpleSMT.Expr ( Expr (..)
-                      , function
-                      , const
-                      , not
-                      , transform
-                      , mod
-                      , (.&&)
-                      , (.||)
-                      , (.->)
-                      , and
-                      , or
-                      , distinct
-                      , addMany
-                      , (.<)
-                      , (.<=)
-                      , (.>)
-                      , (.>=)
-                      , (.==)
-                      , (./=)
-                      , pprExpr
-                      , toUnsafe
-                      , parseAssertion
-                      , parseArithmetic
-                      ) where
+module SimpleSMT.Expr
+  ( Expr (..),
+    function,
+    const,
+    not,
+    transform,
+    mod,
+    (.&&),
+    (.||),
+    (.->),
+    and,
+    or,
+    distinct,
+    addMany,
+    (.<),
+    (.<=),
+    (.>),
+    (.>=),
+    (.==),
+    (./=),
+    pprExpr,
+    toUnsafe,
+    parseAssertion,
+    parseArithmetic,
+  )
+where
 
-import Prelude hiding ( not
-                      , and
-                      , or
-                      , True
-                      , False
-                      , mod
-                      , div
-                      , const
-                      )
-import Prelude qualified as Prelude (Bool (..))
 import Control.Monad.Reader (Reader, local, runReader)
 import Data.Char (isDigit)
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromList)
 import Data.Singletons (Sing, SingI (..))
-import Data.Text (Text, unpack, pack)
+import Data.Text (Text, pack, unpack)
 import Data.Type.Equality
 import Data.Vinyl.Core (Rec (..), (<+>))
 import Data.Vinyl.TypeLevel
@@ -59,15 +50,26 @@ import Lens.Micro (at, non, (&))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (view)
 import SimpleSMT qualified as SMT
+import Prelude hiding
+  ( False,
+    True,
+    and,
+    const,
+    div,
+    mod,
+    not,
+    or,
+  )
+import Prelude qualified as Prelude (Bool (..))
 
 -- main expression type
 
 data Expr a where
-  Int'  :: Integer -> Expr Integer
-  True  :: Expr Bool
+  Int' :: Integer -> Expr Integer
+  True :: Expr Bool
   False :: Expr Bool
-  Fun   :: Text -> Expr a
-  (:*)  :: Expr (a -> b) -> Expr a -> Expr b
+  Fun :: Text -> Expr a
+  (:*) :: Expr (a -> b) -> Expr a -> Expr b
 
 infixl 4 :*
 
@@ -83,7 +85,7 @@ hReverse :: Rec f xs -> Rec f (Reverse xs)
 hReverse RNil = RNil
 hReverse (x :& xs) = hReverse xs <+> (x :& RNil)
 
-fold :: (forall a . Expr a) -> Rec Expr xs -> Expr b
+fold :: (forall a. Expr a) -> Rec Expr xs -> Expr b
 fold v RNil = v
 fold v (x :& xs) = fold (v :* x) xs
 
@@ -106,31 +108,31 @@ const = function
 
 transform :: Applicative f => (forall b. Expr b -> f (Expr b)) -> Expr a -> f (Expr a)
 transform f (a :* b) = (:*) <$> (transform f a) <*> (transform f b)
-transform f v        = f v
+transform f v = f v
 
 -- smart constructors for basic operations
 
 instance Num (Expr Integer) where
   fromInteger = Int'
-  a + b       = Fun "+" :* a :* b
-  a - b       = Fun "-" :* a :* b
-  a * b       = Fun "*" :* a :* b
-  abs a       = Fun "abs" :* a
-  signum a    = Fun "signum" :* a
+  a + b = Fun "+" :* a :* b
+  a - b = Fun "-" :* a :* b
+  a * b = Fun "*" :* a :* b
+  abs a = Fun "abs" :* a
+  signum a = Fun "signum" :* a
 
 mod :: Expr Integer -> Expr Integer -> Expr Integer
 mod a b = function "mod" a b
 
 not :: Expr Bool -> Expr Bool
-not True  = False
+not True = False
 not False = True
-not a     = function "not" a
+not a = function "not" a
 
 infixr 3 .&&
 (.&&) :: Expr Bool -> Expr Bool -> Expr Bool
-True  .&& b = b
+True .&& b = b
 False .&& _ = False
-a     .&& b = function "and" a b
+a .&& b = function "and" a b
 
 foldL :: (forall a. Expr a) -> [Expr b] -> Expr c
 foldL acc [] = acc
@@ -142,8 +144,8 @@ and = foldL (Fun "and")
 infixr 2 .||
 (.||) :: Expr Bool -> Expr Bool -> Expr Bool
 False .|| b = b
-True  .|| _ = True
-a     .|| b = function "or" a b
+True .|| _ = True
+a .|| b = function "or" a b
 
 or :: [Expr Bool] -> Expr Bool
 or = foldL (Fun "or")
@@ -157,8 +159,8 @@ addMany = foldL (Fun "+")
 infix 1 .->
 (.->) :: Expr Bool -> Expr Bool -> Expr Bool
 False .-> _ = True
-True  .-> b = b
-a     .-> b = function "implies" a b
+True .-> b = b
+a .-> b = function "implies" a b
 
 infix 4 .<
 (.<) :: Expr Integer -> Expr Integer -> Expr Bool
@@ -182,26 +184,27 @@ a .== b = function "eq" a b
 
 infix 4 ./=
 (./=) :: Expr Integer -> Expr Integer -> Expr Bool
-a ./= b = distinct [a,b]
+a ./= b = distinct [a, b]
 
 -- converting to unsafe syntax
 
 toUnsafe :: Expr a -> SMT.SExpr
-toUnsafe True     = SMT.bool Prelude.True
-toUnsafe False    = SMT.bool Prelude.False
+toUnsafe True = SMT.bool Prelude.True
+toUnsafe False = SMT.bool Prelude.False
 toUnsafe (Int' v) = SMT.int v
-toUnsafe (Fun s)  = SMT.Atom (unpack s)
+toUnsafe (Fun s) = SMT.Atom (unpack s)
 toUnsafe e@(_ :* _) = SMT.app h args
-  where
-    (h,xs) = splitApp e
-    args = reverse xs
+ where
+  (h, xs) = splitApp e
+  args = reverse xs
 
 -- deriving instance Show (Expr a)
 
 splitApp :: Expr a -> (SMT.SExpr, [SMT.SExpr])
-splitApp (a :* b) = let (h,args) = splitApp a
-                    in (h, toUnsafe b : args)
-splitApp v        = (toUnsafe v, [])
+splitApp (a :* b) =
+  let (h, args) = splitApp a
+   in (h, toUnsafe b : args)
+splitApp v = (toUnsafe v, [])
 
 instance Show a => Show (Expr a) where
   show = unpack . pprExpr
@@ -212,22 +215,22 @@ pprExpr = pack . flip SMT.showsSExpr "" . toUnsafe
 -- parsing api
 
 parseAssertion :: Text -> Maybe (Expr Bool)
-parseAssertion s
-  = case SMT.readSExpr (unpack s) of
-      Just (e , "") ->
-        do
-          e' <- elab (inlineLets e)
-          typeCheck e' SBool
-      _             -> Nothing
+parseAssertion s =
+  case SMT.readSExpr (unpack s) of
+    Just (e, "") ->
+      do
+        e' <- elab (inlineLets e)
+        typeCheck e' SBool
+    _ -> Nothing
 
 parseArith :: Text -> Maybe (Expr Integer)
-parseArith s
-  = case SMT.readSExpr (unpack s) of
-      Just (e, "") ->
-        do
-           e' <- elab (inlineLets e)
-           typeCheck e' SInt
-      _ -> Nothing
+parseArith s =
+  case SMT.readSExpr (unpack s) of
+    Just (e, "") ->
+      do
+        e' <- elab (inlineLets e)
+        typeCheck e' SInt
+    _ -> Nothing
 
 -- let inlining
 
@@ -241,22 +244,24 @@ inlineLets = flip runReader Map.empty . go
     local (<> extension) (go body)
   go (SMT.List l) = SMT.List <$> traverse go l
 
-  bindingsToMap :: [SMT.SExpr] -> Reader (Map String SMT.SExpr)
-                                         (Map String SMT.SExpr)
+  bindingsToMap ::
+    [SMT.SExpr] ->
+    Reader
+      (Map String SMT.SExpr)
+      (Map String SMT.SExpr)
   bindingsToMap bs =
     [(s, v) | SMT.List [SMT.Atom s, v] <- bs]
-      & traverse (\(s, v) -> (s,) <$> go v)
+    & traverse (\(s, v) -> (s,) <$> go v)
       & fmap Map.fromList
-
 
 -- type checker definition
 
 data Ty = TInt | TBool | Ty :-> Ty deriving (Eq, Show)
 
 type family Sem (t :: Ty) = r | r -> t where
-   Sem TInt          = Integer
-   Sem TBool         = Bool
-   Sem (arg :-> res) = Sem arg -> Sem res
+  Sem TInt = Integer
+  Sem TBool = Bool
+  Sem (arg :-> res) = Sem arg -> Sem res
 
 infixr 0 :->
 
@@ -283,27 +288,32 @@ instance (SingI arg, SingI res) => SingI (arg :-> res) where
 instance TestEquality STy where
   testEquality SInt SInt = Just Refl
   testEquality SBool SBool = Just Refl
-  testEquality (a1 ::-> r1) (a2 ::-> r2)
-    = do
-        Refl <- testEquality a1 a2
-        Refl <- testEquality r1 r2
-        return Refl
+  testEquality (a1 ::-> r1) (a2 ::-> r2) =
+    do
+      Refl <- testEquality a1 a2
+      Refl <- testEquality r1 r2
+      return Refl
   testEquality _ _ = Nothing
 
-
 typeCheck :: SingI t => UExpr -> STy t -> Maybe (Expr (Sem t))
-typeCheck e sty
-  = typeCheck' e (\ ty e1 ->
+typeCheck e sty =
+  typeCheck'
+    e
+    ( \ty e1 ->
         case testEquality ty sty of
           Just Refl -> Just e1
-          _         -> Nothing)
+          _ -> Nothing
+    )
 
-
-typeCheck' :: SingI b => UExpr                            ->
-                        (forall t. STy t        ->
-                                   Expr (Sem t) ->
-                                   Maybe (Expr (Sem b))) ->
-                        Maybe (Expr (Sem b))
+typeCheck' ::
+  SingI b =>
+  UExpr ->
+  ( forall t.
+    STy t ->
+    Expr (Sem t) ->
+    Maybe (Expr (Sem b))
+  ) ->
+  Maybe (Expr (Sem b))
 typeCheck' (UInt n) k = k sing (Int' n)
 typeCheck' UTrue k = k sing True
 typeCheck' UFalse k = k sing False
@@ -315,18 +325,18 @@ typeCheck' (UFun s) k
   | s == "abs" = k sing ((Fun s) :: Expr AbsTy)
   | s == "memory" = k sing ((Fun s) :: Expr MemTy)
   | otherwise = k sing ((Fun s) :: Expr Felt)
-typeCheck' (e1 :@: e2) k
-  = typeCheck' e1 $ \ fun_ty f ->
-    typeCheck' e2 $ \ arg_ty arg ->
-    case fun_ty of
-      (arg_ty' ::-> res_ty') ->
-        case arg_ty `testEquality` arg_ty' of
-          Just Refl -> k res_ty' (f :* arg)
-          _         -> Nothing
-      _ -> Nothing
+typeCheck' (e1 :@: e2) k =
+  typeCheck' e1 $ \fun_ty f ->
+    typeCheck' e2 $ \arg_ty arg ->
+      case fun_ty of
+        (arg_ty' ::-> res_ty') ->
+          case arg_ty `testEquality` arg_ty' of
+            Just Refl -> k res_ty' (f :* arg)
+            _ -> Nothing
+        _ -> Nothing
 
 binArithNames :: [Text]
-binArithNames = ["*", "-", "*", "mod", "signum"]
+binArithNames = ["+", "-", "*", "mod", "signum"]
 
 compareNames :: [Text]
 compareNames = ["eq", "lt", "gt", "leq", "geq", "distinct"]
@@ -336,11 +346,11 @@ binLogicNames = ["and", "or", "implies"]
 
 type BinArithTy = Integer -> Integer -> Integer
 type BinLogicTy = Bool -> Bool -> Bool
-type CompareTy  = Integer -> Integer -> Bool
-type NotTy      = Bool -> Bool
-type AbsTy      = Integer -> Integer
-type MemTy      = Integer -> Integer
-type Felt       = Integer
+type CompareTy = Integer -> Integer -> Bool
+type NotTy = Bool -> Bool
+type AbsTy = Integer -> Integer
+type MemTy = Integer -> Integer
+type Felt = Integer
 
 -- intermediate expression type to ease type checking.
 
@@ -363,6 +373,6 @@ elab (SMT.Atom s)
   | otherwise = pure $ UFun (pack s)
 elab (SMT.List []) = Nothing
 elab (SMT.List (x : xs)) = foldl step (elab x) xs
-  where
-    step Nothing _ = Nothing
-    step (Just e) e' = (e :@:) <$> (elab e')
+ where
+  step Nothing _ = Nothing
+  step (Just e) e' = (e :@:) <$> (elab e')
