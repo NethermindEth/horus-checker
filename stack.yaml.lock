@@ -5,12 +5,16 @@
 
 packages:
 - completed:
-    hackage: simple-smt-0.9.7@sha256:a93eba88f8177e13b39bf664b53ad65ca8eea976f00cae443c081b3ea3c26fb3,736
+    name: simple-smt
+    version: 0.9.7
+    git: https://github.com/murcake/simple-smt.git
     pantry-tree:
-      size: 253
-      sha256: ddbb8343712ef5d96480180f4df7113db80ecb41336ec3e02876ccdb6ff6b547
+      size: 357
+      sha256: 29342bcf3b56e2710741d2c881f8ebe1ba0134799a05f1ec479c7561cebc936d
+    commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
   original:
-    hackage: simple-smt-0.9.7@sha256:a93eba88f8177e13b39bf664b53ad65ca8eea976f00cae443c081b3ea3c26fb3,736
+    git: https://github.com/murcake/simple-smt.git
+    commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
 - completed:
     name: z3
     version: '408.2'

@@ -41,7 +41,8 @@ packages:
 #   commit: e7b331f14bcffb8367cd58fbfc8b40ec7642100a
 #
 extra-deps:
-  - simple-smt-0.9.7@sha256:a93eba88f8177e13b39bf664b53ad65ca8eea976f00cae443c081b3ea3c26fb3,736
+  - git: https://github.com/murcake/simple-smt.git
+    commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
   - git: https://github.com/IagoAbal/haskell-z3.git
     commit: fff21420216dd7f501b99ce5b1cbc42aea1339a9
 
