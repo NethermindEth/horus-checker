@@ -1,5 +1,3 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Horus.Global
   ( GlobalT (..)
   , GlobalF (..)
@@ -35,8 +33,8 @@ import Horus.CairoSemantics.Runner
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Module (Module, runModuleL, traverseCFG)
-import Horus.Preprocessor (fetchModelFromSolver, toSMTResult)
-import Horus.Preprocessor.Solvers (Solver)
+import Horus.Preprocessor (fetchModelFromSolver)
+import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.Util (Box (..), tShow, topmostStepFT)
@@ -45,8 +43,8 @@ import Z3.Monad (Z3)
 
 data Config = Config
   { cfg_verbose :: Bool
-  , cfg_printModels :: Bool
   , cfg_solver :: Solver
+  , cfg_solverSettings :: SolverSettings
   }
 
 data GlobalF m a
@@ -130,12 +128,9 @@ produceSMT2Models cd = do
   models <-
     runZ3 $
       traverse
-        (uncurry $ fetchModelFromSolver (cfg_solver config))
+        (uncurry $ fetchModelFromSolver (cfg_solver config) (cfg_solverSettings config))
         namesAndQueries
-  pure $
-    if cfg_printModels config
-      then fmap tShow models
-      else fmap (tShow . toSMTResult) models
+  pure (fmap tShow models)
  where
   extractMemAndAddrNames :: ConstraintsState -> [(Text, Text)]
   extractMemAndAddrNames ConstraintsState{..} =
