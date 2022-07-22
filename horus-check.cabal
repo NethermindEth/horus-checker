@@ -16,6 +16,7 @@ common deps
       ImportQualifiedPost
       MultiParamTypeClasses
       OverloadedStrings
+      RecordWildCards
       ScopedTypeVariables
       StandaloneDeriving
       TupleSections
