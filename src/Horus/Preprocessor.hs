@@ -1,14 +1,12 @@
-{-# LANGUAGE RecordWildCards #-}
-
 module Horus.Preprocessor
   ( Model (..)
   , SolverResult (..)
   , fetchModelFromSolver
-  , toSMTResult
   )
 where
 
 import Control.Applicative ((<|>))
+import Control.Monad (foldM)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Foldable (foldlM, traverse_)
@@ -29,24 +27,19 @@ import Z3.Base qualified (Model)
 import Z3.Monad (MonadZ3)
 import Z3.Monad qualified as Z3
 
-import Horus.Preprocessor.Solvers (Solver (..))
+import Horus.Preprocessor.Solvers (Solver, SolverSettings (..), runSolver)
 import Horus.Util (toSignedFelt)
 
-data SolverResult = Unsat | Sat Model | Unknown Text
+data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text)
 data Model = Model
   { m_regs :: [(Text, Integer)]
   , m_mem :: Map Integer Integer
   }
 
-toSMTResult :: SolverResult -> SMT.Result
-toSMTResult Unsat = SMT.Unsat
-toSMTResult (Sat _) = SMT.Sat
-toSMTResult (Unknown _) = SMT.Unknown
-
 instance Show SolverResult where
   show Unsat = "Unsat"
-  show (Sat model) = "Sat\n" <> show model
-  show (Unknown reason) = "Unknown\n" <> unpack reason
+  show (Sat mbModel) = "Sat" <> maybe "" (\m -> "\n" <> show m) mbModel
+  show (Unknown reason) = "Unknown" <> maybe "" (\r -> "\n" <> unpack r) reason
 
 instance Show Model where
   show Model{..} =
@@ -59,6 +52,7 @@ instance Show Model where
 data PreprocessorEnv = PreprocessorEnv
   { pe_memsAndAddrs :: [(Text, Text)]
   , pe_solver :: Solver
+  , pe_solverSettings :: SolverSettings
   }
 
 peMemsAndAddrs :: Lens' PreprocessorEnv [(Text, Text)]
@@ -67,32 +61,43 @@ peMemsAndAddrs lMod g = fmap (\x -> g{pe_memsAndAddrs = x}) (lMod (pe_memsAndAdd
 peSolver :: Lens' PreprocessorEnv Solver
 peSolver lMod g = fmap (\x -> g{pe_solver = x}) (lMod (pe_solver g))
 
+peSolverSettings :: Lens' PreprocessorEnv SolverSettings
+peSolverSettings lMod g = fmap (\x -> g{pe_solverSettings = x}) (lMod (pe_solverSettings g))
+
 type PreprocessorT m a = ReaderT PreprocessorEnv m a
 
-fetchModelFromSolver :: MonadZ3 z3 => Solver -> [(Text, Text)] -> Text -> z3 SolverResult
-fetchModelFromSolver solver memVars expr = do
+fetchModelFromSolver ::
+  MonadZ3 z3 => Solver -> SolverSettings -> [(Text, Text)] -> Text -> z3 SolverResult
+fetchModelFromSolver solver solverSettings memVars expr = do
   goal <- sexprToGoal expr
   runReaderT
     (fetchModelFromSolver' goal)
     PreprocessorEnv
       { pe_memsAndAddrs = memVars
       , pe_solver = solver
+      , pe_solverSettings = solverSettings
       }
 
 fetchModelFromSolver' :: MonadZ3 z3 => Goal -> PreprocessorT z3 SolverResult
-fetchModelFromSolver' goal = do
-  subgoals <- preprocess goal
-  tGoals <- traverse goalToSExpr subgoals
-  externalSolver <- view peSolver
-  results <- liftIO $ traverse (runSolver externalSolver) tGoals
-  let satGoals = [(subgoal, model) | ((SMT.Sat, Just model), subgoal) <- zip results subgoals]
-  let unsatGoals = [subgoal | ((SMT.Unsat, Nothing), subgoal) <- zip results subgoals]
-  let unknownReasons = [reason | ((SMT.Unknown, Just reason), _) <- zip results subgoals]
-  case satGoals of
-    [] -> case unsatGoals of
-      [] -> pure $ Unknown $ head unknownReasons
-      _ -> pure Unsat
-    (subgoal, model) : _ -> mkFullModel subgoal model
+fetchModelFromSolver' goal = preprocess goal >>= foldM combineResult (Unknown Nothing)
+ where
+  combineResult (Sat mbModel) _ = pure (Sat mbModel)
+  combineResult Unsat subgoal = do
+    result <- computeResult subgoal
+    pure $ case result of
+      Sat mbModel -> Sat mbModel
+      _ -> Unsat
+  combineResult Unknown{} subgoal = computeResult subgoal
+
+  computeResult subgoal = do
+    externalSolver <- view peSolver
+    solverSettings <- view peSolverSettings
+    tGoal <- goalToSExpr subgoal
+    result <- liftIO (runSolver externalSolver solverSettings tGoal)
+    case result of
+      (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (mkFullModel subgoal) mbModel
+      (SMT.Unsat, _mbCore) -> pure Unsat
+      (SMT.Unknown, mbReason) -> pure (Unknown mbReason)
 
 mkFullModel :: MonadZ3 z3 => Goal -> Text -> PreprocessorT z3 SolverResult
 mkFullModel goal tModel = do
@@ -105,7 +110,7 @@ mkFullModel goal tModel = do
     Z3.modelTranslate model realContext
   fullModel <- Z3.convertModel goal model'
   model <- z3ModelToHorusModel fullModel
-  pure $ Sat model
+  pure $ Sat (Just model)
 
 data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
   deriving stock (Eq, Ord)
