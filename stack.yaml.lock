@@ -21,11 +21,11 @@ packages:
     git: https://github.com/IagoAbal/haskell-z3.git
     pantry-tree:
       size: 2204
-      sha256: 83782d77391a1a2569571a8ab96cc55c160b766a3203a17b5b8df1e68a2c7f0a
-    commit: fff21420216dd7f501b99ce5b1cbc42aea1339a9
+      sha256: 540b083755abfe88c5338162505b04db576c0a7072e676c1d27001f2f4cc67f9
+    commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
   original:
     git: https://github.com/IagoAbal/haskell-z3.git
-    commit: fff21420216dd7f501b99ce5b1cbc42aea1339a9
+    commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
 snapshots:
 - completed:
     size: 618884
