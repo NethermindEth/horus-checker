@@ -29,6 +29,7 @@ import Horus.CairoSemantics.Runner
   )
 import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdChecks)
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
+import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Instruction (labelInsructions, readAllInstructions)
 import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
@@ -37,7 +38,6 @@ import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.Util (tShow)
-import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -110,7 +110,7 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
-    let pre = preConds ^. at name . non SMT.True
+    let pre = preConds ^. at name . non Expr.True
     pure (pc, pre)
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState

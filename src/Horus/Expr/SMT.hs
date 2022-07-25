@@ -1,10 +1,3 @@
-{-# LANGUAGE DataKinds #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeFamilyDependencies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE UndecidableInstances #-}
-
 module Horus.Expr.SMT
   ( toSMT
   , pprExpr
@@ -20,66 +13,63 @@ import Prelude hiding
   , and
   , const
   , div
-  , mod
-  , not
   , or
   )
 import Prelude qualified (Bool (..))
 
 import Control.Monad.Reader (Reader, local, runReader)
 import Data.Char (isDigit)
+import Data.Constraint ((\\))
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromList)
-import Data.Singletons (Sing, SingI (..))
+import Data.Singletons (sing)
 import Data.Text (Text, pack, unpack)
-import Data.Type.Equality (TestEquality (..), (:~:) (..))
+import Data.Type.Equality (testEquality, (:~:) (..))
+import Data.Typeable (Typeable)
 import Lens.Micro (at, non, (&))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (view)
 import SimpleSMT qualified as SMT
 
-import Horus.Expr (Expr (..))
+import Horus.Expr (Expr (..), cast', isProper)
+import Horus.Expr.Std (binArithNames, binLogicNames, compareNames)
+import Horus.Expr.Type (STy (..), Ty (..))
+import Horus.Expr.Util (fieldToInt)
 
 -- converting to unsafe syntax
 
 toSMT :: Expr a -> SMT.SExpr
-toSMT True = SMT.bool Prelude.True
-toSMT False = SMT.bool Prelude.False
-toSMT (Int' v) = SMT.int v
-toSMT (Fun s) = SMT.Atom (unpack s)
-toSMT e@(_ :* _) = SMT.app h args
- where
-  (h, xs) = splitApp e
-  args = reverse xs
+toSMT = toSMT' . fieldToInt
 
-splitApp :: Expr a -> (SMT.SExpr, [SMT.SExpr])
-splitApp (a :* b) =
-  let (h, args) = splitApp a
-   in (h, toSMT b : args)
-splitApp v = (toSMT v, [])
+toSMT' :: Expr a -> SMT.SExpr
+toSMT' True = SMT.bool Prelude.True
+toSMT' False = SMT.bool Prelude.False
+toSMT' (Felt b) = SMT.int b
+toSMT' (f :*: x) = let (h, args) = splitApp (f :*: x) in SMT.app h (reverse args)
+toSMT' (Fun s) = SMT.Atom (unpack s)
+toSMT' (ExitField e) = toSMT' e
+
+splitApp :: Expr b -> (SMT.SExpr, [SMT.SExpr])
+splitApp (a :*: b) = let (h, args) = splitApp a in (h, toSMT' b : args)
+splitApp h = (toSMT' h, [])
 
 pprExpr :: Expr a -> Text
-pprExpr = pack . flip SMT.showsSExpr "" . toSMT
+pprExpr = pack . flip SMT.showsSExpr "" . toSMT'
 
 -- parsing api
 
-parseAssertion :: Text -> Maybe (Expr Bool)
-parseAssertion s =
-  case SMT.readSExpr (unpack s) of
-    Just (e, "") ->
-      do
-        e' <- elab (inlineLets e)
-        typeCheck e' SBool
-    _ -> Nothing
+parse :: Typeable t => Text -> Maybe (Expr t)
+parse s = case SMT.readSExpr (unpack s) of
+  Just (e, "") -> do
+    e' <- elab (inlineLets e)
+    typeCheck e'
+  _ -> Nothing
 
-parseArithmetic :: Text -> Maybe (Expr Integer)
-parseArithmetic s =
-  case SMT.readSExpr (unpack s) of
-    Just (e, "") ->
-      do
-        e' <- elab (inlineLets e)
-        typeCheck e' SInt
-    _ -> Nothing
+parseAssertion :: Text -> Maybe (Expr TBool)
+parseAssertion = parse
+
+parseArithmetic :: Text -> Maybe (Expr TFelt)
+parseArithmetic = parse
 
 -- let inlining
 
@@ -93,113 +83,47 @@ inlineLets = flip runReader Map.empty . go
     local (<> extension) (go body)
   go (SMT.List l) = SMT.List <$> traverse go l
 
-  bindingsToMap ::
-    [SMT.SExpr] ->
-    Reader
-      (Map String SMT.SExpr)
-      (Map String SMT.SExpr)
+  bindingsToMap :: [SMT.SExpr] -> Reader (Map String SMT.SExpr) (Map String SMT.SExpr)
   bindingsToMap bs =
     [(s, v) | SMT.List [SMT.Atom s, v] <- bs]
       & traverse (\(s, v) -> (s,) <$> go v)
       & fmap Map.fromList
 
 -- type checker definition
+typeCheck :: Typeable t => UExpr -> Maybe (Expr t)
+typeCheck e = typeCheck' e cast'
 
-data Ty = TInt | TBool | Ty :-> Ty deriving (Eq, Show)
-
-type family Sem (t :: Ty) = r | r -> t where
-  Sem TInt = Integer
-  Sem TBool = Bool
-  Sem (arg :-> res) = Sem arg -> Sem res
-
-infixr 0 :->
-
-data STy (t :: Ty) where
-  SInt :: STy TInt
-  SBool :: STy TBool
-  (::->) :: STy arg -> STy res -> STy (arg :-> res)
-
-deriving instance Show (STy t)
-
-type instance Sing = STy
-
-infixr 0 ::->
-
-instance SingI TInt where
-  sing = SInt
-
-instance SingI TBool where
-  sing = SBool
-
-instance (SingI arg, SingI res) => SingI (arg :-> res) where
-  sing = sing ::-> sing
-
-instance TestEquality STy where
-  testEquality SInt SInt = Just Refl
-  testEquality SBool SBool = Just Refl
-  testEquality (a1 ::-> r1) (a2 ::-> r2) =
-    do
-      Refl <- testEquality a1 a2
-      Refl <- testEquality r1 r2
-      return Refl
-  testEquality _ _ = Nothing
-
-typeCheck :: SingI t => UExpr -> STy t -> Maybe (Expr (Sem t))
-typeCheck e sty =
-  typeCheck'
-    e
-    ( \ty e1 ->
-        case testEquality ty sty of
-          Just Refl -> Just e1
-          _ -> Nothing
-    )
-
-typeCheck' ::
-  SingI b =>
-  UExpr ->
-  ( forall t.
-    STy t ->
-    Expr (Sem t) ->
-    Maybe (Expr (Sem b))
-  ) ->
-  Maybe (Expr (Sem b))
-typeCheck' (UInt n) k = k sing (Int' n)
-typeCheck' UTrue k = k sing True
-typeCheck' UFalse k = k sing False
+typeCheck' :: UExpr -> (forall t. Expr t -> Maybe (Expr a)) -> Maybe (Expr a)
+typeCheck' (UInt n) k = k (Felt n)
+typeCheck' UTrue k = k True
+typeCheck' UFalse k = k False
+typeCheck' (UNeg x) k = do
+  x' <- typeCheck @TFelt x
+  k (Fun @(TFelt :-> TFelt) "-" :*: x')
 typeCheck' (UFun s) k
-  | s `elem` binArithNames = k sing (Fun s :: Expr BinArithTy)
-  | s `elem` compareNames = k sing (Fun s :: Expr CompareTy)
-  | s `elem` binLogicNames = k sing (Fun s :: Expr BinLogicTy)
-  | s == "not" = k sing (Fun s :: Expr NotTy)
-  | s == "abs" = k sing (Fun s :: Expr AbsTy)
-  | s == "memory" = k sing (Fun s :: Expr MemTy)
-  | otherwise = k sing (Fun s :: Expr Felt)
+  | s `elem` binArithNames = k (Fun s :: Expr BinArithTy)
+  | s `elem` compareNames = k (Fun s :: Expr CompareTy)
+  | s `elem` binLogicNames = k (Fun s :: Expr BinLogicTy)
+  | s == "not" = k (Fun s :: Expr NotTy)
+  | s == "abs" = k (Fun s :: Expr AbsTy)
+  | s == "memory" = k (Fun s :: Expr MemTy)
+  | otherwise = k (Fun s :: Expr TFelt)
 typeCheck' (e1 :@: e2) k =
-  typeCheck' e1 $ \fun_ty f ->
-    typeCheck' e2 $ \arg_ty arg ->
-      case fun_ty of
-        (arg_ty' ::-> res_ty') ->
-          case arg_ty `testEquality` arg_ty' of
-            Just Refl -> k res_ty' (f :* arg)
+  typeCheck' e1 $ \(f :: Expr tf) ->
+    typeCheck' e2 $ \(arg :: Expr tx) ->
+      case sing @tf \\ isProper f of
+        (arg_ty' ::-> _) ->
+          case sing @tx `testEquality` arg_ty' \\ isProper arg of
+            Just Refl -> k (f :*: arg)
             _ -> Nothing
         _ -> Nothing
 
-binArithNames :: [Text]
-binArithNames = ["+", "-", "*", "mod", "signum"]
-
-compareNames :: [Text]
-compareNames = ["eq", "lt", "gt", "leq", "geq", "distinct"]
-
-binLogicNames :: [Text]
-binLogicNames = ["and", "or", "implies"]
-
-type BinArithTy = Integer -> Integer -> Integer
-type BinLogicTy = Bool -> Bool -> Bool
-type CompareTy = Integer -> Integer -> Bool
-type NotTy = Bool -> Bool
-type AbsTy = Integer -> Integer
-type MemTy = Integer -> Integer
-type Felt = Integer
+type BinArithTy = TFelt :-> TFelt :-> TFelt
+type BinLogicTy = TBool :-> TBool :-> TBool
+type CompareTy = TFelt :-> TFelt :-> TBool
+type NotTy = TBool :-> TBool
+type AbsTy = TFelt :-> TFelt
+type MemTy = TFelt :-> TFelt
 
 -- intermediate expression type to ease type checking.
 
@@ -207,8 +131,10 @@ data UExpr where
   UInt :: Integer -> UExpr
   UTrue :: UExpr
   UFalse :: UExpr
+  UNeg :: UExpr -> UExpr -- a workaround the fact that "-" can be both binary and unary
   UFun :: Text -> UExpr
   (:@:) :: UExpr -> UExpr -> UExpr
+  deriving stock (Show)
 
 infixl 4 :@:
 
@@ -219,6 +145,7 @@ elab (SMT.Atom s)
   | s == "false" = pure UFalse
   | otherwise = pure $ UFun (pack s)
 elab (SMT.List []) = Nothing
+elab (SMT.List [SMT.Atom "-", x]) = UNeg <$> elab x
 elab (SMT.List (x : xs)) = foldl step (elab x) xs
  where
   step Nothing _ = Nothing

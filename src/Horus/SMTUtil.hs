@@ -2,11 +2,10 @@ module Horus.SMTUtil
   ( prime
   , ap
   , fp
-  , regToTSExpr
+  , regToVar
   , memory
   , pattern Memory
   , rcBound
-  , withSolver
   , builtinStart
   , builtinEnd
   , builtinCond
@@ -16,47 +15,38 @@ module Horus.SMTUtil
   )
 where
 
-import Control.Exception.Safe (bracket)
-import Data.Text (Text, unpack)
-import SimpleSMT qualified (SExpr (..), Solver, newSolver, stop)
+import Data.Text (Text)
 
+import Horus.Expr (Cast (..), Expr (..), Ty (..), cast, (.&&), (.<), (.<=), (.==), (.=>))
+import Horus.Expr qualified as Expr
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
 import Horus.SW.Builtin qualified as Builtin (name, size)
-import SimpleSMT.Typed (TSExpr (..), (.&&), (.->), (.<), (.<=), (.==))
-import SimpleSMT.Typed qualified as SMT
 
-prime :: TSExpr Integer
-prime = SMT.const "prime"
+prime :: Expr TFelt
+prime = Expr.const "prime"
 
-ap, fp :: TSExpr Integer
-ap = SMT.const "ap"
-fp = SMT.const "fp"
+ap, fp :: Expr TFelt
+ap = Expr.const "ap"
+fp = Expr.const "fp"
 
-regToTSExpr :: PointerRegister -> TSExpr Integer
-regToTSExpr AllocationPointer = ap
-regToTSExpr FramePointer = fp
+regToVar :: PointerRegister -> Expr TFelt
+regToVar AllocationPointer = ap
+regToVar FramePointer = fp
 
-memory :: TSExpr Integer -> TSExpr Integer
-memory = SMT.function "memory"
+memory :: Expr TFelt -> Expr TFelt
+memory = Expr.function "memory"
 
-pattern Memory :: TSExpr Integer -> TSExpr Integer
-pattern Memory addr <-
-  (SMT.toUnsafe -> (SimpleSMT.List [SimpleSMT.Atom "memory", SMT.fromUnsafe -> addr]))
+pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
+pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
 
-rcBound :: TSExpr Integer
-rcBound = SMT.const "range-check-bound"
+rcBound :: Expr TFelt
+rcBound = Expr.const "range-check-bound"
 
-withSolver :: Text -> [Text] -> (SimpleSMT.Solver -> IO a) -> IO a
-withSolver solverName args =
-  bracket
-    (SimpleSMT.newSolver (unpack solverName) (map unpack args) Nothing)
-    SimpleSMT.stop
-
-builtinCond :: TSExpr Integer -> Builtin -> TSExpr Bool
-builtinCond ptr RangeCheck = SMT.leq [0, memory ptr, rcBound - 1]
+builtinCond :: Expr TFelt -> Builtin -> Expr TBool
+builtinCond ptr RangeCheck = Expr.leq [0, memory ptr, rcBound - 1]
 
 builtinStartName :: Builtin -> Text
 builtinStartName = (<> "!start") . Builtin.name
@@ -64,20 +54,20 @@ builtinStartName = (<> "!start") . Builtin.name
 builtinEndName :: Builtin -> Text
 builtinEndName = (<> "!end") . Builtin.name
 
-builtinStart :: Builtin -> TSExpr Integer
-builtinStart = SMT.const . builtinStartName
+builtinStart :: Builtin -> Expr TFelt
+builtinStart = Expr.const . builtinStartName
 
-builtinEnd :: Builtin -> TSExpr Integer
-builtinEnd = SMT.const . builtinEndName
+builtinEnd :: Builtin -> Expr TFelt
+builtinEnd = Expr.const . builtinEndName
 
-builtinAligned :: TSExpr Integer -> Builtin -> TSExpr Bool
-builtinAligned ptr b = start .<= ptr .&& ptr `SMT.mod` size .== 0
+builtinAligned :: Expr TFelt -> Builtin -> Expr TBool
+builtinAligned ptr b = start .<= ptr .&& ptr `Expr.mod` size .== 0
  where
   start = builtinStart b
   size = Builtin.size b
 
-builtinInSegment :: TSExpr Integer -> Builtin -> TSExpr Bool
+builtinInSegment :: Expr TFelt -> Builtin -> Expr TBool
 builtinInSegment ptr b = builtinAligned ptr b .&& ptr .< builtinEnd b
 
-builtinConstraint :: TSExpr Integer -> Builtin -> TSExpr Bool
-builtinConstraint ptr b = builtinInSegment ptr b .-> builtinCond ptr b
+builtinConstraint :: Expr TFelt -> Builtin -> Expr TBool
+builtinConstraint ptr b = builtinInSegment ptr b .=> builtinCond ptr b
