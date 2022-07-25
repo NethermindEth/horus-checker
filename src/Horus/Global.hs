@@ -33,7 +33,7 @@ import Horus.CairoSemantics.Runner
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Module (Module, runModuleL, traverseCFG)
-import Horus.Preprocessor (fetchModelFromSolver)
+import Horus.Preprocessor (EZ3, fetchModelFromSolver)
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.Identifier (getFunctionPc)
@@ -52,7 +52,7 @@ data GlobalF m a
   | forall b. RunCairoSemanticsT SemanticsEnv (CairoSemanticsT m b) (ConstraintsState -> a)
   | AskConfig (Config -> a)
   | forall b. Show b => Print' b a
-  | forall b. RunZ3 (Z3 b) (b -> a)
+  | forall b. RunZ3 (EZ3 Z3 b) (b -> a)
   | Throw Text
 
 deriving instance Functor (GlobalF m)
@@ -83,7 +83,7 @@ runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder 
 askConfig :: GlobalT m Config
 askConfig = liftF' (AskConfig id)
 
-runZ3 :: Z3 a -> GlobalT m a
+runZ3 :: EZ3 Z3 a -> GlobalT m a
 runZ3 z3 = liftF' (RunZ3 z3 id)
 
 print' :: Show a => a -> GlobalT m ()
@@ -125,12 +125,17 @@ produceSMT2Models cd = do
   let sexprs = map (makeModel (cd_rawSmt cd)) constraints
   let memAndAddrNames = map extractMemAndAddrNames constraints
   let namesAndQueries = zip memAndAddrNames sexprs
-  models <-
-    runZ3 $
-      traverse
-        (uncurry $ fetchModelFromSolver (cfg_solver config) (cfg_solverSettings config))
-        namesAndQueries
-  pure (fmap tShow models)
+  let fetchModel =
+        uncurry $
+          fetchModelFromSolver
+            (cfg_solver config)
+            (cfg_solverSettings config)
+   in do
+        models <-
+          traverse
+            (runZ3 . fetchModel)
+            namesAndQueries
+        pure (fmap tShow models)
  where
   extractMemAndAddrNames :: ConstraintsState -> [(Text, Text)]
   extractMemAndAddrNames ConstraintsState{..} =

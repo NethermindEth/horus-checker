@@ -1,5 +1,6 @@
 module Horus.Preprocessor
-  ( Model (..)
+  ( EZ3
+  , Model (..)
   , SolverResult (..)
   , fetchModelFromSolver
   )
@@ -7,6 +8,11 @@ where
 
 import Control.Applicative ((<|>))
 import Control.Monad (foldM)
+import Control.Monad.Except
+  ( ExceptT (..)
+  , runExceptT
+  , throwError
+  )
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Reader (ReaderT, runReaderT)
 import Data.Foldable (foldlM, traverse_)
@@ -64,19 +70,20 @@ peSolver lMod g = fmap (\x -> g{pe_solver = x}) (lMod (pe_solver g))
 peSolverSettings :: Lens' PreprocessorEnv SolverSettings
 peSolverSettings lMod g = fmap (\x -> g{pe_solverSettings = x}) (lMod (pe_solverSettings g))
 
-type PreprocessorT m a = ReaderT PreprocessorEnv m a
+type EZ3 z3 a = z3 (Either Text a)
+type PreprocessorT m a = ReaderT PreprocessorEnv (ExceptT Text m) a
 
 fetchModelFromSolver ::
-  MonadZ3 z3 => Solver -> SolverSettings -> [(Text, Text)] -> Text -> z3 SolverResult
-fetchModelFromSolver solver solverSettings memVars expr = do
-  goal <- sexprToGoal expr
-  runReaderT
-    (fetchModelFromSolver' goal)
-    PreprocessorEnv
-      { pe_memsAndAddrs = memVars
-      , pe_solver = solver
-      , pe_solverSettings = solverSettings
-      }
+  MonadZ3 z3 => Solver -> SolverSettings -> [(Text, Text)] -> Text -> EZ3 z3 SolverResult
+fetchModelFromSolver solver solverSettings memVars expr =
+  runExceptT $
+    runReaderT
+      (fetchModelFromSolver' =<< sexprToGoal expr)
+      PreprocessorEnv
+        { pe_memsAndAddrs = memVars
+        , pe_solver = solver
+        , pe_solverSettings = solverSettings
+        }
 
 fetchModelFromSolver' :: MonadZ3 z3 => Goal -> PreprocessorT z3 SolverResult
 fetchModelFromSolver' goal = preprocess goal >>= foldM combineResult (Unknown Nothing)
@@ -144,10 +151,16 @@ z3ModelToHorusModel model =
             addr <- Z3.getInt addrAst
             value <- Z3.getInt valueAst
             pure (toSignedFelt addr, toSignedFelt value)
-          _ -> liftIO $ fail "This was supposed to be unreachable"
+          _ ->
+            throwError $
+              "There is no interpretation of \""
+                <> memName
+                <> "\" or \""
+                <> addrName
+                <> "\""
       pure $ fromList addrValueList
  where
-  parseRegVar :: MonadZ3 z3 => Z3.FuncDecl -> z3 (Maybe (RegKind, Text, Integer))
+  parseRegVar :: MonadZ3 z3 => Z3.FuncDecl -> PreprocessorT z3 (Maybe (RegKind, Text, Integer))
   parseRegVar constDecl = do
     nameSymbol <- Z3.getDeclName constDecl
     name <- Z3.getSymbolString nameSymbol
@@ -156,7 +169,12 @@ z3ModelToHorusModel model =
       Just regKind -> do
         mbVal <- Z3.getConstInterp model constDecl
         case mbVal of
-          Nothing -> liftIO $ fail "The model should have interpretation for all of its constants"
+          Nothing ->
+            throwError $
+              "The model should have interpretation for all of its constants.\n"
+                <> "For some reason there is no interpretation of \""
+                <> pack name
+                <> "\""
           Just val -> do
             intVal <- Z3.getInt val
             pure (Just (regKind, pack name, toSignedFelt intVal))

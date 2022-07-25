@@ -39,7 +39,9 @@ interpret = iterTM exec . runGlobalT
   exec (RunCairoSemanticsT env builder cont) = do
     lift (CairoSemantics.runT env builder) >>= cont
   exec (AskConfig cont) = ask >>= cont
-  exec (RunZ3 z3 cont) = liftIO (evalZ3 z3) >>= cont
+  exec (RunZ3 ez3 cont) = do
+    result <- liftIO (evalZ3 ez3)
+    liftEither result >>= cont
   exec (Print' what cont) = pPrint what >> cont
   exec (Throw t) = throwError t
 
