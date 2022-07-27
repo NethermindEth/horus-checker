@@ -57,7 +57,6 @@ data GlobalF m a
   | AskConfig (Config -> a)
   | --  | forall b. Show b => Print' b a
     forall b. Show b => Log (L.LogT m b) a
-  | forall b. RunZ3 (Z3 b) (b -> a)
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
 

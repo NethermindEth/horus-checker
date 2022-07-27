@@ -17,8 +17,6 @@ import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 import Horus.Logger.Runner qualified as Logger (interpret, runImplT)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
-import Z3.Monad (evalZ3)
-
 newtype ImplT m a = ImplT (ReaderT Config (ExceptT Text m) a)
   deriving newtype
     ( Functor
@@ -42,8 +40,6 @@ interpret = iterTM exec . runGlobalT
   exec (RunCairoSemanticsT env builder cont) = do
     lift (CairoSemantics.runT env builder) >>= cont
   exec (AskConfig cont) = ask >>= cont
-  exec (RunZ3 z3 cont) = liftIO (evalZ3 z3) >>= cont
-  --  exec (Print' what cont) = pPrint what >> cont
   exec (Log logger cont) = do
     _ <- lift $ Logger.runImplT (Logger.interpret logger)
     cont
