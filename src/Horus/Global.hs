@@ -4,6 +4,10 @@ module Horus.Global
   , Config (..)
   , solveContract
   , SolvingInfo (..)
+  , logDebug
+  , logInfo
+  , logError
+  , logWarning
   )
 where
 
@@ -41,6 +45,7 @@ import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName ())
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
+import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -65,6 +70,7 @@ data GlobalF a
   | SetConfig Config a
   | PutStrLn' Text a
   | WriteFile' FilePath Text a
+  | forall b. Show b => Log (L.LogL b) a
   | Throw Text
   | forall b. Catch (GlobalL b) (Text -> GlobalL b) (b -> a)
 
@@ -243,3 +249,15 @@ solveContract = do
    in for (filter isUntrusted modules) solveModule
  where
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
+
+logDebug :: Show a => a -> GlobalL ()
+logDebug = liftF' . flip Log () . L.logDebug
+
+logInfo :: Show a => a -> GlobalL ()
+logInfo = liftF' . flip Log () . L.logInfo
+
+logError :: Show a => a -> GlobalL ()
+logError = liftF' . flip Log () . L.logError
+
+logWarning :: Show a => a -> GlobalL ()
+logWarning = liftF' . flip Log () . L.logWarning
