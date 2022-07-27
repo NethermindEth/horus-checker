@@ -1,34 +1,117 @@
 module Horus.Preprocessor
   ( Model (..)
   , SolverResult (..)
-  , fetchModelFromSolver
+  , PreprocessorF (..)
+  , PreprocessorL (..)
+  , solve
   )
 where
 
 import Control.Applicative ((<|>))
-import Control.Monad (foldM)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Reader (ReaderT, runReaderT)
-import Data.Foldable (foldlM, traverse_)
+import Control.Monad.Except (MonadError (..))
+import Control.Monad.Free.Class (MonadFree)
+import Control.Monad.Trans.Free.Church (F, liftF)
+import Data.Foldable (foldlM)
 import Data.Function ((&))
 import Data.List (sort)
-import Data.List qualified as List (stripPrefix)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack, unpack)
+import Data.Text qualified as Text (stripPrefix)
 import Data.Traversable (for)
-import Lens.Micro (Lens')
-import Lens.Micro.Mtl (view)
-import SimpleSMT qualified as SMT
+import SimpleSMT qualified as SMT (Result (..))
 import Text.Printf (printf)
 import Text.Read (readMaybe)
 import Z3.Base (Goal, Tactic)
-import Z3.Base qualified (Model)
-import Z3.Monad (MonadZ3)
+import Z3.Monad (Z3)
 import Z3.Monad qualified as Z3
 
-import Horus.Preprocessor.Solvers (Solver, SolverSettings (..), runSolver)
 import Horus.Util (toSignedFelt)
+import Horus.Z3Util (goalToSExpr, sexprToGoal)
+
+data PreprocessorF a
+  = forall b. RunZ3 (Z3 b) (b -> a)
+  | RunSolver Text ((SMT.Result, Maybe Text) -> a)
+  | GetMemsAndAddrs ([(Text, Text)] -> a)
+  | Throw Text
+  | forall b. Catch (PreprocessorL b) (Text -> PreprocessorL b) (b -> a)
+
+deriving instance Functor PreprocessorF
+
+newtype PreprocessorL a = PreprocessorL {runPreprocessor :: F PreprocessorF a}
+  deriving newtype
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadFree PreprocessorF
+    )
+
+instance MonadError Text PreprocessorL where
+  throwError = throw
+  catchError = catch
+
+runZ3 :: Z3 a -> PreprocessorL a
+runZ3 z3 = liftF (RunZ3 z3 id)
+
+runSolver :: Text -> PreprocessorL (SMT.Result, Maybe Text)
+runSolver goal = liftF (RunSolver goal id)
+
+getMemsAndAddrs :: PreprocessorL [(Text, Text)]
+getMemsAndAddrs = liftF (GetMemsAndAddrs id)
+
+throw :: Text -> PreprocessorL a
+throw e = liftF (Throw e)
+
+catch :: PreprocessorL a -> (Text -> PreprocessorL a) -> PreprocessorL a
+catch preprocessor handler = liftF (Catch preprocessor handler id)
+
+mkTactic :: Text -> PreprocessorL Tactic
+mkTactic tactic = runZ3 $ Z3.mkTactic (unpack tactic)
+
+preprocessGoal :: [Tactic] -> Goal -> PreprocessorL [Goal]
+preprocessGoal tactics goal = runZ3 $ do
+  skip <- Z3.mkTactic "skip"
+  combinedTactic <- foldlM Z3.andThenTactic skip tactics
+  Z3.applyTactic combinedTactic goal
+    >>= Z3.getApplyResultSubgoals
+
+parseZ3Model :: Text -> PreprocessorL Z3.Model
+parseZ3Model tModel = runZ3 $ do
+  realContext <- Z3.getContext
+  Z3.local $ do
+    Z3.solverFromString (unpack tModel)
+    _ <- Z3.solverCheck -- tModel consists of (declare-fun ...) expressions
+    -- so should be okay to ignore the result.
+    model <- Z3.solverGetModel
+    Z3.modelTranslate model realContext
+
+getConsts :: Z3.Model -> PreprocessorL [(Text, Integer)]
+getConsts model = do
+  constDecls <- runZ3 $ Z3.getConsts model
+  for constDecls $ \constDecl -> do
+    name <- runZ3 $ Z3.getSymbolString =<< Z3.getDeclName constDecl
+    mbVal <- runZ3 $ Z3.getConstInterp model constDecl
+    case mbVal of
+      Nothing ->
+        throwError $
+          "The model lacks interpretation of \""
+            <> pack name
+            <> "\""
+      Just val -> do
+        intVal <- runZ3 $ Z3.getInt val
+        pure (pack name, toSignedFelt intVal)
+
+interpConst :: Z3.Model -> Text -> PreprocessorL Integer
+interpConst model name = do
+  var <- runZ3 $ Z3.mkIntVar =<< Z3.mkStringSymbol (unpack name)
+  mbValue <- runZ3 $ Z3.modelEval model var True
+  case mbValue of
+    Just value -> runZ3 $ Z3.getInt value
+    Nothing ->
+      throwError $
+        "The model lacks interpretation of \""
+          <> name
+          <> "\""
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text)
 data Model = Model
@@ -49,37 +132,18 @@ instance Show Model where
     showAp (reg, value) = printf "%8s\t=\t%d\n" reg value
     showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
 
-data PreprocessorEnv = PreprocessorEnv
-  { pe_memsAndAddrs :: [(Text, Text)]
-  , pe_solver :: Solver
-  , pe_solverSettings :: SolverSettings
-  }
-
-peMemsAndAddrs :: Lens' PreprocessorEnv [(Text, Text)]
-peMemsAndAddrs lMod g = fmap (\x -> g{pe_memsAndAddrs = x}) (lMod (pe_memsAndAddrs g))
-
-peSolver :: Lens' PreprocessorEnv Solver
-peSolver lMod g = fmap (\x -> g{pe_solver = x}) (lMod (pe_solver g))
-
-peSolverSettings :: Lens' PreprocessorEnv SolverSettings
-peSolverSettings lMod g = fmap (\x -> g{pe_solverSettings = x}) (lMod (pe_solverSettings g))
-
-type PreprocessorT m a = ReaderT PreprocessorEnv m a
-
-fetchModelFromSolver ::
-  MonadZ3 z3 => Solver -> SolverSettings -> [(Text, Text)] -> Text -> z3 SolverResult
-fetchModelFromSolver solver solverSettings memVars expr = do
-  goal <- sexprToGoal expr
-  runReaderT
-    (fetchModelFromSolver' goal)
-    PreprocessorEnv
-      { pe_memsAndAddrs = memVars
-      , pe_solver = solver
-      , pe_solverSettings = solverSettings
-      }
-
-fetchModelFromSolver' :: MonadZ3 z3 => Goal -> PreprocessorT z3 SolverResult
-fetchModelFromSolver' goal = preprocess goal >>= foldM combineResult (Unknown Nothing)
+solve :: Text -> PreprocessorL SolverResult
+solve smtQuery = do
+  magicTactics <-
+    traverse
+      mkTactic
+      [ "simplify"
+      , "solve-eqs"
+      , "propagate-values"
+      , "simplify"
+      ]
+  goal <- runZ3 $ sexprToGoal smtQuery
+  preprocessGoal magicTactics goal >>= foldlM combineResult (Unknown Nothing)
  where
   combineResult (Sat mbModel) _ = pure (Sat mbModel)
   combineResult Unsat subgoal = do
@@ -90,102 +154,49 @@ fetchModelFromSolver' goal = preprocess goal >>= foldM combineResult (Unknown No
   combineResult Unknown{} subgoal = computeResult subgoal
 
   computeResult subgoal = do
-    externalSolver <- view peSolver
-    solverSettings <- view peSolverSettings
-    tGoal <- goalToSExpr subgoal
-    result <- liftIO (runSolver externalSolver solverSettings tGoal)
+    result <- runSolver =<< runZ3 (goalToSExpr subgoal)
     case result of
-      (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (mkFullModel subgoal) mbModel
+      (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (processModel subgoal) mbModel
       (SMT.Unsat, _mbCore) -> pure Unsat
       (SMT.Unknown, mbReason) -> pure (Unknown mbReason)
 
-mkFullModel :: MonadZ3 z3 => Goal -> Text -> PreprocessorT z3 SolverResult
-mkFullModel goal tModel = do
-  realContext <- Z3.getContext
-  model' <- Z3.local $ do
-    Z3.solverFromString (unpack tModel)
-    _ <- Z3.solverCheck -- tModel consists of (declare-fun ...) expressions
-    -- so should be okay to ignore the result.
-    model <- Z3.solverGetModel
-    Z3.modelTranslate model realContext
-  fullModel <- Z3.convertModel goal model'
-  model <- z3ModelToHorusModel fullModel
+processModel :: Goal -> Text -> PreprocessorL SolverResult
+processModel goal tModel = do
+  z3Model <- parseZ3Model tModel
+  z3FullModel <- runZ3 $ Z3.convertModel goal z3Model
+  model <- z3ModelToHorusModel z3FullModel
   pure $ Sat (Just model)
 
 data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
   deriving stock (Eq, Ord)
 
-parseRegKind :: String -> Maybe RegKind
+parseRegKind :: Text -> Maybe RegKind
 parseRegKind "fp!" = Just MainFp
 parseRegKind "ap!" = Just SingleAp
 parseRegKind t =
-  fmap CallFp (List.stripPrefix "fp@" t >>= readMaybe)
-    <|> fmap ApGroup (List.stripPrefix "ap!" t >>= readMaybe)
+  fmap CallFp (Text.stripPrefix "fp@" t >>= readMaybe . unpack)
+    <|> fmap ApGroup (Text.stripPrefix "ap!" t >>= readMaybe . unpack)
 
-z3ModelToHorusModel :: MonadZ3 z3 => Z3.Base.Model -> PreprocessorT z3 Model
+z3ModelToHorusModel :: Z3.Model -> PreprocessorL Model
 z3ModelToHorusModel model =
   Model
     <$> do
-      consts <- Z3.getConsts model
-      mbRegs <- for consts parseRegVar
+      consts <- getConsts model
+      mbRegs <- for consts (pure . parseRegVar)
       pure $
         catMaybes mbRegs
           & sort
           & map (\(_regKind, regName, regVal) -> (regName, regVal))
     <*> do
-      memVars <- view peMemsAndAddrs
-      addrValueList <- for memVars $ \(memName, addrName) -> do
-        memVar <- Z3.mkIntVar =<< Z3.mkStringSymbol (unpack memName)
-        addrVar <- Z3.mkIntVar =<< Z3.mkStringSymbol (unpack addrName)
-        mbValue <- Z3.modelEval model memVar True
-        mbAddr <- Z3.modelEval model addrVar True
-        case (mbAddr, mbValue) of
-          (Just addrAst, Just valueAst) -> do
-            addr <- Z3.getInt addrAst
-            value <- Z3.getInt valueAst
-            pure (toSignedFelt addr, toSignedFelt value)
-          _ -> liftIO $ fail "This was supposed to be unreachable"
+      memAndAddrs <- getMemsAndAddrs
+      addrValueList <- for memAndAddrs $ \(memName, addrName) -> do
+        value <- interpConst model memName
+        addr <- interpConst model addrName
+        pure (toSignedFelt addr, toSignedFelt value)
       pure $ fromList addrValueList
  where
-  parseRegVar :: MonadZ3 z3 => Z3.FuncDecl -> z3 (Maybe (RegKind, Text, Integer))
-  parseRegVar constDecl = do
-    nameSymbol <- Z3.getDeclName constDecl
-    name <- Z3.getSymbolString nameSymbol
+  parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
+  parseRegVar (name, value) = do
     case parseRegKind name of
-      Nothing -> pure Nothing
-      Just regKind -> do
-        mbVal <- Z3.getConstInterp model constDecl
-        case mbVal of
-          Nothing -> liftIO $ fail "The model should have interpretation for all of its constants"
-          Just val -> do
-            intVal <- Z3.getInt val
-            pure (Just (regKind, pack name, toSignedFelt intVal))
-
-mkMagicTactic :: MonadZ3 z3 => z3 Tactic
-mkMagicTactic = do
-  skip <- Z3.mkTactic "skip"
-  tactics <- traverse Z3.mkTactic ["simplify", "solve-eqs", "propagate-values", "simplify"]
-  foldlM Z3.andThenTactic skip tactics
-
-goalToSExpr :: MonadZ3 z3 => Goal -> z3 Text
-goalToSExpr goal =
-  Z3.local $
-    Z3.getGoalFormulas goal
-      >>= Z3.mkAnd
-      >>= Z3.solverAssertCnstr
-      >>= const (pack <$> Z3.solverToString)
-
-sexprToGoal :: MonadZ3 z3 => Text -> z3 Goal
-sexprToGoal sexpr = do
-  goal <-
-    Z3.mkGoal
-      True -- enable model generation
-      True -- enable unsat cores
-      False -- disable proofs
-  exprs <- Z3.parseSMTLib2String (unpack sexpr) [] [] [] []
-  traverse_ (Z3.goalAssert goal) exprs
-  pure goal
-
-preprocess :: MonadZ3 z3 => Goal -> z3 [Goal]
-preprocess goal =
-  mkMagicTactic >>= (`Z3.applyTactic` goal) >>= Z3.getApplyResultSubgoals
+      Nothing -> Nothing
+      Just regKind -> Just (regKind, name, toSignedFelt value)
