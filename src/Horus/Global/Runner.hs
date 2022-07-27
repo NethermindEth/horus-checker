@@ -18,6 +18,7 @@ import Horus.ContractInfo (ContractInfo (..))
 import Horus.Global (Config (..), GlobalF (..), GlobalL (..))
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
+import Horus.Logger.Runner qualified as Logger (interpret, runImpl)
 
 data Env = Env {e_config :: IORef Config, e_contractInfo :: ContractInfo}
 
@@ -54,6 +55,9 @@ interpret = iterM exec . runGlobalL
     cont
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
+  exec (Log logger cont) = do
+    _ <- lift $ Logger.runImpl (Logger.interpret logger)
+    cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
 
