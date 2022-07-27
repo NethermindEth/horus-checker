@@ -2,7 +2,7 @@ module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad ((<=<))
 import Control.Monad.Except (ExceptT, MonadError, liftEither, runExceptT, throwError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
@@ -15,6 +15,7 @@ import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 import Horus.Logger.Runner qualified as Logger (interpret, runImplT)
+import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
 import Z3.Monad (evalZ3)
 
@@ -46,6 +47,9 @@ interpret = iterTM exec . runGlobalT
   exec (Log logger cont) = do
     _ <- lift $ Logger.runImplT (Logger.interpret logger)
     cont
+  exec (RunPreprocessor penv preprocessor cont) = do
+    mPreprocessed <- lift (Preprocessor.run penv preprocessor)
+    liftEither mPreprocessed >>= cont
   exec (Throw t) = throwError t
 
 runImplT :: Config -> ImplT m a -> m (Either Text a)

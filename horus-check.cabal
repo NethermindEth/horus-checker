@@ -58,6 +58,7 @@ library
       Horus.Logger.Runner
       Horus.Module
       Horus.Preprocessor
+      Horus.Preprocessor.Runner
       Horus.Preprocessor.Solvers
       Horus.SMTUtil
       Horus.SW.CairoType
@@ -67,6 +68,7 @@ library
       Horus.SW.Identifier
       Horus.SW.ScopedName
       Horus.SW.Std
+      Horus.Z3Util
       SimpleSMT.Typed
     build-depends:
       aeson,
@@ -105,6 +107,7 @@ executable horus-check
       optparse-applicative,
       pretty-simple,
       text,
+      z3,
 
 executable horus-disasm
     import:                  deps

@@ -4,7 +4,6 @@ module Horus.Global
   , Config (..)
   , runCFGBuildT
   , makeCFG
-  , runZ3
   , makeModules
   , produceSMT2Models
   , logDebug
@@ -38,13 +37,13 @@ import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds,
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
 import Horus.Logger qualified as L (LogT, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module, runModuleL, traverseCFG)
-import Horus.Preprocessor (fetchModelFromSolver)
+import Horus.Preprocessor (PreprocessorL, SolverResult, solve)
+import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..))
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.Util (Box (..), tShow, topmostStepFT)
 import SimpleSMT.Typed qualified as SMT (TSExpr (True))
-import Z3.Monad (Z3)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -59,6 +58,7 @@ data GlobalF m a
   | --  | forall b. Show b => Print' b a
     forall b. Show b => Log (L.LogT m b) a
   | forall b. RunZ3 (Z3 b) (b -> a)
+  | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
 
 deriving instance Functor (GlobalF m)
@@ -89,8 +89,9 @@ runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder 
 askConfig :: GlobalT m Config
 askConfig = liftF' (AskConfig id)
 
-runZ3 :: Z3 a -> GlobalT m a
-runZ3 z3 = liftF' (RunZ3 z3 id)
+runPreprocessor :: PreprocessorEnv -> PreprocessorL a -> GlobalT m a
+runPreprocessor penv preprocessor =
+  liftF' (RunPreprocessor penv preprocessor id)
 
 -- print' :: Show a => a -> GlobalT m ()
 -- print' what = liftF' (Print' what ())
@@ -110,6 +111,17 @@ makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
     pc <- getFunctionPc idef
     let pre = preConds ^. at name . non SMT.True
     pure (pc, pre)
+
+solveSMT :: [(Text, Text)] -> Text -> GlobalT m SolverResult
+solveSMT memsAndAddrs smtQuery = do
+  config <- askConfig
+  runPreprocessor
+    ( PreprocessorEnv
+        memsAndAddrs
+        (cfg_solver config)
+        (cfg_solverSettings config)
+    )
+    (solve smtQuery)
 
 extractConstraints :: SemanticsEnv -> Module -> GlobalT m ConstraintsState
 extractConstraints env = runCairoSemanticsT env . encodeSemantics
@@ -132,10 +144,9 @@ produceSMT2Models cd = do
   let memAndAddrNames = map extractMemAndAddrNames constraints
   let namesAndQueries = zip memAndAddrNames sexprs
   models <-
-    runZ3 $
-      traverse
-        (uncurry $ fetchModelFromSolver (cfg_solver config) (cfg_solverSettings config))
-        namesAndQueries
+    traverse
+      (uncurry solveSMT)
+      namesAndQueries
   pure (fmap tShow models)
  where
   extractMemAndAddrNames :: ConstraintsState -> [(Text, Text)]
