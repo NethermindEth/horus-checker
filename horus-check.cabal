@@ -54,6 +54,8 @@ library
       Horus.CairoSemantics.Runner
       Horus.Expr
       Horus.Expr.SMT
+      Horus.Logger
+      Horus.Logger.Runner
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Solvers
@@ -70,6 +72,7 @@ library
       aeson,
       array,
       containers,
+      co-log-core,
       dlist,
       free,
       hashable,
@@ -97,6 +100,7 @@ executable horus-check
       filepath,
       horus-check,
       microlens,
+      monad-logger,
       mtl,
       optparse-applicative,
       pretty-simple,

@@ -7,6 +7,10 @@ module Horus.Global
   , runZ3
   , makeModules
   , produceSMT2Models
+  , logDebug
+  , logInfo
+  , logError
+  , logWarning
   )
 where
 
@@ -32,6 +36,7 @@ import Horus.CairoSemantics.Runner
   )
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
+import Horus.Logger qualified as L (LogT, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module, runModuleL, traverseCFG)
 import Horus.Preprocessor (fetchModelFromSolver)
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
@@ -51,7 +56,8 @@ data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
   | forall b. RunCairoSemanticsT SemanticsEnv (CairoSemanticsT m b) (ConstraintsState -> a)
   | AskConfig (Config -> a)
-  | forall b. Show b => Print' b a
+  | --  | forall b. Show b => Print' b a
+    forall b. Show b => Log (L.LogT m b) a
   | forall b. RunZ3 (Z3 b) (b -> a)
   | Throw Text
 
@@ -86,8 +92,8 @@ askConfig = liftF' (AskConfig id)
 runZ3 :: Z3 a -> GlobalT m a
 runZ3 z3 = liftF' (RunZ3 z3 id)
 
-print' :: Show a => a -> GlobalT m ()
-print' what = liftF' (Print' what ())
+-- print' :: Show a => a -> GlobalT m ()
+-- print' what = liftF' (Print' what ())
 
 throw :: Text -> GlobalT m a
 throw t = liftF' (Throw t)
@@ -118,10 +124,10 @@ produceSMT2Models cd = do
   let semanticsEnv = mkSemanticsEnv cd labeledInsts
   constraints <- traverse (extractConstraints semanticsEnv) modules
   when (cfg_verbose config) $ do
-    print' labeledInsts
-    print' cfg
-    print' modules
-    print' (map debugFriendlyModel constraints)
+    logDebug labeledInsts
+    logDebug cfg
+    logDebug modules
+    logDebug (map debugFriendlyModel constraints)
   let sexprs = map (makeModel (cd_rawSmt cd)) constraints
   let memAndAddrNames = map extractMemAndAddrNames constraints
   let namesAndQueries = zip memAndAddrNames sexprs
@@ -156,3 +162,15 @@ mkSemanticsEnv cd labeledInsts =
     , Just callDst <- [callDestination inst]
     , Just fun <- [pcToFun ^. at callDst]
     ]
+
+logDebug :: Show a => a -> GlobalT m ()
+logDebug = liftF' . flip Log () . L.logDebug
+
+logInfo :: Show a => a -> GlobalT m ()
+logInfo = liftF' . flip Log () . L.logInfo
+
+logError :: Show a => a -> GlobalT m ()
+logError = liftF' . flip Log () . L.logError
+
+logWarning :: Show a => a -> GlobalT m ()
+logWarning = liftF' . flip Log () . L.logWarning

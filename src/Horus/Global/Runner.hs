@@ -8,11 +8,13 @@ import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
 import Data.Text (Text)
-import Text.Pretty.Simple (pPrint)
+
+-- import Text.Pretty.Simple (pPrint)
 
 import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
+import Horus.Logger.Runner qualified as Logger (interpret, runImplT)
 
 import Z3.Monad (evalZ3)
 
@@ -40,7 +42,10 @@ interpret = iterTM exec . runGlobalT
     lift (CairoSemantics.runT env builder) >>= cont
   exec (AskConfig cont) = ask >>= cont
   exec (RunZ3 z3 cont) = liftIO (evalZ3 z3) >>= cont
-  exec (Print' what cont) = pPrint what >> cont
+  --  exec (Print' what cont) = pPrint what >> cont
+  exec (Log logger cont) = do
+    _ <- lift $ Logger.runImplT (Logger.interpret logger)
+    cont
   exec (Throw t) = throwError t
 
 runImplT :: Config -> ImplT m a -> m (Either Text a)
