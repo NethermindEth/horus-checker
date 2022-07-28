@@ -1,4 +1,8 @@
+f
 Unsat
+main
 Unsat
+main.loop+T
 Unsat
+main.loop+F
 Sat

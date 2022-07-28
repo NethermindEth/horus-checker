@@ -1,4 +1,8 @@
+main
 Unsat
+succpred+T
 Unsat
+succpred.add
 Unsat
+succpred+F
 Unsat

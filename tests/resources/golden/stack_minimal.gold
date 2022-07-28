@@ -1,7 +1,14 @@
+_Stack.add
 Unsat
+_Stack.empty
 Unsat
+_Stack.lit
 Unsat
+_Stack.top
 Unsat
+main_
 Unsat
+cairo.lang.compiler.lib.registers.get_ap
 Unsat
+empty: (and (= (memory (- ap 2)) (memory (- fp 2))) (= (memory (- ap 1)
 Unsat
