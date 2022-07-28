@@ -27,8 +27,10 @@ type EIO = ExceptT Text IO
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdChecks %~ (<> stdChecks)
-  models <- Global.runT arg_config (produceSMT2Models contract)
-  liftIO $ traverse_ Text.putStrLn models
+  (models, names) <- Global.runT arg_config (produceSMT2Models contract)
+  liftIO $
+    traverse_ (\(model, name) -> Text.putStrLn (name <> "\n" <> model)) $
+      zip models names
 
 eioDecodeFileStrict :: FromJSON a => FilePath -> EIO a
 eioDecodeFileStrict path = do

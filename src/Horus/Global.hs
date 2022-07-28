@@ -31,7 +31,7 @@ import Horus.CairoSemantics.Runner
   )
 import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
 import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
-import Horus.Module (Module, runModuleL, traverseCFG)
+import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
@@ -119,13 +119,14 @@ solveSMT memsAndAddrs smtQuery = do
 extractConstraints :: SemanticsEnv -> Module -> GlobalT m ConstraintsState
 extractConstraints env = runCairoSemanticsT env . encodeSemantics
 
-produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m [Text]
+produceSMT2Models :: Monad m => ContractDefinition -> GlobalT m ([Text], [Text])
 produceSMT2Models cd = do
   config <- askConfig
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
   cfg <- makeCFG cd labeledInsts
   modules <- makeModules cd cfg
+  let names = map (nameOfModule (p_identifiers (cd_program cd))) modules
   let semanticsEnv = mkSemanticsEnv cd labeledInsts
   constraints <- traverse (extractConstraints semanticsEnv) modules
   when (cfg_verbose config) $ do
@@ -136,11 +137,8 @@ produceSMT2Models cd = do
   let sexprs = map (makeModel (cd_rawSmt cd)) constraints
   let memAndAddrNames = map extractMemAndAddrNames constraints
   let namesAndQueries = zip memAndAddrNames sexprs
-  models <-
-    traverse
-      (uncurry solveSMT)
-      namesAndQueries
-  pure (fmap tShow models)
+  models <- traverse (uncurry solveSMT) namesAndQueries
+  pure (fmap tShow models, names)
  where
   extractMemAndAddrNames :: ConstraintsState -> [(Text, Text)]
   extractMemAndAddrNames ConstraintsState{..} =
