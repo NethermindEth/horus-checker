@@ -17,14 +17,10 @@ import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import SimpleSMT qualified as SMT (SExpr (..))
 
-import Horus.CallStack as CS
-  ( CallEntry
-  , callerOfRoot
-  )
+import Horus.CallStack as CS (CallEntry)
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -138,9 +134,6 @@ push l = liftF (Push l ())
 pop :: CairoSemanticsT m ()
 pop = liftF (Pop ())
 
-top :: CairoSemanticsT m CallEntry
-top = liftF (Top id)
-
 {- | Prepare the expression for usage in the model.
 
 That is, deduce AP from the ApTracking data by PC and replace FP name
@@ -159,12 +152,8 @@ encodeApTracking traceDescr ApTracking{..} =
 getAp :: Label -> CairoSemanticsT m (TSExpr Integer)
 getAp pc = getStackTraceDescr >>= \trace -> getApTracking pc >>= encodeApTracking trace
 
-getFp :: Maybe Label -> CairoSemanticsT m (TSExpr Integer)
-getFp mbLabel = do
-  stackTrace <- getStackTraceDescr
-  (_, currentF) <- top
-  let trace = "fp!" <> stackTrace <> "@"
-  declareFelt $ trace <> tShow (unLabel $ fromMaybe currentF mbLabel)
+getFp :: CairoSemanticsT m (TSExpr Integer)
+getFp = getStackTraceDescr >>= declareFelt . ("fp!" <>)
 
 moduleStartAp :: Module -> CairoSemanticsT m (TSExpr Integer)
 moduleStartAp Module{m_prog = []} = do
@@ -182,7 +171,7 @@ encodeSemantics :: Module -> CairoSemanticsT m ()
 encodeSemantics m@Module{..} = do
   apStart <- moduleStartAp m
   apEnd <- moduleEndAp m
-  fp <- getFp Nothing
+  fp <- getFp
   assert (fp .<= apStart)
   assert (prepare' apStart fp m_pre)
   expect (prepare' apEnd fp m_post)
@@ -200,10 +189,8 @@ withExecutionCtx ctx action = do
   pure res
 
 mkInstructionConstraints :: Map (NonEmpty Label, Label) Bool -> LabeledInst -> CairoSemanticsT m ()
-mkInstructionConstraints jnzOracle lInst@(pc, inst@Instruction{..}) = do
-  fp <- getFp (Just pc)
-  lastFp <- getFp Nothing
-  unless (isRet inst) $ assert (fp .== lastFp)
+mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
+  fp <- getFp
   dstReg <- prepare pc fp (regToTSExpr i_dstRegister)
   let dst = memory (dstReg + fromInteger i_dstOffset)
   case i_opCode of
@@ -212,7 +199,7 @@ mkInstructionConstraints jnzOracle lInst@(pc, inst@Instruction{..}) = do
           nextPc = getNextPc lInst
           stackFrame = (pc, calleePc)
        in do
-            calleeFp <- withExecutionCtx stackFrame $ getFp (Just calleePc)
+            calleeFp <- withExecutionCtx stackFrame getFp
             nextAp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
             saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
             setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
@@ -232,10 +219,7 @@ mkInstructionConstraints jnzOracle lInst@(pc, inst@Instruction{..}) = do
         Just False -> assert (dst .== 0)
         Just True -> assert (dst ./= 0)
         Nothing -> pure ()
-    Ret -> do
-      (callerPc, _) <- top
-      unless (callerPc == callerOfRoot) $
-        prepare callerPc fp (Util.fp .== Util.memory (Util.fp - 2)) >>= assert >> pop
+    Ret -> pop
 
 mkApConstraints :: TSExpr Integer -> TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
 mkApConstraints fp apEnd insts = do
