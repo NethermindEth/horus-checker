@@ -1,7 +1,5 @@
 module Horus.CairoSemantics.Runner
-  ( SemanticsEnv (..)
-  , runT
-  , run
+  ( runT
   , MemoryVariable (..)
   , ConstraintsState (..)
   , makeModel
@@ -9,25 +7,25 @@ module Horus.CairoSemantics.Runner
   )
 where
 
+import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import Control.Monad.State (MonadState, StateT, execStateT)
+import Control.Monad.State (MonadState, StateT, runStateT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
-import Data.Functor.Identity (runIdentity)
+import Data.Functor (($>))
 import Data.List qualified as List (find, tails, union)
-import Data.Map (Map)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
-import Lens.Micro (Lens', at, ix, non, (%~), (<&>), (^.), (^?!))
+import Lens.Micro (Lens', (%~), (<&>))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (<%=))
 
-import Horus.CFGBuild (Label)
-import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, CairoSemanticsT)
-import Horus.Program (ApTracking)
-import Horus.SMTUtil (prime)
-import Horus.Util (tShow)
+import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsT)
+import Horus.ContractInfo (ContractInfo (..))
+import Horus.SMTUtil (builtinEnd, builtinStart, prime, rcBound)
+import Horus.SW.Builtin qualified as Builtin (rcBound)
+import Horus.Util (enumerate, fieldPrime, tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as SMT
 
@@ -70,23 +68,19 @@ emptyConstraintsState =
     , cs_nameCounter = 0
     }
 
-data SemanticsEnv = SemanticsEnv
-  { se_pres :: Map Label (TSExpr Bool)
-  , se_posts :: Map Label (TSExpr Bool)
-  , se_apTracking :: Map Label ApTracking
-  }
-
-newtype ImplT m a = ImplT (ReaderT SemanticsEnv (StateT ConstraintsState m) a)
+newtype ImplT m a
+  = ImplT (ReaderT ContractInfo (ExceptT Text (StateT ConstraintsState m)) a)
   deriving newtype
     ( Functor
     , Applicative
     , Monad
-    , MonadReader SemanticsEnv
+    , MonadReader ContractInfo
     , MonadState ConstraintsState
+    , MonadError Text
     )
 
 instance MonadTrans ImplT where
-  lift = ImplT . lift . lift
+  lift = ImplT . lift . lift . lift
 
 interpret :: forall m a. Monad m => CairoSemanticsT m a -> ImplT m a
 interpret = iterTM exec
@@ -107,15 +101,22 @@ interpret = iterTM exec
         let addrName = "ADDR!" <> tShow freshCount
         csMemoryVariables %= (MemoryVariable name addrName address :)
         cont (SMT.const name)
-  exec (GetPreByCall label cont) = do
-    pres <- asks se_pres
-    cont (pres ^. at label . non SMT.True)
-  exec (GetPostByCall label cont) = do
-    posts <- asks se_posts
-    cont (posts ^. at label . non SMT.True)
+  exec (GetPreByCall inst cont) = do
+    getPreByCall <- asks ci_getPreByCall
+    getPreByCall inst & cont
+  exec (GetPostByCall inst cont) = do
+    getPostByCall <- asks ci_getPostByCall
+    getPostByCall inst & cont
   exec (GetApTracking label cont) = do
-    trackings <- asks se_apTracking
-    cont (trackings ^?! ix label)
+    getApTracking <- asks (\ci -> ci_getApTracking ci)
+    getApTracking label >>= cont
+  exec (GetFunPc label cont) = do
+    getFunPc <- asks (\ci -> ci_getFunPc ci)
+    getFunPc label >>= cont
+  exec (GetBuiltinOffsets label builtin cont) = do
+    getBuiltinOffsets <- asks (\ci -> ci_getBuiltinOffsets ci)
+    getBuiltinOffsets label builtin >>= cont
+  exec (Throw t) = throwError t
 
 debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
@@ -124,9 +125,9 @@ debugFriendlyModel ConstraintsState{..} =
       [ ["# Memory"]
       , memoryPairs
       , ["# Assert"]
-      , map SMT.ppTSExpr cs_asserts
+      , map SMT.showTSExpr cs_asserts
       , ["# Expect"]
-      , map SMT.ppTSExpr cs_expects
+      , map SMT.showTSExpr cs_expects
       ]
  where
   memoryPairs =
@@ -138,10 +139,12 @@ makeModel :: Text -> ConstraintsState -> Text
 makeModel rawSmt ConstraintsState{..} =
   let names =
         concat
-          [ ["prime"]
+          [ map SMT.showTSExpr [prime, rcBound]
           , cs_decls
           , map mv_varName cs_memoryVariables
           , map mv_addrName cs_memoryVariables
+          , map (SMT.showTSExpr . builtinStart) enumerate
+          , map (SMT.showTSExpr . builtinEnd) enumerate
           ]
       decls = map SMT.declareInt names
       feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- tail names]
@@ -152,7 +155,9 @@ makeModel rawSmt ConstraintsState{..} =
         ]
       restrictions =
         concat
-          [ feltRestrictions
+          [ [prime .== fromInteger fieldPrime]
+          , [rcBound .== fromInteger Builtin.rcBound]
+          , feltRestrictions
           , memRestrictions
           , addrDefinitions
           , cs_asserts
@@ -164,20 +169,28 @@ makeModel rawSmt ConstraintsState{..} =
         & Text.intercalate "\n"
  where
   restrictMemTail [] = []
-  restrictMemTail (MemoryVariable var _ addr : rest) =
-    [addr .== mv_addrExpr .-> SMT.const var .== SMT.const mv_varName | MemoryVariable{..} <- rest]
+  restrictMemTail (mv0 : rest) =
+    [ addr0 .== SMT.const mv_addrName .-> mem0 .== SMT.const mv_varName
+    | MemoryVariable{..} <- rest
+    ]
+   where
+    mem0 = SMT.const (mv_varName mv0)
+    addr0 = SMT.const (mv_addrName mv0)
 
-runImplT :: Monad m => SemanticsEnv -> ImplT m a -> m ConstraintsState
-runImplT env (ImplT m) = runReaderT m env & flip execStateT emptyConstraintsState
+runImplT :: Monad m => ContractInfo -> ImplT m a -> m (Either Text ConstraintsState)
+runImplT contractInfo (ImplT m) = do
+  (v, cs) <-
+    runReaderT m contractInfo
+      & runExceptT
+      & flip runStateT emptyConstraintsState
+  pure (v $> cs)
 
-runT :: Monad m => SemanticsEnv -> CairoSemanticsT m a -> m ConstraintsState
-runT env a = do
-  cs <- runImplT env (interpret a)
-  pure cs
-    <&> csMemoryVariables %~ reverse
-    <&> csAsserts %~ reverse
-    <&> csExpects %~ reverse
-    <&> csDecls %~ reverse
-
-run :: SemanticsEnv -> CairoSemanticsL a -> ConstraintsState
-run env = runIdentity . runT env
+runT :: Monad m => ContractInfo -> CairoSemanticsT m a -> m (Either Text ConstraintsState)
+runT contractInfo a = do
+  mbCs <- runImplT contractInfo (interpret a)
+  pure $
+    mbCs
+      <&> csMemoryVariables %~ reverse
+      <&> csAsserts %~ reverse
+      <&> csExpects %~ reverse
+      <&> csDecls %~ reverse
