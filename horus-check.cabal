@@ -16,10 +16,12 @@ common deps
       ImportQualifiedPost
       MultiParamTypeClasses
       OverloadedStrings
+      PatternSynonyms
       RecordWildCards
       ScopedTypeVariables
       StandaloneDeriving
       TupleSections
+      ViewPatterns
     ghc-options:
       -Weverything -Werror
       -Wno-safe -Wno-unsafe -Wno-implicit-prelude
@@ -52,11 +54,13 @@ library
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
+      Horus.ContractInfo
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner
       Horus.Preprocessor.Solvers
       Horus.SMTUtil
+      Horus.SW.Builtin
       Horus.SW.CairoType
       Horus.SW.CairoType.JSON
       Horus.SW.CairoType.Lexer
