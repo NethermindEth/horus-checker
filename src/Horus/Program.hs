@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeApplications #-}
+
 module Horus.Program
   ( Program (..)
   , DebugInfo (..)
@@ -10,7 +12,9 @@ where
 
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
+import Data.Functor ((<&>))
 import Data.Map (Map)
+import Data.Map qualified as Map (keys)
 import Numeric (readHex)
 
 import Horus.Label (Label (..))
@@ -39,7 +43,10 @@ data ILInfo = ILInfo
   }
   deriving (Show)
 
-data FlowTrackingData = FlowTrackingData {ftd_apTracking :: ApTracking}
+data FlowTrackingData = FlowTrackingData
+  { ftd_apTracking :: ApTracking
+  , ftd_references :: [ScopedName]
+  }
   deriving stock (Show)
 
 data ApTracking = ApTracking {at_group :: Int, at_offset :: Int}
@@ -68,7 +75,9 @@ instance FromJSON ILInfo where
 
 instance FromJSON FlowTrackingData where
   parseJSON = withObject "flow_tracking_data" $ \v ->
-    FlowTrackingData <$> v .: "ap_tracking"
+    FlowTrackingData
+      <$> v .: "ap_tracking"
+      <*> (v .: "reference_ids" <&> Map.keys @_ @Int)
 
 instance FromJSON ApTracking where
   parseJSON = withObject "ap_tracking" $ \v ->
