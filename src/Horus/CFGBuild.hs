@@ -19,13 +19,13 @@ import Data.List (sort, union)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
 import Data.Map (Map)
-import Data.Map qualified as Map (elems, fromListWith, mapMaybe, toList, (!))
+import Data.Map qualified as Map (elems, fromListWith, toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 import Lens.Micro (at, ix, non, (^.))
 import Lens.Micro.GHC ()
 
-import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
+import Horus.ContractDefinition (Checks (..))
 import Horus.Instruction
   ( Instruction (..)
   , LabeledInst
@@ -35,9 +35,9 @@ import Horus.Instruction
   , jumpDestination
   )
 import Horus.Label (Label (..), moveLabel)
-import Horus.Program (DebugInfo (..), ILInfo (..), Identifiers, Program (..))
+import Horus.Program (Identifiers)
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
-import Horus.Util (Box (..), appendList, safeLast, topmostStepFT, whenJust)
+import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
 import SimpleSMT.Typed (TSExpr)
 import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
@@ -77,18 +77,12 @@ instance Monad m => MonadError Text (CFGBuildT m) where
       Just (Box (Throw t)) -> handler t
       _ -> m
 
-buildCFG :: ContractDefinition -> [LabeledInst] -> CFGBuildT m ()
-buildCFG cd labeledInsts = do
+buildCFG ::
+  Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> CFGBuildT m ()
+buildCFG checks identifiers getFunPc labeledInsts = do
   buildFrame labeledInsts identifiers
-  let retsByFun = mapFunsToRets funByLabel labeledInsts
-  addAssertions retsByFun (cd_checks cd) identifiers
- where
-  identifiers = p_identifiers (cd_program cd)
-  funByLabel = Map.mapMaybe ilInfoToFun (di_instructionLocations debugInfo)
-  debugInfo = p_debugInfo (cd_program cd)
-  ilInfoToFun ilInfo = do
-    name <- safeLast (il_accessibleScopes ilInfo)
-    getFunctionPc (identifiers Map.! name)
+  retsByFun <- mapFunsToRets getFunPc labeledInsts
+  addAssertions retsByFun checks identifiers
 
 newtype Segment = Segment (NonEmpty LabeledInst)
   deriving (Show)
@@ -173,14 +167,10 @@ addAssertions retsByFun checks identifiers = do
  Note, there might be no rets in a function, for example, when it ends with an endless
  loop.
 -}
-mapFunsToRets :: Map Label Label -> [LabeledInst] -> Map Label [Label]
-mapFunsToRets funByLabel rows =
-  Map.fromListWith
-    (++)
-    [ (funByLabel Map.! pc, [pc])
-    | (pc, inst) <- rows
-    , isRet inst
-    ]
+mapFunsToRets :: (Label -> CFGBuildT m Label) -> [LabeledInst] -> CFGBuildT m (Map Label [Label])
+mapFunsToRets getFunPc rows = do
+  retAndFun <- sequenceA [fmap (,[pc]) (getFunPc pc) | (pc, inst) <- rows, isRet inst]
+  pure (Map.fromListWith (++) retAndFun)
 
 isRet :: Instruction -> Bool
 isRet Instruction{i_opCode = Ret} = True

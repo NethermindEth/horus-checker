@@ -5,7 +5,7 @@ import Data.String (IsString (..))
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified as Text (intercalate, splitOn)
 
-newtype ScopedName = ScopedName {sn_Path :: [Text]} deriving (Eq, Ord)
+newtype ScopedName = ScopedName {sn_path :: [Text]} deriving (Eq, Ord)
 
 fromText :: Text -> ScopedName
 fromText scope = ScopedName (Text.splitOn "." scope)
@@ -17,7 +17,7 @@ instance Show ScopedName where
   show (ScopedName path) = unpack (Text.intercalate "." path)
 
 instance Semigroup ScopedName where
-  lhs <> rhs = ScopedName (sn_Path lhs ++ sn_Path rhs)
+  lhs <> rhs = ScopedName (sn_path lhs ++ sn_path rhs)
 
 instance FromJSONKey ScopedName where
   fromJSONKey = FromJSONKeyText fromText

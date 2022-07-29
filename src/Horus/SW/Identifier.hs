@@ -18,11 +18,13 @@ import Horus.SW.CairoType.JSON ()
 import Horus.SW.ScopedName (ScopedName)
 
 data Member = Member {me_cairoType :: CairoType, me_offset :: Int}
+  deriving stock (Show)
 data Struct = Struct
   { st_fullName :: ScopedName
   , st_members :: Map Text Member
   , st_size :: Int
   }
+  deriving stock (Show)
 data Function = Function {fu_pc :: Label, fu_decorators :: [Text]}
 
 data Identifier
