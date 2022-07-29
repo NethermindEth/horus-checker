@@ -13,8 +13,7 @@ import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, cons, intercalate, length, take)
-import Data.Text qualified as TextText
+import Data.Text qualified as Text (concat, cons, intercalate, length)
 import Lens.Micro (ix, (^.))
 
 import Horus.CFGBuild (ArcCondition (..), Label (..))
@@ -27,6 +26,7 @@ import Horus.SW.Identifier
   , getLabelPc
   )
 import Horus.SW.ScopedName (ScopedName (..))
+import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, (.&&), (.==))
 import SimpleSMT.Typed qualified as SMT (and)
 
@@ -77,13 +77,11 @@ descrOfOracle oracle =
 nameOfModule :: Identifiers -> Module -> Text
 nameOfModule idents (Module _ post prog oracle) =
   case beginOfModule prog of
-    Nothing -> "empty: " <> (Text.take preDigestLen . TextText.pack . show) post
+    Nothing -> "empty: " <> tShow post
     Just label ->
       let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
           noPrefix = Text.length prefix == 0
        in Text.concat [prefix, if noPrefix then "" else ".", labelsDigest, descrOfOracle oracle]
- where
-  preDigestLen = 64 :: Int
 
 type ModuleL = WriterT (DList Module) (Reader (Set Label))
 
