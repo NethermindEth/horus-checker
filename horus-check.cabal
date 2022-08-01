@@ -103,7 +103,6 @@ executable horus-check
       optparse-applicative,
       pretty-simple,
       text,
-      z3,
 
 executable horus-disasm
     import:                  deps
