@@ -13,6 +13,7 @@ import Control.Monad.Free.Class (MonadFree)
 import Control.Monad.Trans.Free.Church (F, liftF)
 import Data.Foldable (foldlM)
 import Data.Function ((&))
+import Data.Functor ((<&>))
 import Data.List (sort)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
@@ -26,7 +27,7 @@ import Z3.Base (Goal, Tactic)
 import Z3.Monad (Z3)
 import Z3.Monad qualified as Z3
 
-import Horus.Util (toSignedFelt)
+import Horus.Util (maybeToError, toSignedFelt)
 import Horus.Z3Util (goalToSExpr, sexprToGoal)
 
 data PreprocessorF a
@@ -90,28 +91,29 @@ getConsts model = do
   constDecls <- runZ3 $ Z3.getConsts model
   for constDecls $ \constDecl -> do
     name <- runZ3 $ Z3.getSymbolString =<< Z3.getDeclName constDecl
-    mbVal <- runZ3 $ Z3.getConstInterp model constDecl
-    case mbVal of
-      Nothing ->
-        throwError $
-          "The model lacks interpretation of \""
+    mbValue <- runZ3 $ Z3.getConstInterp model constDecl
+    value <-
+      maybeToError
+        ( "The model lacks interpretation of \""
             <> pack name
             <> "\""
-      Just val -> do
-        intVal <- runZ3 $ Z3.getInt val
-        pure (pack name, toSignedFelt intVal)
+        )
+        mbValue
+    intValue <- runZ3 $ Z3.getInt value
+    pure (pack name, toSignedFelt intValue)
 
 interpConst :: Z3.Model -> Text -> PreprocessorL Integer
 interpConst model name = do
   var <- runZ3 $ Z3.mkIntVar =<< Z3.mkStringSymbol (unpack name)
   mbValue <- runZ3 $ Z3.modelEval model var True
-  case mbValue of
-    Just value -> runZ3 $ Z3.getInt value
-    Nothing ->
-      throwError $
-        "The model lacks interpretation of \""
+  value <-
+    maybeToError
+      ( "The model lacks interpretation of \""
           <> name
           <> "\""
+      )
+      mbValue
+  runZ3 $ Z3.getInt value
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text)
 data Model = Model
@@ -196,7 +198,5 @@ z3ModelToHorusModel model =
       pure $ fromList addrValueList
  where
   parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
-  parseRegVar (name, value) = do
-    case parseRegKind name of
-      Nothing -> Nothing
-      Just regKind -> Just (regKind, name, toSignedFelt value)
+  parseRegVar (name, value) =
+    parseRegKind name <&> (,name,toSignedFelt value)
