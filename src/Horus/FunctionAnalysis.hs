@@ -62,6 +62,7 @@ import Horus.Program
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
 import Horus.Util (invert, safeLast)
+import Horus.SW.Std (stdFuncs, FuncSpec (fs_name))
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -193,6 +194,14 @@ labelNamesOfPc idents lblpc =
   , pc == lblpc
   ]
 
+funcName :: Identifiers -> Label -> Maybe ScopedName
+funcName idents lblpc =
+  let n = [ name | (name, ident) <- Map.toList idents
+              , Just pc <- [getFunctionPc ident]
+              , pc == lblpc
+             ] in
+  if null n then Nothing else Just (head n)
+
 isAnnotated :: Identifiers -> Checks -> Label -> Bool
 isAnnotated idents checks =
   any
@@ -212,7 +221,7 @@ sizeOfCall = 2
 
 inlinableFuns :: [LabeledInst] -> Program -> Checks -> Map.Map Label [LabeledInst]
 inlinableFuns rows prog checks =
-  Map.filterWithKey (\f _ -> f `elem` inlinable && isUnannotated f) functions
+  Map.filterWithKey (\f _ -> f `elem` inlinable && isUnannotated f && maybe True (\fname -> fname `notElem` map fs_name stdFuncs) (funcName idents f)) functions
  where
   idents = p_identifiers prog
   functions = functionsOf rows prog
