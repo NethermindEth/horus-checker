@@ -33,8 +33,8 @@ interpret = iterTM exec . runGlobalT
   exec :: GlobalF m (ImplT m a) -> ImplT m a
   exec (RunCFGBuildT builder cont) = do
     lift (CFGBuild.runImplT (CFGBuild.interpret builder)) >>= liftEither >>= cont
-  exec (RunCairoSemanticsT env builder cont) = do
-    lift (CairoSemantics.runT env builder) >>= liftEither >>= cont
+  exec (RunCairoSemanticsT initStack env builder cont) = do
+    lift (CairoSemantics.runT initStack env builder) >>= liftEither >>= cont
   exec (AskConfig cont) = ask >>= cont
   exec (RunPreprocessor penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)

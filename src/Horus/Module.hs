@@ -66,7 +66,7 @@ labelNamesOfPc idents lblpc =
 normalizedName :: [ScopedName] -> (Text, Text)
 normalizedName scopedNames =
   let names :: [[Text]]
-      names = map sn_Path scopedNames
+      names = map sn_path scopedNames
       scopes = map (Text.intercalate "." . tail . init) names
       labels = map last names
    in (Text.concat scopes, summarizeLabels labels)

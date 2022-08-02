@@ -11,14 +11,12 @@ where
 import Control.Arrow qualified as Bifunc
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import Control.Monad.State (MonadState (get), StateT, execStateT, modify)
+import Control.Monad.State (MonadState (get), StateT (runStateT), modify)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails, union)
-import Data.Map (Map)
-import Data.Set (Set)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
@@ -26,17 +24,11 @@ import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (<%=))
 
 import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsT)
+import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.SMTUtil (builtinEnd, builtinStart, prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.Util (enumerate, fieldPrime, tShow)
-import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, CairoSemanticsT)
-import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
-import Horus.Label (Label)
-import Horus.Program (ApTracking)
-import Horus.SMTUtil (prime)
-import Horus.SW.ScopedName (ScopedName)
-import Horus.Util (tShow)
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as SMT
 
@@ -124,13 +116,13 @@ interpret = iterTM exec
     getPostByCall <- asks ci_getPostByCall
     getPostByCall inst & cont
   exec (GetApTracking label cont) = do
-    trackings <- asks se_apTracking
-    cont (trackings ^?! ix label)
+    getApTracking <- asks (\ci -> ci_getApTracking ci)
+    getApTracking label >>= cont
   exec (IsInlinable label cont) = do
-    inlinableFs <- asks se_inlinableFs
+    inlinableFs <- asks ci_inlinableFs
     cont (label `elem` inlinableFs)
   exec (GetStackTraceDescr cont) = do
-    fNames <- asks se_functionNames
+    fNames <- asks ci_functionNames
     get >>= cont . digestOfCallStack fNames . fst
   exec (GetOracle cont) = do
     get >>= cont . stackTrace . fst
@@ -225,6 +217,3 @@ runT initStack contractInfo a = do
       <&> csAsserts %~ reverse
       <&> csExpects %~ reverse
       <&> csDecls %~ reverse
-
-run :: CallStack -> SemanticsEnv -> CairoSemanticsL a -> ExecutionState
-run initStack env = runIdentity . runT initStack env
