@@ -217,7 +217,7 @@ inlinableFuns rows prog checks =
   idents = p_identifiers prog
   functions = functionsOf rows prog
   isUnannotated = not . isAnnotated idents checks
-  localCycles = Map.map (filter isUnannotated . cyclicVerts . jumpgraph)
+  localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls
   inlinable =
     Map.keys . Map.filterWithKey (isAcylic . cyclicVerts $ callgraph functions) $

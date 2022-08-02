@@ -6,8 +6,10 @@ import Control.Monad.Except (MonadError (..))
 import Data.Foldable (asum)
 import Data.Function ((&))
 import Data.Functor ((<&>))
-import Data.Map qualified as Map ((!), (!?))
+import Data.Map (Map)
+import Data.Map qualified as Map (fromList, toList, (!), (!?))
 import Data.Maybe (fromMaybe)
+import Data.Set (Set)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
@@ -28,10 +30,12 @@ data ContractInfo = ContractInfo
   , ci_getPostByCall :: LabeledInst -> ScopedTSExpr Bool
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_identifiers :: Identifiers
+  , ci_inlinableFs :: Set Label
+  , ci_functionNames :: Map Label ScopedName
   }
 
-mkContractInfo :: ContractDefinition -> ContractInfo
-mkContractInfo cd =
+mkContractInfo :: ContractDefinition -> Set Label -> ContractInfo
+mkContractInfo cd inlinable =
   ContractInfo
     { ci_getFunPc = getFunPc
     , ci_getBuiltinOffsets = getBuiltinOffsets
@@ -39,11 +43,17 @@ mkContractInfo cd =
     , ci_getPostByCall = getPostByCall
     , ci_getApTracking = getApTracking
     , ci_identifiers = identifiers
+    , ci_inlinableFs = inlinable
+    , ci_functionNames = pcToFun
     }
  where
   debugInfo = p_debugInfo (cd_program cd)
   identifiers = p_identifiers (cd_program cd)
   instructionLocations = di_instructionLocations debugInfo
+  pcToFun =
+    Map.fromList
+      [ (pc, fun) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
+      ]
 
   getFunName :: Label -> Maybe ScopedName
   getFunName l = do
