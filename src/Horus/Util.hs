@@ -20,6 +20,7 @@ import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map (Map, fromListWith, toList)
 import Data.Text (Text, pack)
+import Data.Text qualified as Text (commonPrefixes)
 
 fieldPrime :: Integer
 fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1

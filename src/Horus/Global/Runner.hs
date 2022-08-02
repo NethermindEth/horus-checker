@@ -37,8 +37,8 @@ interpret = iterTM exec . runGlobalT
   exec :: GlobalF m (ImplT m a) -> ImplT m a
   exec (RunCFGBuildT builder cont) = do
     lift (CFGBuild.runImplT (CFGBuild.interpret builder)) >>= liftEither >>= cont
-  exec (RunCairoSemanticsT env builder cont) = do
-    lift (CairoSemantics.runT env builder) >>= liftEither >>= cont
+  exec (RunCairoSemanticsT initStack env builder cont) = do
+    lift (CairoSemantics.runT initStack env builder) >>= liftEither >>= cont
   exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
   exec (AskConfig cont) = get >>= cont
   exec (SetConfig conf cont) = put conf >> cont
