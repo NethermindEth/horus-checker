@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wno-redundant-constraints #-}
+
 module Horus.Global
   ( GlobalT (..)
   , GlobalF (..)
@@ -7,23 +9,23 @@ module Horus.Global
   )
 where
 
-import Control.Monad (ap, forM, guard, when)
+import Control.Monad (forM, guard, when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_)
 import Data.Function ((&))
 import Data.List ((\\))
-import Data.Map qualified as Map (fromList, keys, map, toList)
+import Data.Map qualified as Map (keys, toList)
 import Data.Maybe (mapMaybe)
 import Data.Set (Set, fromList)
 import Data.Set qualified as Set
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
-import Lens.Micro (at, non, (<&>), (^.))
+import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildT, Label, LabeledInst, buildCFG)
+import Horus.CFGBuild (CFGBuildT (), Label, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
 import Horus.CairoSemantics.Runner
@@ -34,14 +36,15 @@ import Horus.CairoSemantics.Runner
   , makeModel
   )
 import Horus.CallStack (CallStack, initialWithFunc)
-import Horus.ContractDefinition (ContractDefinition (..), cPostConds, cPreConds, cdChecks)
+import Horus.ContractDefinition (ContractDefinition (..), cPreConds, cdChecks)
+import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_identifiers), mkContractInfo)
 import Horus.FunctionAnalysis (inlinableFuns)
-import Horus.Instruction (callDestination, labelInsructions, readAllInstructions)
-import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
+import Horus.Instruction (labelInsructions, readAllInstructions)
+import Horus.Module (Module (m_calledF), nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program (Identifiers, Program (..))
+import Horus.Program (Program (..))
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.ScopedTSExpr (emptyScopedTSExpr, isEmptyScoped)
 import Horus.Util (tShow, whenJust)
@@ -56,7 +59,7 @@ data Config = Config
 
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
-  | forall b. RunCairoSemanticsT CallStack SemanticsEnv (CairoSemanticsT m b) (ExecutionState -> a)
+  | forall b. RunCairoSemanticsT CallStack ContractInfo (CairoSemanticsT m b) (ExecutionState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | AskConfig (Config -> a)
   | SetConfig Config a
@@ -84,7 +87,7 @@ liftF' = GlobalT . liftF
 runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
 runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
 
-runCairoSemanticsT :: CallStack -> SemanticsEnv -> CairoSemanticsT m a -> GlobalT m ExecutionState
+runCairoSemanticsT :: CallStack -> ContractInfo -> CairoSemanticsT m a -> GlobalT m ExecutionState
 runCairoSemanticsT initStack env smt2Builder = liftF' (RunCairoSemanticsT initStack env smt2Builder id)
 
 runModuleL :: ModuleL a -> GlobalT m [Module]
@@ -120,8 +123,9 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalT m ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeCFG :: [Label] -> ContractDefinition -> [LabeledInst] -> GlobalT m CFG
-makeCFG inlinable cd labeledInsts = runCFGBuildT (buildCFG (fromList inlinable) cd labeledInsts)
+makeCFG :: [Label] -> ContractDefinition -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
+makeCFG inlinable cd labelToFun labeledInsts =
+  runCFGBuildT (buildCFG (fromList inlinable) cd labelToFun labeledInsts)
 
 makeModules :: (Label -> Bool) -> ContractDefinition -> CFG -> GlobalT m [Module]
 makeModules allow cd cfg = pure (runModuleL (traverseCFG sources cfg))
@@ -134,7 +138,7 @@ makeModules allow cd cfg = pure (runModuleL (traverseCFG sources cfg))
     let pre = preConds ^. at name . non SMT.True
     pure (pc, pre)
 
-extractConstraints :: SemanticsEnv -> Module -> GlobalT m ExecutionState
+extractConstraints :: ContractInfo -> Module -> GlobalT m ExecutionState
 extractConstraints env mdl =
   runCairoSemanticsT (initialWithFunc $ m_calledF mdl) env $ encodeSemantics mdl
 
@@ -203,19 +207,36 @@ checkMathsat contractInfo m = do
   getPre = ci_getPreByCall contractInfo
 
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
-solveSMT smtPrefix cs = do
+solveSMT smtPrefix cs@(_, cs) = do
   Config{..} <- askConfig
   runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
   query = makeModel smtPrefix es
-  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables es)
+  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
+
+additionalResults :: Monad m => [Label] -> ContractDefinition -> [LabeledInst] -> GlobalT m [SolvingInfo]
+additionalResults inlinable cd labeledInsts =
+  concat
+    <$> forM
+      inlinable
+      ( \f ->
+          let inlineSet = inlinable \\ [f]
+              inlineEnv = mkContractInfo cd $ fromList inlineSet
+           in do
+                cfg <- makeCFG inlineSet cd (ci_getFunPc inlineEnv) labeledInsts
+                modules <- makeModules (== f) cd cfg
+                for modules . solveModule inlineEnv $ cd_rawSmt cd
+      )
 
 solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
+      inlinable = Map.keys $ inlinableFuns labeledInsts (cd_program cd) (cd_checks cd)
+      contractInfo = mkContractInfo cd $ fromList inlinable
+      getFunPc = ci_getFunPc contractInfo
   verbosePrint labeledInsts
-  cfg <- makeCFG checks identifiers getFunPc labeledInsts
+  cfg <- makeCFG inlinable cd getFunPc labeledInsts
   verbosePrint cfg
   modules <- makeModules cd cfg
   for modules (solveModule contractInfo (cd_rawSmt cd))

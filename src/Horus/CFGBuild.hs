@@ -17,11 +17,7 @@ import Data.Foldable (forM_, for_, toList)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
 import Data.Map (Map, (!))
-import Data.Map qualified as Map
-  ( fromListWith
-  , toList
-  , (!)
-  )
+import Data.Map qualified as Map (fromListWith, toList)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -47,17 +43,10 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), moveLabel)
-import Horus.Program
-  ( Program (..)
-  )
+import Horus.Program (Program (..))
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.ScopedTSExpr (ScopedTSExpr, emptyScopedTSExpr)
-import Horus.Util
-  ( Box (..)
-  , appendList
-  , topmostStepFT
-  , whenJust
-  )
+import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -95,10 +84,11 @@ instance Monad m => MonadError Text (CFGBuildT m) where
       Just (Box (Throw t)) -> handler t
       _ -> m
 
-buildCFG :: Set Label -> ContractDefinition -> [LabeledInst] -> CFGBuildT m ()
-buildCFG inlinable cd labeledInsts = do
+buildCFG ::
+  Set Label -> ContractDefinition -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> CFGBuildT m ()
+buildCFG inlinable cd getFunPc labeledInsts = do
   buildFrame inlinable labeledInsts $ cd_program cd
-  let retsByFun = flip mapFunsToRets labeledInsts . pcToFunOfProg $ cd_program cd
+  retsByFun <- mapFunsToRets getFunPc labeledInsts
   addAssertions inlinable retsByFun (cd_checks cd) (cd_program cd)
 
 newtype Segment = Segment (NonEmpty LabeledInst)
