@@ -175,10 +175,9 @@ encodeSemantics m@Module{..} = do
   assert (fp .<= apStart)
   assert (prepare' apStart fp m_pre)
   expect (prepare' apEnd fp m_post)
-  for_ m_prog $ \inst -> do
-    mkInstructionConstraints m_jnzOracle inst
+  for_ m_prog $ mkInstructionConstraints m_jnzOracle
   whenJust (nonEmpty m_prog) $ \neInsts -> do
-    mkApConstraints fp apEnd neInsts
+    mkApConstraints apEnd neInsts
     mkBuiltinConstraints fp neInsts
 
 withExecutionCtx :: CallEntry -> FT CairoSemanticsF m b -> FT CairoSemanticsF m b
@@ -207,9 +206,9 @@ mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
             canInline <- isInlinable $ uncheckedCallDestination lInst
             push stackFrame
             unless canInline $ do
-              preparedPre <- getPreByCall pc >>= prepare calleePc calleeFp
+              preparedPre <- getPreByCall lInst >>= prepare calleePc calleeFp
               pop
-              preparedPost <- getPostByCall pc >>= prepare nextPc calleeFp
+              preparedPost <- getPostByCall lInst >>= prepare nextPc calleeFp
               expect preparedPre
               assert preparedPost
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
@@ -221,8 +220,8 @@ mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
         Nothing -> pure ()
     Ret -> pop
 
-mkApConstraints :: TSExpr Integer -> TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
-mkApConstraints fp apEnd insts = do
+mkApConstraints :: TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
+mkApConstraints apEnd insts = do
   forM_ (zip (toList insts) (NonEmpty.tail insts)) $ \(lInst@(pc, inst), (pcNext, _)) -> do
     at1 <- getApTracking pc
     at2 <- getApTracking pcNext
@@ -234,12 +233,14 @@ mkApConstraints fp apEnd insts = do
       when (isRet inst) pop
       newTrace <- getStackTraceDescr
       ap2 <- encodeApTracking newTrace at2
+      fp <- getFp
       getApIncrement fp lInst >>= \case
         Just apIncrement -> assert (ap1 + apIncrement .== ap2)
         Nothing | not canInline -> assert (ap1 .< ap2)
         Nothing -> pure ()
   trace <- getStackTraceDescr
   lastAp <- encodeApTracking trace =<< getApTracking lastPc
+  fp <- getFp
   getApIncrement fp lastInst >>= \case
     Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
     Nothing -> assert (lastAp .< apEnd)
