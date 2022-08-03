@@ -3,3 +3,5 @@
 dist-newstyle/
 **/__pycache__
 tests/resources/golden/**.out
+compile
+z3-4.8.9-x64-ubuntu-16.04
