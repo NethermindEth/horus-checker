@@ -61,6 +61,7 @@ import Horus.Program
   )
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
+import Horus.SW.Std (FuncSpec (fs_name), stdFuncs)
 import Horus.Util (invert, safeLast)
 
 data CG = CG
@@ -212,11 +213,12 @@ sizeOfCall = 2
 
 inlinableFuns :: [LabeledInst] -> Program -> Checks -> Map.Map Label [LabeledInst]
 inlinableFuns rows prog checks =
-  Map.filterWithKey (\f _ -> f `elem` inlinable && isUnannotated f) functions
+  Map.filterWithKey (\f _ -> f `elem` inlinable && isUnannotated f && isAnnotatedLater f) functions
  where
   idents = p_identifiers prog
   functions = functionsOf rows prog
   isUnannotated = not . isAnnotated idents checks
+  isAnnotatedLater f = maybe True (`notElem` map fs_name stdFuncs) (fNameOfPc idents f)
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls
   inlinable =
