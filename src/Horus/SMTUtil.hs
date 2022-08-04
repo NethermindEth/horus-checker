@@ -56,7 +56,10 @@ withSolver solverName args =
     SimpleSMT.stop
 
 builtinCond :: TSExpr Integer -> Builtin -> TSExpr Bool
+builtinCond _ptr Pedersen = SMT.True
 builtinCond ptr RangeCheck = SMT.leq [0, memory ptr, rcBound - 1]
+builtinCond _ptr Ecdsa = SMT.True
+builtinCond _ptr Bitwise = SMT.True
 
 builtinStartName :: Builtin -> Text
 builtinStartName = (<> "!start") . Builtin.name
