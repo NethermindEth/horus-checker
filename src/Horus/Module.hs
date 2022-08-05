@@ -25,22 +25,20 @@ import Horus.CallStack
   , top
   )
 import Horus.FunctionAnalysis (FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall)
+import Horus.Expr (Expr, Ty (..), (.&&), (.==))
+import Horus.Expr qualified as Expr (and)
+import Horus.Expr.SMT (pprExpr)
+import Horus.Expr.Vars (ap, fp)
 import Horus.Instruction (LabeledInst)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
-import Horus.SMTUtil (ap, fp)
-import Horus.SW.Identifier
-  ( getFunctionPc
-  , getLabelPc
-  )
+import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.Util (tShow)
-import SimpleSMT.Typed (TSExpr, (.&&), (.==))
-import SimpleSMT.Typed qualified as SMT (and)
 
 data Module = Module
-  { m_pre :: TSExpr Bool
-  , m_post :: TSExpr Bool
+  { m_pre :: Expr TBool
+  , m_post :: Expr TBool
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
@@ -87,7 +85,7 @@ descrOfOracle oracle =
 nameOfModule :: Identifiers -> Module -> Text
 nameOfModule idents (Module _ post prog oracle _ _) =
   case beginOfModule prog of
-    Nothing -> "empty: " <> tShow post
+    Nothing -> "empty: " <> pprExpr post
     Just label ->
       let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
           noPrefix = Text.length prefix == 0
