@@ -56,7 +56,8 @@ interpret = iterM exec . runGlobalL
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
   exec (Log logger cont) = do
-    _ <- lift $ Logger.runImpl (Logger.interpret logger)
+    (_, vs) <- lift $ Logger.runImpl (Logger.interpret logger)
+    liftIO $ mapM_ print vs
     cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont

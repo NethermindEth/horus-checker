@@ -53,7 +53,7 @@ data Config = Config
   , cfg_outputOptimizedQueries :: Maybe FilePath
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
-  }
+  } deriving Show
 
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
@@ -250,14 +250,21 @@ solveContract = do
  where
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
 
-logDebug :: Show a => a -> GlobalL ()
-logDebug = liftF' . flip Log () . L.logDebug
+logM :: (a -> L.LogT m ()) -> a -> GlobalT m ()
+logM lg v
+  = do
+      config <- askConfig
+      when (cfg_verbose config) $ do
+        liftF' $ Log (lg v) ()
 
-logInfo :: Show a => a -> GlobalL ()
-logInfo = liftF' . flip Log () . L.logInfo
+logDebug :: Show a => a -> GlobalT m ()
+logDebug = logM L.logDebug
 
-logError :: Show a => a -> GlobalL ()
-logError = liftF' . flip Log () . L.logError
+logInfo :: Text -> GlobalT m ()
+logInfo = logM L.logInfo
 
-logWarning :: Show a => a -> GlobalL ()
-logWarning = liftF' . flip Log () . L.logWarning
+logError :: Show a => a -> GlobalT m ()
+logError = logM L.logError
+
+logWarning :: Show a => a -> GlobalT m ()
+logWarning = logM L.logWarning
