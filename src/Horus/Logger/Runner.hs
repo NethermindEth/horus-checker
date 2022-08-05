@@ -8,40 +8,43 @@ module Horus.Logger.Runner
 where
 
 import Colog.Core
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import Control.Monad.Trans (MonadTrans (..))
+import Control.Monad.State (MonadState, StateT (..), modify')
+import Control.Monad.Trans.Class (MonadTrans)
 import Control.Monad.Trans.Free.Church (iterTM)
-import Data.Text (Text)
+import Data.Foldable (toList)
+import Data.Sequence (Seq, (|>))
+import Data.Text (Text, filter, unpack)
+import Prelude hiding (filter)
 
 import Horus.Logger (LogF (..), LogT (..))
 
 data Message
   = Message Severity Text
 
-newtype ImplT m a = ImplT (ReaderT (LogAction (ImplT m) Message) m a)
-  deriving newtype
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadReader (LogAction (ImplT m) Message)
-    )
+instance Show Message where
+  show (Message s t) = "[" <> show s <> "] - " <> t'
+    where
+      t' = unpack $ filter (/= '\"') t
 
-instance MonadTrans ImplT where
-  lift = ImplT . lift
 
-type WithLog env m = (MonadReader env m, HasLog env Message m)
+newtype ImplT m a
+  = ImplT (StateT (Seq Message) m a)
+    deriving newtype ( Functor
+                     , Applicative
+                     , Monad
+                     , MonadTrans
+                     , MonadState (Seq Message)
+                     )
 
-logMsg :: forall env m. WithLog env m => Message -> m ()
-logMsg msg =
-  do
-    LogAction lg <- asks getLogAction
-    lg msg
 
-runImplT :: Monad m => ImplT m a -> m a
-runImplT (ImplT m) = runReaderT m mempty
+runImplT :: Functor m => ImplT m a -> m (a, [Message])
+runImplT (ImplT m)
+  = f <$> flip runStateT mempty m
+    where
+      f (x, y) = (x , toList y)
 
 interpret :: Monad m => LogT m a -> ImplT m a
 interpret = iterTM exec . runLogT
  where
   exec (LogF sev txt next) =
-    logMsg (Message sev txt) >> next
+    modify' (|> (Message sev txt)) >> next
