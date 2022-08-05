@@ -21,6 +21,7 @@ import Data.Map qualified as Map (fromListWith, toList)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Some (Some (..))
 import Data.Text (Text)
 import Lens.Micro (at, ix, (^.))
 import Lens.Micro.GHC ()
@@ -34,6 +35,8 @@ import Horus.FunctionAnalysis
   , programLabels
   , sizeOfCall
   )
+import Horus.Expr (Expr, Ty (..))
+import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Instruction
   ( Instruction (..)
   , LabeledInst
@@ -45,9 +48,7 @@ import Horus.Instruction
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Program (..))
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
-import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
-import SimpleSMT.Typed (TSExpr)
-import SimpleSMT.Typed qualified as SMT (TSExpr (True))
+import Horus.Util (appendList, topmostStepFT, whenJust)
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -71,7 +72,7 @@ addVertex l = liftF' (AddVertex l ())
 addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> FInfo -> CFGBuildT m ()
 addArc lFrom lTo insts test f = liftF' (AddArc lFrom lTo insts test f ())
 
-addAssertion :: Label -> TSExpr Bool -> CFGBuildT m ()
+addAssertion :: Label -> Expr TBool -> CFGBuildT m ()
 addAssertion l assertion = liftF' (AddAssertion l assertion ())
 
 throw :: Text -> CFGBuildT m a
@@ -82,7 +83,7 @@ instance Monad m => MonadError Text (CFGBuildT m) where
   catchError m handler = do
     step <- lift (topmostStepFT (runCFGBuildT m))
     case step of
-      Just (Box (Throw t)) -> handler t
+      Just (Some (Throw t)) -> handler t
       _ -> m
 
 buildCFG ::

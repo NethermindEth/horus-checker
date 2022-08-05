@@ -15,17 +15,31 @@ import Control.Monad.Reader (ReaderT (..), ask, local)
 import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_, toList, traverse_)
+import Data.Functor ((<&>))
 import Data.Functor.Identity (Identity)
 import Data.List (tails)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
-import Data.Set qualified as Set (toList)
-import Data.Text (Text, unpack)
-import SimpleSMT qualified as SMT (SExpr (..), const)
+import Data.Set qualified as Set (member)
+import Data.Text (Text)
 
 import Horus.CallStack as CS (CallEntry, callerOfRoot)
+import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
+import Horus.Expr qualified as Expr
+import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
+import Horus.Expr.Vars
+  ( builtinAligned
+  , builtinConstraint
+  , builtinEnd
+  , builtinStart
+  , memory
+  , prime
+  , regToVar
+  , pattern Memory
+  )
+import Horus.Expr.Vars qualified as Vars (ap, fp)
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -42,42 +56,25 @@ import Horus.Instruction
 import Horus.Label (Label (..), tShowLabel)
 import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
-import Horus.SMTUtil
-  ( builtinAligned
-  , builtinConstraint
-  , builtinEnd
-  , builtinStart
-  , existsFelt
-  , gatherLogicalVariables
-  , memory
-  , prime
-  , regToTSExpr
-  , suffixLogicalVariables
-  , pattern Memory
-  )
-import Horus.SMTUtil qualified as Util (ap, fp)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
-import SimpleSMT.Typed (TSExpr (Mod, (:+)), (.&&), (.->), (./=), (.<), (.<=), (.==), (.||))
-import SimpleSMT.Typed qualified as TSMT
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
   , mv_addrName :: Text
-  , mv_addrExpr :: TSExpr Integer
+  , mv_addrExpr :: Expr TFelt
   }
   deriving (Show)
 
 data CairoSemanticsF a
-  = Assert' (TSExpr Bool) a
-  | Expect' (TSExpr Bool) a
-  | CheckPoint ([MemoryVariable] -> TSExpr Bool) a
-  | DeclareFelt Text (TSExpr Integer -> a)
-  | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
-  | DeclareLocalMem (TSExpr Integer) (MemoryVariable -> a)
-  | GetPreByCall LabeledInst (TSExpr Bool -> a)
-  | GetPostByCall LabeledInst (TSExpr Bool -> a)
+  = Assert' (Expr TBool) a
+  | Expect' (Expr TBool) a
+  | CheckPoint ([MemoryVariable] -> Expr TBool) a
+  | DeclareMem (Expr TFelt) (Expr TFelt -> a)
+  | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
+  | GetPreByCall LabeledInst (Expr TBool -> a)
+  | GetPostByCall LabeledInst (Expr TBool -> a)
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
@@ -93,28 +90,25 @@ data CairoSemanticsF a
 type CairoSemanticsT = FT CairoSemanticsF
 type CairoSemanticsL = CairoSemanticsT Identity
 
-assert' :: TSExpr Bool -> CairoSemanticsT m ()
+assert' :: Expr TBool -> CairoSemanticsT m ()
 assert' a = liftF (Assert' a ())
 
-expect' :: TSExpr Bool -> CairoSemanticsT m ()
+expect' :: Expr TBool -> CairoSemanticsT m ()
 expect' a = liftF (Expect' a ())
 
-checkPoint :: ([MemoryVariable] -> TSExpr Bool) -> CairoSemanticsT m ()
+checkPoint :: ([MemoryVariable] -> Expr TBool) -> CairoSemanticsT m ()
 checkPoint a = liftF (CheckPoint a ())
 
-declareFelt :: Text -> CairoSemanticsT m (TSExpr Integer)
-declareFelt t = liftF (DeclareFelt t id)
-
-declareMem :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
+declareMem :: Expr TFelt -> CairoSemanticsT m (Expr TFelt)
 declareMem address = liftF (DeclareMem address id)
 
-getPreByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
+getPreByCall :: LabeledInst -> CairoSemanticsT m (Expr TBool)
 getPreByCall inst = liftF (GetPreByCall inst id)
 
-getPostByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
+getPostByCall :: LabeledInst -> CairoSemanticsT m (Expr TBool)
 getPostByCall inst = liftF (GetPostByCall inst id)
 
-declareLocalMem :: TSExpr Integer -> CairoSemanticsT m MemoryVariable
+declareLocalMem :: Expr TFelt -> CairoSemanticsT m MemoryVariable
 declareLocalMem address = liftF (DeclareLocalMem address id)
 
 getApTracking :: Label -> CairoSemanticsT m ApTracking
@@ -129,17 +123,17 @@ getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
 throw :: Text -> CairoSemanticsT m a
 throw t = liftF (Throw t)
 
-assert :: TSExpr Bool -> CairoSemanticsT m ()
+assert :: Expr TBool -> CairoSemanticsT m ()
 assert a = assert' =<< memoryRemoval a
 
-expect :: TSExpr Bool -> CairoSemanticsT m ()
+expect :: Expr TBool -> CairoSemanticsT m ()
 expect a = expect' =<< memoryRemoval a
 
-memoryRemoval :: TSExpr a -> CairoSemanticsT m (TSExpr a)
-memoryRemoval = TSMT.transform' step
+memoryRemoval :: Expr a -> CairoSemanticsT m (Expr a)
+memoryRemoval = Expr.transform step
  where
-  step (SMT.List [SMT.Atom "memory", x]) =
-    TSMT.toUnsafe <$> declareMem (TSMT.fromUnsafe x `TSMT.mod` prime)
+  step :: Expr b -> CairoSemanticsT m (Expr b)
+  step (Memory x) = declareMem x
   step e = pure e
 
 isInlinable :: Label -> CairoSemanticsT m Bool
@@ -163,24 +157,29 @@ top = liftF (Top id)
 isCtxRoot :: CairoSemanticsT m Bool
 isCtxRoot = (callerOfRoot ==) . fst <$> top
 
+substitute :: Text -> Expr TFelt -> Expr a -> Expr a
+substitute what forWhat = Expr.canonicalize . Expr.transformId step
+ where
+  step :: Expr b -> Expr b
+  step (Expr.cast @TFelt -> CastOk (Expr.Fun name)) | name == what = forWhat
+  step e = e
+
 {- | Prepare the expression for usage in the model.
 
 That is, deduce AP from the ApTracking data by PC and replace FP name
 with the given one.
 -}
-prepare :: Label -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
-prepare pc fp stsexpr = getAp pc >>= \ap -> prepare' ap fp stsexpr
+prepare :: Label -> Expr TFelt -> Expr a -> CairoSemanticsT m (Expr a)
+prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
 
-prepare' :: TSExpr Integer -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
-prepare' ap fp expr = do
-  mapM_ declareFelt (Set.toList (gatherLogicalVariables expr))
-  memoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr))
+prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsT m (Expr a)
+prepare' ap fp expr = memoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
 prepareCheckPoint ::
-  Label -> TSExpr Integer -> TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
+  Label -> Expr TFelt -> Expr TBool -> CairoSemanticsT m ([MemoryVariable] -> Expr TBool)
 prepareCheckPoint pc fp expr = do
   ap <- getAp pc
-  exMemoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr))
+  exMemoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
 encodeApTracking :: Text -> ApTracking -> CairoSemanticsT m (TSExpr Integer)
 encodeApTracking traceDescr ApTracking{..} =
@@ -219,51 +218,58 @@ encodeSemantics m@Module{..} = do
     mkApConstraints apEnd neInsts
     mkBuiltinConstraints apEnd neInsts
 
-alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
-alloc address = declareMem (address `TSMT.mod` prime)
-
-allocLocal :: TSExpr Integer -> CairoSemanticsT m MemoryVariable
-allocLocal address = declareLocalMem (address `TSMT.mod` prime)
-
-exMemoryRemoval :: TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
+exMemoryRemoval :: Expr TBool -> CairoSemanticsT m ([MemoryVariable] -> Expr TBool)
 exMemoryRemoval expr = do
-  (sexpr, lMemVars) <- unsafeMemoryRemoval (TSMT.toUnsafe expr)
-  pure (intro (TSMT.fromUnsafe sexpr) lMemVars)
+  (expr', localMemVars, _referencesLocals) <- unsafeMemoryRemoval expr
+  pure (intro expr' localMemVars)
  where
   exVars = gatherLogicalVariables expr
 
   restrictMemTail [] = []
-  restrictMemTail (MemoryVariable var _ addr : rest) =
-    [addr .== mv_addrExpr .-> TSMT.const var .== TSMT.const mv_varName | MemoryVariable{..} <- rest]
+  restrictMemTail (mv0 : rest) =
+    [ addr0 .== Expr.const mv_addrName .=> mem0 .== Expr.const mv_varName
+    | MemoryVariable{..} <- rest
+    ]
+   where
+    mem0 = Expr.const (mv_varName mv0)
+    addr0 = Expr.const (mv_addrName mv0)
 
-  intro :: TSExpr Bool -> [MemoryVariable] -> [MemoryVariable] -> TSExpr Bool
+  intro :: Expr TBool -> [MemoryVariable] -> [MemoryVariable] -> Expr TBool
   intro ex lmv gmv =
     let globMemRestrictions =
-          [ addr1 .== addr2 .-> TSMT.const var1 .== TSMT.const var2
+          [ addr1 .== addr2 .=> Expr.const var1 .== Expr.const var2
           | MemoryVariable var1 _ addr1 <- lmv
           , MemoryVariable var2 _ addr2 <- gmv
           ]
         locMemRestrictions = concatMap restrictMemTail (tails lmv)
-        inner_expr = TSMT.and (ex : (locMemRestrictions ++ globMemRestrictions))
-        quant_lmv = foldr (\mvar e -> existsFelt (mv_varName mvar) (const e)) inner_expr lmv
-     in foldr (\var e -> existsFelt var (const e)) quant_lmv exVars
+        innerExpr = Expr.and (ex : (locMemRestrictions ++ globMemRestrictions))
+        quantLmv = foldr (\mvar e -> Expr.ExistsFelt (mv_varName mvar) e) innerExpr lmv
+     in foldr (\var e -> Expr.ExistsFelt var e) quantLmv exVars
 
-  unsafeMemoryRemoval :: SMT.SExpr -> CairoSemanticsT m (SMT.SExpr, [MemoryVariable])
-  unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
-    (x', localMemVars) <- unsafeMemoryRemoval x
-    if null localMemVars && not (TSMT.referencesAny exVars x')
+  unsafeMemoryRemoval :: Expr a -> CairoSemanticsT m (Expr a, [MemoryVariable], Bool)
+  unsafeMemoryRemoval (Memory addr) = do
+    (addr', localMemVars, referencesLocals) <- unsafeMemoryRemoval addr
+    if referencesLocals
       then do
-        mv <- alloc (TSMT.fromUnsafe x')
-        pure (TSMT.toUnsafe mv, [])
+        mv <- declareLocalMem addr'
+        pure (Expr.const (mv_varName mv), mv : localMemVars, True)
       else do
-        mv <- allocLocal (TSMT.fromUnsafe x')
-        pure (SMT.const (unpack $ mv_varName mv), mv : localMemVars)
-  unsafeMemoryRemoval (SMT.List l) = do
-    res <- traverse unsafeMemoryRemoval l
-    let l' = map fst res
-        localMemVars = concatMap snd res
-    pure (SMT.List l', localMemVars)
-  unsafeMemoryRemoval expr' = pure (expr', [])
+        mv <- declareMem addr'
+        pure (mv, localMemVars, False)
+  unsafeMemoryRemoval e@Expr.Felt{} = pure (e, [], False)
+  unsafeMemoryRemoval e@Expr.True = pure (e, [], False)
+  unsafeMemoryRemoval e@Expr.False = pure (e, [], False)
+  unsafeMemoryRemoval e@(Expr.Fun name) = pure (e, [], name `Set.member` exVars)
+  unsafeMemoryRemoval (f Expr.:*: x) = do
+    (f', localMemVars1, referencesLocals1) <- unsafeMemoryRemoval f
+    (x', localMemVars2, referencesLocals2) <- unsafeMemoryRemoval x
+    pure (f' Expr.:*: x', localMemVars2 <> localMemVars1, referencesLocals1 || referencesLocals2)
+  unsafeMemoryRemoval (Expr.ExistsFelt name e) = do
+    (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
+    pure (Expr.ExistsFelt name e', localMemVars, referencesLocals)
+  unsafeMemoryRemoval (Expr.ExitField e) = do
+    (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
+    pure (Expr.ExitField e', localMemVars, referencesLocals)
 
 withExecutionCtx :: CallEntry -> FT CairoSemanticsF m b -> FT CairoSemanticsF m b
 withExecutionCtx ctx action = do
@@ -356,7 +362,7 @@ mkBuiltinConstraints apEnd insts = do
       Nothing -> checkBuiltinNotRequired b (toList insts)
 
 getBuiltinContract ::
-  TSExpr Integer -> TSExpr Integer -> Builtin -> BuiltinOffsets -> (TSExpr Bool, TSExpr Bool)
+  Expr TFelt -> Expr TFelt -> Builtin -> BuiltinOffsets -> (Expr TBool, Expr TBool)
 getBuiltinContract fp apEnd b bo = (pre, post)
  where
   pre = builtinAligned initialPtr b .&& finalPtr .<= builtinEnd b
@@ -412,23 +418,23 @@ checkBuiltinNotRequired b = traverse_ check
             <> ") that does require it"
         )
 
-getRes :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (TSExpr Integer)
+getRes :: Expr TFelt -> LabeledInst -> CairoSemanticsT m (Expr TFelt)
 getRes fp (pc, Instruction{..}) = do
-  op0Reg <- prepare pc fp (regToTSExpr i_op0Register)
+  op0Reg <- prepare pc fp (regToVar i_op0Register)
   let op0 = memory (op0Reg + fromInteger i_op0Offset)
   op1 <- case i_op1Source of
     Op0 -> pure (memory (op0 + fromInteger i_op1Offset))
     RegisterSource reg -> do
-      op1Reg <- prepare pc fp (regToTSExpr reg)
+      op1Reg <- prepare pc fp (regToVar reg)
       pure (memory (op1Reg + fromInteger i_op1Offset))
     Imm -> pure (fromInteger i_imm)
   pure $ case i_resLogic of
     Op1 -> op1
-    Add -> (op0 + op1) `TSMT.mod` prime
-    Mult -> (op0 * op1) `TSMT.mod` prime
+    Add -> op0 + op1
+    Mult -> op0 * op1
     Unconstrained -> 0
 
-getApIncrement :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (Maybe (TSExpr Integer))
+getApIncrement :: Expr TFelt -> LabeledInst -> CairoSemanticsT m (Maybe (Expr TFelt))
 getApIncrement fp inst
   | Call <- i_opCode (snd inst) = pure Nothing
   | otherwise = fmap Just $ case i_apUpdate (snd inst) of

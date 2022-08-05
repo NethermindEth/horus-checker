@@ -44,7 +44,7 @@ cfgVertices lMod g = fmap (\x -> g{cfg_vertices = x}) (lMod (cfg_vertices g))
 cfgArcs :: Lens' CFG (Map Label [(Label, [LabeledInst], ArcCondition, FInfo)])
 cfgArcs lMod g = fmap (\x -> g{cfg_arcs = x}) (lMod (cfg_arcs g))
 
-cfgAssertions :: Lens' CFG (Map Label [TSExpr Bool])
+cfgAssertions :: Lens' CFG (Map Label [Expr TBool])
 cfgAssertions lMod g = fmap (\x -> g{cfg_assertions = x}) (lMod (cfg_assertions g))
 
 interpret :: Monad m => CFGBuildT m a -> ImplT m a
