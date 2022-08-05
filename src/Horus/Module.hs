@@ -14,21 +14,19 @@ import Lens.Micro (ix, (^.))
 
 import Horus.CFGBuild (ArcCondition (..), Label (..))
 import Horus.CFGBuild.Runner (CFG (..))
+import Horus.Expr (Expr, Ty (..), (.&&), (.==))
+import Horus.Expr qualified as Expr (and)
+import Horus.Expr.SMT (pprExpr)
+import Horus.Expr.Vars (ap, fp)
 import Horus.Instruction (LabeledInst)
 import Horus.Program (Identifiers)
-import Horus.SMTUtil (ap, fp)
-import Horus.SW.Identifier
-  ( getFunctionPc
-  , getLabelPc
-  )
+import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.Util (tShow)
-import SimpleSMT.Typed (TSExpr, (.&&), (.==))
-import SimpleSMT.Typed qualified as SMT (and)
 
 data Module = Module
-  { m_pre :: TSExpr Bool
-  , m_post :: TSExpr Bool
+  { m_pre :: Expr TBool
+  , m_post :: Expr TBool
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map Label Bool
   }
@@ -73,7 +71,7 @@ descrOfOracle oracle =
 nameOfModule :: Identifiers -> Module -> Text
 nameOfModule idents (Module _ post prog oracle) =
   case beginOfModule prog of
-    Nothing -> "empty: " <> tShow post
+    Nothing -> "empty: " <> pprExpr post
     Just label ->
       let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
           noPrefix = Text.length prefix == 0
@@ -116,20 +114,20 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Text -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
-traverseCFG :: [(Label, TSExpr Bool)] -> CFG -> ModuleL ()
+traverseCFG :: [(Label, Expr TBool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(l, pre) ->
   visit Map.empty [] (pre .&& ap .== fp) l ACNone
  where
-  visit :: Map Label Bool -> [LabeledInst] -> TSExpr Bool -> Label -> ArcCondition -> ModuleL ()
+  visit :: Map Label Bool -> [LabeledInst] -> Expr TBool -> Label -> ArcCondition -> ModuleL ()
   visit oracle acc pre l arcCond = visiting l $ \alreadyVisited -> do
     when (alreadyVisited && null assertions) $ do
       throwError ("There is a loop at PC " <> tShow (unLabel l) <> " with no invariant")
     unless (null assertions) $
-      emitModule (Module pre (SMT.and assertions) acc oracle')
+      emitModule (Module pre (Expr.and assertions) acc oracle')
     unless alreadyVisited $
       if null assertions
         then visitArcs oracle' acc pre l
-        else visitArcs Map.empty [] (SMT.and assertions) l
+        else visitArcs Map.empty [] (Expr.and assertions) l
    where
     oracle' = updateOracle arcCond oracle
     assertions = cfg_assertions cfg ^. ix l

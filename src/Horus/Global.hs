@@ -36,16 +36,16 @@ import Horus.ContractDefinition
   , cdChecks
   )
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
-import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
-import Horus.Module (Module (m_prog), ModuleL, nameOfModule, traverseCFG)
+import Horus.Expr qualified as Expr (Expr (True))
+import Horus.Expr.Util (gatherLogicalVariables)
+import Horus.Instruction (Instruction (..), OpCode (Call), labelInsructions, readAllInstructions)
+import Horus.Module (Module (..), ModuleL, nameOfModule, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (..))
-import Horus.SMTUtil (gatherLogicalVariables)
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.Util (tShow, whenJust)
-import SimpleSMT.Typed qualified as TSMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -132,7 +132,7 @@ makeModules cd cfg = runModuleL (traverseCFG sources cfg)
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
-    let pre = preConds ^. at name . non TSMT.True
+    let pre = preConds ^. at name . non Expr.True
     pure (pc, pre)
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
