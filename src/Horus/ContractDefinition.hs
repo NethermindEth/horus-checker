@@ -19,10 +19,11 @@ import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens')
 
+import Horus.Expr (Expr, Ty (..), canonicalize)
+import Horus.Expr.SMT (parseAssertion)
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.Std (FuncSpec (..), stdFuncs)
-import SimpleSMT.Typed (TSExpr, canonicalize, parseAssertion)
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
@@ -40,18 +41,18 @@ cdRawSmt :: Lens' ContractDefinition Text
 cdRawSmt lMod g = fmap (\x -> g{cd_rawSmt = x}) (lMod (cd_rawSmt g))
 
 data Checks = Checks
-  { c_preConds :: Map ScopedName (TSExpr Bool)
-  , c_postConds :: Map ScopedName (TSExpr Bool)
-  , c_invariants :: Map ScopedName (TSExpr Bool)
+  { c_preConds :: Map ScopedName (Expr TBool)
+  , c_postConds :: Map ScopedName (Expr TBool)
+  , c_invariants :: Map ScopedName (Expr TBool)
   }
 
-cPreConds :: Lens' Checks (Map ScopedName (TSExpr Bool))
+cPreConds :: Lens' Checks (Map ScopedName (Expr TBool))
 cPreConds lMod g = fmap (\x -> g{c_preConds = x}) (lMod (c_preConds g))
 
-cPostConds :: Lens' Checks (Map ScopedName (TSExpr Bool))
+cPostConds :: Lens' Checks (Map ScopedName (Expr TBool))
 cPostConds lMod g = fmap (\x -> g{c_postConds = x}) (lMod (c_postConds g))
 
-cInvariants :: Lens' Checks (Map ScopedName (TSExpr Bool))
+cInvariants :: Lens' Checks (Map ScopedName (Expr TBool))
 cInvariants lMod g = fmap (\x -> g{c_invariants = x}) (lMod (c_invariants g))
 
 stdChecks :: Checks
@@ -71,20 +72,20 @@ instance FromJSON ContractDefinition where
       <*> v .:? "checks" .!= mempty
       <*> v .:? "smt" .!= ""
 
-newtype HSExpr a = HSExpr (TSExpr a)
+newtype HSExpr a = HSExpr (Expr a)
   deriving newtype (Show)
 
-instance FromJSON (HSExpr Bool) where
+instance FromJSON (HSExpr TBool) where
   parseJSON = withObject "HSExpr" $ \v -> do
     exprLines <- v .: "bool_ref"
     case parseAssertion (Text.intercalate "\n" exprLines) of
-      Just tsexpr -> pure (HSExpr (canonicalize tsexpr))
+      Right expr -> pure (HSExpr (canonicalize expr))
       _ -> fail "Can't parse an smt2 sexp"
 
-elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (TSExpr a)
+elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (Expr a)
 elimHSExpr = coerce
 
-introHSExpr :: Map ScopedName (TSExpr a) -> Map ScopedName (HSExpr a)
+introHSExpr :: Map ScopedName (Expr a) -> Map ScopedName (HSExpr a)
 introHSExpr = coerce
 
 instance FromJSON Checks where
