@@ -1,5 +1,3 @@
-{-# LANGUAGE TypeApplications #-}
-
 module Horus.Program
   ( Program (..)
   , DebugInfo (..)
