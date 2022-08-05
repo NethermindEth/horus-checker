@@ -2,7 +2,7 @@ module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad ((<=<))
 import Control.Monad.Except (ExceptT, MonadError, liftEither, runExceptT, throwError)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
@@ -41,7 +41,8 @@ interpret = iterTM exec . runGlobalT
     lift (CairoSemantics.runT env builder) >>= cont
   exec (AskConfig cont) = ask >>= cont
   exec (Log logger cont) = do
-    _ <- lift $ Logger.runImplT (Logger.interpret logger)
+    (_, vs) <- lift (Logger.runImplT (Logger.interpret logger))
+    liftIO $ mapM_ print vs
     cont
   exec (RunPreprocessor penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)

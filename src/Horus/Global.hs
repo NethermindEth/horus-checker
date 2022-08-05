@@ -49,14 +49,13 @@ data Config = Config
   { cfg_verbose :: Bool
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
-  }
+  } deriving Show
 
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
   | forall b. RunCairoSemanticsT SemanticsEnv (CairoSemanticsT m b) (ConstraintsState -> a)
   | AskConfig (Config -> a)
-  | --  | forall b. Show b => Print' b a
-    forall b. Show b => Log (L.LogT m b) a
+  | forall b. Show b => Log (L.LogT m b) a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
 
@@ -91,9 +90,6 @@ askConfig = liftF' (AskConfig id)
 runPreprocessor :: PreprocessorEnv -> PreprocessorL a -> GlobalT m a
 runPreprocessor penv preprocessor =
   liftF' (RunPreprocessor penv preprocessor id)
-
--- print' :: Show a => a -> GlobalT m ()
--- print' what = liftF' (Print' what ())
 
 throw :: Text -> GlobalT m a
 throw t = liftF' (Throw t)
@@ -134,14 +130,18 @@ produceSMT2Models cd = do
   modules <- makeModules cd cfg
   let semanticsEnv = mkSemanticsEnv cd labeledInsts
   constraints <- traverse (extractConstraints semanticsEnv) modules
-  when (cfg_verbose config) $ do
-    logDebug labeledInsts
-    logDebug cfg
-    logDebug modules
-    logDebug (map debugFriendlyModel constraints)
   let sexprs = map (makeModel (cd_rawSmt cd)) constraints
   let memAndAddrNames = map extractMemAndAddrNames constraints
   let namesAndQueries = zip memAndAddrNames sexprs
+  when (cfg_verbose config) $ do
+      logInfo "Program instructions (with labels)"
+      logDebug labeledInsts
+      logInfo "Control flow graph"
+      logDebug cfg
+      logInfo "Modules"
+      logDebug modules
+      logInfo "Constraints"
+      logDebug (map debugFriendlyModel constraints)
   models <-
     traverse
       (uncurry solveSMT)
@@ -173,14 +173,22 @@ mkSemanticsEnv cd labeledInsts =
     , Just fun <- [pcToFun ^. at callDst]
     ]
 
-logDebug :: Show a => a -> GlobalT m ()
-logDebug = liftF' . flip Log () . L.logDebug
 
-logInfo :: Show a => a -> GlobalT m ()
-logInfo = liftF' . flip Log () . L.logInfo
+logM :: (a -> L.LogT m ()) -> a -> GlobalT m ()
+logM lg v
+  = do
+      config <- askConfig
+      when (cfg_verbose config) $ do
+        liftF' $ Log (lg v) ()
+
+logDebug :: Show a => a -> GlobalT m ()
+logDebug = logM L.logDebug
+
+logInfo :: Text -> GlobalT m ()
+logInfo = logM L.logInfo
 
 logError :: Show a => a -> GlobalT m ()
-logError = liftF' . flip Log () . L.logError
+logError = logM L.logError
 
 logWarning :: Show a => a -> GlobalT m ()
-logWarning = liftF' . flip Log () . L.logWarning
+logWarning = logM L.logWarning
