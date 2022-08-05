@@ -191,4 +191,4 @@ logError :: Show a => a -> GlobalT m ()
 logError = logM L.logError
 
 logWarning :: Show a => a -> GlobalT m ()
-logWarning = logM L.logWarning
+logWarning = liftF' . flip Log () .  L.logWarning
