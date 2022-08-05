@@ -1,5 +1,3 @@
-{-# LANGUAGE RankNTypes #-}
-
 module Horus.ContractInfo (ContractInfo (..), mkContractInfo) where
 
 import Control.Monad.Except (MonadError (..))
@@ -13,6 +11,8 @@ import Data.Set (Set)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
+import Horus.Expr (Expr, Ty (..))
+import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Instruction (LabeledInst, callDestination)
 import Horus.Label (Label)
 import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..))
@@ -21,14 +21,12 @@ import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.Identifier (Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (maybeToError, safeLast, tShow)
-import SimpleSMT.Typed (TSExpr)
-import SimpleSMT.Typed qualified as SMT (pattern True)
 
 data ContractInfo = ContractInfo
   { ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
-  , ci_getPreByCall :: LabeledInst -> TSExpr Bool
-  , ci_getPostByCall :: LabeledInst -> TSExpr Bool
+  , ci_getPreByCall :: LabeledInst -> Expr TBool
+  , ci_getPostByCall :: LabeledInst -> Expr TBool
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_identifiers :: Identifiers
   , ci_inlinableFs :: Set Label
@@ -104,10 +102,10 @@ mkContractInfo cd inlinable =
   getPre name = cd & cd_checks & c_preConds & (Map.!? name)
   getPost name = cd & cd_checks & c_postConds & (Map.!? name)
 
-  getPreByCall inst = fromMaybe SMT.True $ do
+  getPreByCall inst = fromMaybe Expr.True $ do
     callDestination inst >>= getFunName >>= getPre
 
-  getPostByCall inst = fromMaybe SMT.True $ do
+  getPostByCall inst = fromMaybe Expr.True $ do
     callDestination inst >>= getFunName >>= getPost
 
   getApTracking :: MonadError Text m => Label -> m ApTracking
