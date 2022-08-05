@@ -21,11 +21,14 @@ import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, fromListWith, toList)
 import Data.Maybe (mapMaybe)
+import Data.Some (Some (..))
 import Data.Text (Text)
 import Lens.Micro (at, ix, non, (^.))
 import Lens.Micro.GHC ()
 
 import Horus.ContractDefinition (Checks (..))
+import Horus.Expr (Expr, Ty (..))
+import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Instruction
   ( Instruction (..)
   , LabeledInst
@@ -37,9 +40,7 @@ import Horus.Instruction
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
-import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
-import SimpleSMT.Typed (TSExpr)
-import SimpleSMT.Typed qualified as SMT (TSExpr (True))
+import Horus.Util (appendList, topmostStepFT, whenJust)
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -47,7 +48,7 @@ data ArcCondition = ACNone | ACJnz Label Bool
 data CFGBuildF a
   = AddVertex Label a
   | AddArc Label Label [LabeledInst] ArcCondition a
-  | AddAssertion Label (TSExpr Bool) a
+  | AddAssertion Label (Expr TBool) a
   | Throw Text
   deriving (Functor)
 
@@ -63,7 +64,7 @@ addVertex l = liftF' (AddVertex l ())
 addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> CFGBuildT m ()
 addArc lFrom lTo insts test = liftF' (AddArc lFrom lTo insts test ())
 
-addAssertion :: Label -> TSExpr Bool -> CFGBuildT m ()
+addAssertion :: Label -> Expr TBool -> CFGBuildT m ()
 addAssertion l assertion = liftF' (AddAssertion l assertion ())
 
 throw :: Text -> CFGBuildT m a
@@ -74,7 +75,7 @@ instance Monad m => MonadError Text (CFGBuildT m) where
   catchError m handler = do
     step <- lift (topmostStepFT (runCFGBuildT m))
     case step of
-      Just (Box (Throw t)) -> handler t
+      Just (Some (Throw t)) -> handler t
       _ -> m
 
 buildCFG ::
@@ -157,7 +158,7 @@ addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildT m ()
 addAssertions retsByFun checks identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> do
     whenJust (getFunctionPc def) $ \pc -> do
-      let post = c_postConds checks ^. at idName . non SMT.True
+      let post = c_postConds checks ^. at idName . non Expr.True
       for_ (retsByFun ^. ix pc) (`addAssertion` post)
     whenJust (getLabelPc def) $ \pc ->
       whenJust (c_invariants checks ^. at idName) (pc `addAssertion`)
