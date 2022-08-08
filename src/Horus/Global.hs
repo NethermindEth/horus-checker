@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-redundant-constraints #-}
-
 module Horus.Global
   ( GlobalT (..)
   , GlobalF (..)
@@ -136,7 +134,6 @@ solveModule contractInfo smtPrefix m = do
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult = printingErrors $ do
-    verbosePrint m
     constraints <- extractConstraints contractInfo m
     verbosePrint (debugFriendlyModel constraints)
     solveSMT smtPrefix constraints

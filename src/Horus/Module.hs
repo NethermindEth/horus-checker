@@ -48,6 +48,7 @@ data Module = Module
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
+  , m_lastPc :: Label
   }
   deriving (Show)
 
@@ -88,7 +89,7 @@ descrOfOracle oracle =
     else Text.cons '+' . Text.concat . map descrOfBool . Map.elems $ oracle
 
 nameOfModule :: Identifiers -> Module -> Text
-nameOfModule idents (Module _ post prog oracle _) =
+nameOfModule idents (Module _ post prog oracle _ _) =
   case beginOfModule prog of
     Nothing -> "empty: " <> tShow post
     Just label ->
@@ -123,10 +124,7 @@ traverseCFG sources cfg = for_ sources $ \(fLabel, fpre) ->
         stackTraceAndLbl = (stackTrace callstack', l)
     unless (null assertions) $
       emitModule
-        ( Module pre (SMT.and assertions) acc oracle' $
-            calledFOfCallEntry $
-              top callstack'
-        )
+        (Module pre (SMT.and assertions) acc oracle' (calledFOfCallEntry $ top callstack') l)
     visited <- ask
     unless (stackTraceAndLbl `Set.member` visited) $
       local (Set.insert stackTraceAndLbl) $
