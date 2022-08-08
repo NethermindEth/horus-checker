@@ -28,7 +28,7 @@ import Data.Text (Text, unpack)
 import Lens.Micro ((^.))
 import SimpleSMT qualified as SMT (SExpr (..), const)
 
-import Horus.CallStack as CS (CallEntry)
+import Horus.CallStack as CS (CallEntry, callerOfRoot)
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -159,6 +159,9 @@ push l = liftF (Push l ())
 pop :: CairoSemanticsT m ()
 pop = liftF (Pop ())
 
+top :: CairoSemanticsT m CallEntry
+top = liftF (Top id)
+
 {- | Prepare the expression for usage in the model.
 
 That is, deduce AP from the ApTracking data by PC and replace FP name
@@ -201,7 +204,7 @@ moduleEndAp :: Module -> CairoSemanticsT m (TSExpr Integer)
 moduleEndAp Module{m_prog = []} = do
   trace <- getStackTraceDescr
   declareFelt $ "ap!" <> trace
-moduleEndAp Module{m_prog = m_prog} = getAp (getNextPc (last m_prog))
+moduleEndAp m@Module{m_prog = _} = getAp (m_lastPc m)
 
 encodeSemantics :: Module -> CairoSemanticsT m ()
 encodeSemantics m@Module{..} = do
@@ -216,7 +219,7 @@ encodeSemantics m@Module{..} = do
   expect post
   whenJust (nonEmpty m_prog) $ \neInsts -> do
     mkApConstraints apEnd neInsts
-    mkBuiltinConstraints fp neInsts
+    mkBuiltinConstraints apEnd neInsts
 
 alloc :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
 alloc address = declareMem (address `TSMT.mod` prime)
@@ -301,38 +304,38 @@ mkApConstraints apEnd insts = do
   forM_ (zip (toList insts) (NonEmpty.tail insts)) $ \(lInst@(pc, inst), (pcNext, _)) -> do
     at1 <- getApTracking pc
     at2 <- getApTracking pcNext
-    canInline <- isInlinable (uncheckedCallDestination lInst)
+    canInline <- isInlinable $ uncheckedCallDestination lInst
     when (at_group at1 /= at_group at2) $ do
-      oldTrace <- getStackTraceDescr
-      ap1 <- encodeApTracking oldTrace at1
-      when (isCall inst && canInline) $ push (pc, uncheckedCallDestination lInst)
-      when (isRet inst) pop
-      newTrace <- getStackTraceDescr
-      ap2 <- encodeApTracking newTrace at2
+      ap1 <- getAp pc
+      if isCall inst && canInline
+        then push (pc, uncheckedCallDestination lInst)
+        else when (isRet inst) pop
+      ap2 <- getAp pcNext
       fp <- getFp
       getApIncrement fp lInst >>= \case
         Just apIncrement -> assert (ap1 + apIncrement .== ap2)
         Nothing | not canInline -> assert (ap1 .< ap2)
         Nothing -> pure ()
-  trace <- getStackTraceDescr
-  lastAp <- encodeApTracking trace =<< getApTracking lastPc
+  lastAp <- getAp lastPc
+  when (isRet lastInst) pop
   fp <- getFp
-  getApIncrement fp lastInst >>= \case
+  getApIncrement fp lastLInst >>= \case
     Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
     Nothing -> assert (lastAp .< apEnd)
  where
-  lastInst@(lastPc, _) = NonEmpty.last insts
+  lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
 mkBuiltinConstraints :: TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsT m ()
-mkBuiltinConstraints fp insts = do
+mkBuiltinConstraints apEnd insts = do
+  fp <- getFp
   funPc <- getFunPc (fst (NonEmpty.head insts))
-  apEnd <- getAp (getNextPc (NonEmpty.last insts))
   for_ enumerate $ \b ->
     getBuiltinOffsets funPc b >>= \case
       Just bo -> do
         let (pre, post) = getBuiltinContract fp apEnd b bo
         assert pre *> expect post
-        for_ insts (mkBuiltinConstraintsForInst fp b)
+        let (lastPc, _) = NonEmpty.last insts
+        for_ insts $ \inst@(pc, _) -> mkBuiltinConstraintsForInst apEnd (pc == lastPc) b inst
       Nothing -> checkBuiltinNotRequired b (toList insts)
 
 getBuiltinContract ::
@@ -344,24 +347,43 @@ getBuiltinContract fp apEnd b bo = (pre, post)
   initialPtr = memory (fp - fromIntegral (bo_input bo))
   finalPtr = memory (apEnd - fromIntegral (bo_output bo))
 
-mkBuiltinConstraintsForInst :: TSExpr Integer -> Builtin -> LabeledInst -> CairoSemanticsT m ()
-mkBuiltinConstraintsForInst fp b inst@(pc, Instruction{..}) = case i_opCode of
-  Call -> do
-    let calleePc = uncheckedCallDestination inst
-    whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
-      calleeFpAsAp <- (2 +) <$> getAp pc
-      calleeApEnd <- getAp (getNextPc inst)
-      let (pre, post) = getBuiltinContract calleeFpAsAp calleeApEnd b bo
-      expect pre *> assert post
-  AssertEqual -> do
-    res <- getRes fp inst
-    case res of
-      Memory resAddr -> assert (builtinConstraint resAddr b)
-      Mod (op0 :+ op1) p -> do
-        let isBuiltin = builtinStart b .<= op0 .|| builtinStart b .<= op1
-        assert (isBuiltin .-> (op0 + op1 .== (op0 + op1) `TSMT.mod` p))
+mkBuiltinConstraintsForInst :: TSExpr Integer -> Bool -> Builtin -> LabeledInst -> CairoSemanticsT m ()
+mkBuiltinConstraintsForInst apEnd isLast b inst@(pc, Instruction{..}) =
+  getFp >>= \fp -> do
+    case i_opCode of
+      Call ->
+        let calleePc = uncheckedCallDestination inst
+            stackFrame = (pc, calleePc)
+         in do
+              canInline <- isInlinable calleePc
+              if canInline
+                then push stackFrame
+                else do
+                  whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
+                    calleeFp <- withExecutionCtx stackFrame getFp
+                    calleeApEnd <- getAp (getNextPc inst)
+                    let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
+                    expect pre *> assert post
+      AssertEqual -> do
+        res <- getRes fp inst
+        case res of
+          Memory resAddr -> assert (builtinConstraint resAddr b)
+          Mod (op0 :+ op1) p -> do
+            let isBuiltin = builtinStart b .<= op0 .|| builtinStart b .<= op1
+            assert (isBuiltin .-> (op0 + op1 .== (op0 + op1) `TSMT.mod` p))
+          _ -> pure ()
+      Ret -> do
+        -- when encountering a 'ret', the corresponding function can be inlined
+        stackFrame@(_, calleePc) <- top
+        pop
+        whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
+          calleeFp <- withExecutionCtx stackFrame getFp
+          (caller, _) <- top
+          calleeApEnd <- getAp (getNextPc inst)
+          let calleeApEnd' = if isLast && caller == callerOfRoot then apEnd else calleeApEnd
+          let (pre, post) = getBuiltinContract calleeFp calleeApEnd' b bo
+          expect pre *> assert post
       _ -> pure ()
-  _ -> pure ()
 
 checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsT m ()
 checkBuiltinNotRequired b = traverse_ check
