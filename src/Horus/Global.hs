@@ -1,5 +1,3 @@
-{-# OPTIONS_GHC -Wno-redundant-constraints #-}
-
 module Horus.Global
   ( GlobalT (..)
   , GlobalF (..)
