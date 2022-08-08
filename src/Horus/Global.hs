@@ -38,7 +38,7 @@ import Horus.CairoSemantics.Runner
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.ContractDefinition (ContractDefinition (..), cPreConds, cdChecks)
 import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_identifiers), mkContractInfo)
-import Horus.FunctionAnalysis (inlinableFuns)
+import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
 import Horus.Instruction (labelInsructions, readAllInstructions)
 import Horus.Module (Module (m_calledF), nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
@@ -230,9 +230,9 @@ additionalResults inlinable cd labeledInsts =
 
 solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
-  insts <- readAllInstructions (p_code (cd_program cd))
+  insts <- readAllInstructions (p_code program)
   let labeledInsts = labelInsructions insts
-      inlinable = Map.keys $ inlinableFuns labeledInsts (cd_program cd) (cd_checks cd)
+      inlinable = Map.keys $ inlinableFuns labeledInsts program (cd_checks cd)
       contractInfo = mkContractInfo cd $ fromList inlinable
       getFunPc = ci_getFunPc contractInfo
   verbosePrint labeledInsts
