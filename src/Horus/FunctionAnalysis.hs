@@ -10,6 +10,7 @@ module Horus.FunctionAnalysis
   , FuncOp (ArcCall, ArcRet)
   , isCallArc
   , isRetArc
+  , isWrapper
   , allFuns
   , isNormalArc
   , uninlinableFuns
@@ -43,6 +44,7 @@ import Data.Map qualified as Map
   )
 import Data.Maybe (fromJust, mapMaybe)
 
+import Data.Text (Text)
 import Horus.ContractDefinition (Checks (c_invariants, c_postConds, c_preConds))
 import Horus.Instruction
   ( LabeledInst
@@ -133,6 +135,10 @@ fNameOfPc idents lblpc =
 uncheckedFNameOfPc :: Identifiers -> Label -> ScopedName
 uncheckedFNameOfPc idents = fromJust . fNameOfPc idents
 
+outerScope :: ScopedName -> Text
+outerScope (ScopedName []) = ""
+outerScope (ScopedName (scope : _)) = scope
+
 functionsOf :: [LabeledInst] -> Program -> Map.Map Label [LabeledInst]
 functionsOf rows prog =
   Map.map (map (\pc -> (pc, Map.fromList rows Map.! pc))) . Map.map sort . invert $
@@ -208,17 +214,30 @@ isAnnotated idents checks =
 fMain :: ScopedName
 fMain = ScopedName ["__main__", "main"]
 
+wrapperScope :: Text
+wrapperScope = "__wrappers__"
+
+isWrapper :: Label -> Identifiers -> Bool
+isWrapper f idents = outerScope (uncheckedFNameOfPc idents f) == wrapperScope
+
 sizeOfCall :: Int
 sizeOfCall = 2
 
 inlinableFuns :: [LabeledInst] -> Program -> Checks -> Map.Map Label [LabeledInst]
 inlinableFuns rows prog checks =
-  Map.filterWithKey (\f _ -> f `elem` inlinable && isUnannotated f && isAnnotatedLater f) functions
+  Map.filterWithKey
+    ( \f _ ->
+        f `elem` inlinable
+          && notIsAnnotated f
+          && notIsAnnotatedLater f
+          && not (isWrapper f idents)
+    )
+    functions
  where
   idents = p_identifiers prog
   functions = functionsOf rows prog
-  isUnannotated = not . isAnnotated idents checks
-  isAnnotatedLater f = maybe True (`notElem` map fs_name stdFuncs) (fNameOfPc idents f)
+  notIsAnnotated = not . isAnnotated idents checks
+  notIsAnnotatedLater f = maybe True (`notElem` map fs_name stdFuncs) (fNameOfPc idents f)
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls
   inlinable =
