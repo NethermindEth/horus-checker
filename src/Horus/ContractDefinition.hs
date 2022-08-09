@@ -14,7 +14,7 @@ where
 import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
 import Data.Coerce (coerce)
 import Data.Map (Map)
-import Data.Map qualified as Map (empty, fromAscList)
+import Data.Map qualified as Map (empty, fromAscList, toList)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens')
@@ -23,7 +23,7 @@ import Horus.Expr (Expr, Ty (..), canonicalize)
 import Horus.Expr.SMT (parseAssertion)
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
-import Horus.SW.Std (FuncSpec (..), stdFuncs)
+import Horus.SW.Std (FuncSpec (..), stdSpecs)
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
@@ -63,7 +63,11 @@ stdChecks =
     , c_invariants = Map.empty
     }
  where
-  (pres, posts) = unzip [((fs_name, fs_pre), (fs_name, fs_post)) | FuncSpec{..} <- stdFuncs]
+  (pres, posts) =
+    unzip
+      [ ((name, fs_pre), (name, fs_post))
+      | (name, FuncSpec{..}) <- Map.toList stdSpecs
+      ]
 
 instance FromJSON ContractDefinition where
   parseJSON = withObject "ContractDefinition" $ \v ->

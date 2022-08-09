@@ -83,6 +83,7 @@ library
       Horus.SW.CairoType.JSON
       Horus.SW.CairoType.Lexer
       Horus.SW.CairoType.Parser
+      Horus.SW.FuncSpec
       Horus.SW.Identifier
       Horus.SW.ScopedName
       Horus.SW.Std
