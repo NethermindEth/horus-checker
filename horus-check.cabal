@@ -73,6 +73,8 @@ library
       Horus.Expr.Type.SMT
       Horus.Expr.Util
       Horus.Expr.Vars
+      Horus.Logger
+      Horus.Logger.Runner
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner
@@ -91,6 +93,7 @@ library
       array,
       constraints,
       containers,
+      co-log-core,
       dlist,
       free,
       hashable,

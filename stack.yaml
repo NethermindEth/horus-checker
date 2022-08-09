@@ -45,6 +45,7 @@ extra-deps:
     commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
   - git: https://github.com/IagoAbal/haskell-z3.git
     commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
+  - co-log-core-0.3.1.0@sha256:9794bdedd1391decd0e22bdfe2b11abcb42e6cff7a4531e1f8882890828f4e63,3816
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
