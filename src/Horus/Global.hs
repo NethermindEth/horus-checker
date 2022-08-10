@@ -38,7 +38,7 @@ import Horus.ContractDefinition
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
 import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.Instruction (Instruction (..), OpCode (Call), labelInsructions, readAllInstructions)
+import Horus.Instruction (Instruction (..), OpCode (Call), labelInstructions, readAllInstructions)
 import Horus.Module (Module (..), ModuleL, nameOfModule, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
@@ -215,7 +215,7 @@ solveSMT smtPrefix cs = do
 solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
   insts <- readAllInstructions (p_code (cd_program cd))
-  let labeledInsts = labelInsructions insts
+  let labeledInsts = labelInstructions insts
   verbosePrint labeledInsts
   cfg <- makeCFG checks identifiers getFunPc labeledInsts
   verbosePrint cfg

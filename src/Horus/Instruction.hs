@@ -1,7 +1,7 @@
 module Horus.Instruction
   ( Instruction (..)
   , LabeledInst
-  , labelInsructions
+  , labelInstructions
   , PointerRegister (..)
   , Register (..)
   , Op1Source (..)
@@ -75,8 +75,8 @@ data Instruction = Instruction
 
 type LabeledInst = (Label, Instruction)
 
-labelInsructions :: [Instruction] -> [LabeledInst]
-labelInsructions insts = zip (coerce pcs) insts
+labelInstructions :: [Instruction] -> [LabeledInst]
+labelInstructions insts = zip (coerce pcs) insts
  where
   pcs = scanl (+) 0 (map instructionSize insts)
 
