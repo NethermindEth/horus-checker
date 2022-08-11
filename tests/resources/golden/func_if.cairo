@@ -7,7 +7,7 @@ func main():
 end
 
 # @pre True
-# @post (x == 42 && res == 24601) || ((x > 42 || x < 42) && res == 1337)
+# @post (x == 42 && $Return.res == 24601) || ((x > 42 || x < 42) && $Return.res == 1337)
 func f(x) -> (res):
     [ap] = x; ap++
     [ap] = [ap - 1] - 42; ap++

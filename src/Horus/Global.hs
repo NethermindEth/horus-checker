@@ -10,17 +10,16 @@ where
 import Control.Monad (when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
+import Data.Either (fromRight)
 import Data.Foldable (for_)
-import Data.Function ((&))
 import Data.Map qualified as Map (toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
-import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildT, Label, LabeledInst, buildCFG)
+import Horus.CFGBuild (CFGBuildL, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
 import Horus.CairoSemantics.Runner
@@ -29,22 +28,15 @@ import Horus.CairoSemantics.Runner
   , debugFriendlyModel
   , makeModel
   )
-import Horus.ContractDefinition
-  ( Checks
-  , ContractDefinition (..)
-  , cPreConds
-  , cdChecks
-  )
+import Horus.ContractDefinition (ContractDefinition (..))
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
-import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.Instruction (Instruction (..), OpCode (Call), labelInstructions, readAllInstructions)
 import Horus.Module (Module (..), ModuleL, nameOfModule, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program (Identifiers, Program (..))
-import Horus.SW.Identifier (getFunctionPc)
+import Horus.SW.FuncSpec (fs_pre)
+import Horus.SW.Identifier (Function (..), Identifier (..))
 import Horus.Util (tShow, whenJust)
 
 data Config = Config
@@ -56,7 +48,7 @@ data Config = Config
   }
 
 data GlobalF m a
-  = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
+  = forall b. RunCFGBuildL ContractInfo (CFGBuildL b) (CFG -> a)
   | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | AskConfig (Config -> a)
@@ -82,8 +74,8 @@ instance MonadError Text (GlobalT m) where
 liftF' :: GlobalF m a -> GlobalT m a
 liftF' = GlobalT . liftF
 
-runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
-runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
+runCFGBuildL :: ContractInfo -> CFGBuildL a -> GlobalT m CFG
+runCFGBuildL env cfgBuilder = liftF' (RunCFGBuildL env cfgBuilder id)
 
 runCairoSemanticsT :: ContractInfo -> CairoSemanticsT m a -> GlobalT m ConstraintsState
 runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder id)
@@ -121,19 +113,15 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalT m ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeCFG :: Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
-makeCFG checks identifiers labelToFun labeledInsts =
-  runCFGBuildT (buildCFG checks identifiers labelToFun labeledInsts)
+makeCFG :: ContractInfo -> GlobalT m CFG
+makeCFG env = runCFGBuildL env buildCFG
 
-makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules cd cfg = runModuleL (traverseCFG sources cfg)
+makeModules :: ContractInfo -> CFG -> GlobalT m [Module]
+makeModules ContractInfo{..} cfg = runModuleL (traverseCFG sources cfg)
  where
-  sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
-  preConds = cd ^. cdChecks . cPreConds
-  takeSourceAndPre (name, idef) = do
-    pc <- getFunctionPc idef
-    let pre = preConds ^. at name . non Expr.True
-    pure (pc, pre)
+  sources = mapMaybe takeSourceAndPre (Map.toList ci_identifiers)
+  takeSourceAndPre (name, IFunction f) = Just (fu_pc f, fs_pre (ci_getFuncSpec name))
+  takeSourceAndPre _ = Nothing
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
 extractConstraints env m = runCairoSemanticsT env (encodeSemantics m)
@@ -197,12 +185,11 @@ checkMathsat contractInfo m = do
         then throw "MathSat solver was used to analyze a call with a logical variable in it's specification."
         else setConfig conf{cfg_solver = solver'}
  where
-  callToLVarSpec lblInst@(_, inst) = case i_opCode inst of
-    Call -> not (null lvars)
-    _ -> False
-   where
-    lvars = gatherLogicalVariables (getPre lblInst)
-  getPre = ci_getPreByCall contractInfo
+  callToLVarSpec i = fromRight False $ do
+    callee <- ci_getCallee contractInfo i
+    let pre = fs_pre (ci_getFuncSpec contractInfo callee)
+    let lvars = gatherLogicalVariables pre
+    pure (not (null lvars))
 
 solveSMT :: ConstraintsState -> GlobalT m SolverResult
 solveSMT cs = do
@@ -212,17 +199,10 @@ solveSMT cs = do
   query = makeModel cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
+solveContract :: ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
-  insts <- readAllInstructions (p_code (cd_program cd))
-  let labeledInsts = labelInstructions insts
-  verbosePrint labeledInsts
-  cfg <- makeCFG checks identifiers getFunPc labeledInsts
+  contractInfo <- mkContractInfo cd
+  cfg <- makeCFG contractInfo
   verbosePrint cfg
-  modules <- makeModules cd cfg
+  modules <- makeModules contractInfo cfg
   for modules (solveModule contractInfo)
- where
-  contractInfo = mkContractInfo cd
-  getFunPc = ci_getFunPc contractInfo
-  identifiers = p_identifiers (cd_program cd)
-  checks = cd_checks cd

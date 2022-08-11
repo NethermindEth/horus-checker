@@ -8,7 +8,7 @@ func main():
     ret
 end
 
-# @post res == x * y
+# @post $Return.res == x * y
 func prod(x, y) -> (res):
   [ap] = [fp - 3]; ap++
   [ap] = [fp - 4]; ap++
@@ -21,7 +21,7 @@ func prod(x, y) -> (res):
   ret
 end
 
-# @post res == 3 * x
+# @post $Return.res == 3 * x
 func mul(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] * 3; ap++
