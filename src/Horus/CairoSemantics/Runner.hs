@@ -171,11 +171,9 @@ debugFriendlyModel ConstraintsState{..} =
 constants :: [(Text, Integer)]
 constants = [(pprExpr prime, fieldPrime), (pprExpr rcBound, Builtin.rcBound)]
 
-makeModel :: Text -> ConstraintsState -> Text
-makeModel rawSmt ConstraintsState{..} =
-  (decls <> map Command.assert restrictions)
-    & (rawSmt :)
-    & Text.intercalate "\n"
+makeModel :: ConstraintsState -> Text
+makeModel ConstraintsState{..} =
+  Text.intercalate "\n" (decls <> map Command.assert restrictions)
  where
   functions =
     toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)

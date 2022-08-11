@@ -3,7 +3,6 @@ module Horus.ContractDefinition
   , Checks (..)
   , cdProgram
   , cdChecks
-  , cdRawSmt
   , cPreConds
   , cPostConds
   , cInvariants
@@ -15,7 +14,6 @@ import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
 import Data.Coerce (coerce)
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromAscList, toList)
-import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens')
 
@@ -28,7 +26,6 @@ import Horus.SW.Std (FuncSpec (..), stdSpecs)
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_checks :: Checks
-  , cd_rawSmt :: Text
   }
 
 cdProgram :: Lens' ContractDefinition Program
@@ -36,9 +33,6 @@ cdProgram lMod g = fmap (\x -> g{cd_program = x}) (lMod (cd_program g))
 
 cdChecks :: Lens' ContractDefinition Checks
 cdChecks lMod g = fmap (\x -> g{cd_checks = x}) (lMod (cd_checks g))
-
-cdRawSmt :: Lens' ContractDefinition Text
-cdRawSmt lMod g = fmap (\x -> g{cd_rawSmt = x}) (lMod (cd_rawSmt g))
 
 data Checks = Checks
   { c_preConds :: Map ScopedName (Expr TBool)
@@ -74,7 +68,6 @@ instance FromJSON ContractDefinition where
     ContractDefinition
       <$> v .: "program"
       <*> v .:? "checks" .!= mempty
-      <*> v .:? "smt" .!= ""
 
 newtype HSExpr a = HSExpr (Expr a)
   deriving newtype (Show)
