@@ -12,7 +12,7 @@ import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Function ((&))
 import Data.Map qualified as Map (toList)
-import Data.Maybe (mapMaybe, isNothing)
+import Data.Maybe (isNothing, mapMaybe)
 import Data.Text (Text, pack)
 import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
@@ -115,7 +115,7 @@ makeModules cd cfg = do
   emitWarnings (fst <$> names)
   pure (runModuleL m)
  where
-  names = filter (\ p -> isNothing $ preConds ^. at (fst p)) sources
+  names = filter (\p -> isNothing $ preConds ^. at (fst p)) sources
   mlist = cd_program cd & p_identifiers & Map.toList
   sources = mlist & mapMaybe takeSourceAndPre
   preConds = cd ^. cdChecks . cPreConds
