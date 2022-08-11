@@ -8,7 +8,7 @@ module Horus.CairoSemantics.Runner
 where
 
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
+import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.State (MonadState, StateT, runStateT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
@@ -134,21 +134,21 @@ interpret = iterTM exec
         let name = "MEM!" <> tShow freshCount
         let addrName = "ADDR!" <> tShow freshCount
         cont (MemoryVariable name addrName address)
-  exec (GetPreByCall inst cont) = do
-    getPreByCall <- asks ci_getPreByCall
-    getPreByCall inst & cont
-  exec (GetPostByCall inst cont) = do
-    getPostByCall <- asks ci_getPostByCall
-    getPostByCall inst & cont
+  exec (GetCallee inst cont) = do
+    ci <- ask
+    ci_getCallee ci inst >>= cont
+  exec (GetFuncSpec inst cont) = do
+    ci <- ask
+    ci_getFuncSpec ci inst & cont
   exec (GetApTracking label cont) = do
-    getApTracking <- asks (\ci -> ci_getApTracking ci)
-    getApTracking label >>= cont
+    ci <- ask
+    ci_getApTracking ci label >>= cont
   exec (GetFunPc label cont) = do
-    getFunPc <- asks (\ci -> ci_getFunPc ci)
-    getFunPc label >>= cont
+    ci <- ask
+    ci_getFunPc ci label >>= cont
   exec (GetBuiltinOffsets label builtin cont) = do
-    getBuiltinOffsets <- asks (\ci -> ci_getBuiltinOffsets ci)
-    getBuiltinOffsets label builtin >>= cont
+    ci <- ask
+    ci_getBuiltinOffsets ci label builtin >>= cont
   exec (Throw t) = throwError t
 
 debugFriendlyModel :: ConstraintsState -> Text

@@ -11,7 +11,7 @@ import System.Directory (createDirectoryIfMissing)
 import System.FilePath.Posix (takeDirectory)
 import Text.Pretty.Simple (pPrintString)
 
-import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
+import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImpl)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 import Horus.Module.Runner qualified as Module (run)
@@ -35,8 +35,8 @@ interpret :: forall m a. (MonadError Text m, MonadIO m) => GlobalT m a -> ImplT 
 interpret = iterTM exec . runGlobalT
  where
   exec :: GlobalF m (ImplT m a) -> ImplT m a
-  exec (RunCFGBuildT builder cont) = do
-    lift (CFGBuild.runImplT (CFGBuild.interpret builder)) >>= liftEither >>= cont
+  exec (RunCFGBuildL env builder cont) = do
+    liftEither (CFGBuild.runImpl env (CFGBuild.interpret builder)) >>= cont
   exec (RunCairoSemanticsT env builder cont) = do
     lift (CairoSemantics.runT env builder) >>= liftEither >>= cont
   exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont

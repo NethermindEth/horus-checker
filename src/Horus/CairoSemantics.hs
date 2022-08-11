@@ -53,6 +53,8 @@ import Horus.Module (Module (..))
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
+import Horus.SW.FuncSpec (FuncSpec (..))
+import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 
 data MemoryVariable = MemoryVariable
@@ -68,8 +70,8 @@ data CairoSemanticsF a
   | CheckPoint ([MemoryVariable] -> Expr TBool) a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
   | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
-  | GetPreByCall LabeledInst (Expr TBool -> a)
-  | GetPostByCall LabeledInst (Expr TBool -> a)
+  | GetCallee LabeledInst (ScopedName -> a)
+  | GetFuncSpec ScopedName (FuncSpec -> a)
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
@@ -91,11 +93,11 @@ checkPoint a = liftF (CheckPoint a ())
 declareMem :: Expr TFelt -> CairoSemanticsT m (Expr TFelt)
 declareMem address = liftF (DeclareMem address id)
 
-getPreByCall :: LabeledInst -> CairoSemanticsT m (Expr TBool)
-getPreByCall inst = liftF (GetPreByCall inst id)
+getCallee :: LabeledInst -> CairoSemanticsT m ScopedName
+getCallee call = liftF (GetCallee call id)
 
-getPostByCall :: LabeledInst -> CairoSemanticsT m (Expr TBool)
-getPostByCall inst = liftF (GetPostByCall inst id)
+getFuncSpec :: ScopedName -> CairoSemanticsT m FuncSpec
+getFuncSpec name = liftF (GetFuncSpec name id)
 
 declareLocalMem :: Expr TFelt -> CairoSemanticsT m MemoryVariable
 declareLocalMem address = liftF (DeclareLocalMem address id)
@@ -246,9 +248,10 @@ mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
       setNewFp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
       saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
       setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
+      calleeSpec <- getCallee inst >>= getFuncSpec
       let lvarSuffix = "+" <> tShowLabel pc
-      pre <- getPreByCall inst <&> suffixLogicalVariables lvarSuffix
-      post <- getPostByCall inst <&> suffixLogicalVariables lvarSuffix
+      let pre = suffixLogicalVariables lvarSuffix (fs_pre calleeSpec)
+      let post = suffixLogicalVariables lvarSuffix (fs_post calleeSpec)
       preparedPre <- prepare calleePc calleeFpAsAp pre
       preparedPost <- prepare nextPc calleeFpAsAp post
       preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFpAsAp pre
