@@ -1,16 +1,16 @@
 module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad.Except (MonadError (..), liftEither, throwError)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
-import Data.Text (Text, unpack)
-import Text.Pretty.Simple (pPrintString)
+import Data.Text (Text)
 
 import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
+import Horus.Logger.Runner qualified as L
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
 newtype ImplT m a = ImplT (ReaderT Config m a)
@@ -39,7 +39,10 @@ interpret = iterTM exec . runGlobalT
   exec (RunPreprocessor penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)
     liftEither mPreprocessed >>= cont
-  exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
+  exec (Log what cont) = do
+    (_, vs) <- lift (L.runImplT (L.interpret what))
+    liftIO $ mapM_ print vs
+    cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
 

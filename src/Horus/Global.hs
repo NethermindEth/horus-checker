@@ -12,8 +12,8 @@ import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Function ((&))
 import Data.Map qualified as Map (toList)
-import Data.Maybe (mapMaybe)
-import Data.Text (Text)
+import Data.Maybe (mapMaybe, isNothing)
+import Data.Text (Text, pack)
 import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
@@ -31,13 +31,14 @@ import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdC
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
 import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Instruction (labelInsructions, readAllInstructions)
+import Horus.Logger qualified as L (LogT, logDebug, logWarning)
 import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
-import Horus.Util (tShow)
+import Horus.SW.ScopedName (ScopedName)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -49,7 +50,7 @@ data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
   | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
   | AskConfig (Config -> a)
-  | PutStrLn' Text a
+  | forall b. Log (L.LogT m b) a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
   | forall b. Catch (GlobalT m b) (Text -> GlobalT m b) (b -> a)
@@ -82,8 +83,16 @@ runPreprocessor :: PreprocessorEnv -> PreprocessorL a -> GlobalT m a
 runPreprocessor penv preprocessor =
   liftF' (RunPreprocessor penv preprocessor id)
 
-putStrLn' :: Text -> GlobalT m ()
-putStrLn' what = liftF' (PutStrLn' what ())
+logG :: (a -> L.LogT m ()) -> a -> GlobalT m ()
+logG lg what = do
+  config <- askConfig
+  when (cfg_verbose config) (liftF' $ Log (lg what) ())
+
+logDebug :: Show a => a -> GlobalT m ()
+logDebug = logG L.logDebug
+
+logWarning :: Text -> GlobalT m ()
+logWarning = liftF' . flip Log () . L.logWarning
 
 throw :: Text -> GlobalT m a
 throw t = liftF' (Throw t)
@@ -91,27 +100,29 @@ throw t = liftF' (Throw t)
 catch :: GlobalT m a -> (Text -> GlobalT m a) -> GlobalT m a
 catch m h = liftF' (Catch m h id)
 
-verbosePutStrLn :: Text -> GlobalT m ()
-verbosePutStrLn what = do
-  config <- askConfig
-  when (cfg_verbose config) (putStrLn' what)
-
-verbosePrint :: Show a => a -> GlobalT m ()
-verbosePrint what = verbosePutStrLn (tShow what)
-
 makeCFG :: Checks -> Identifiers -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
 makeCFG checks identifiers labelToFun labeledInsts =
   runCFGBuildT (buildCFG checks identifiers labelToFun labeledInsts)
 
-makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
+emitWarnings :: [ScopedName] -> GlobalT m ()
+emitWarnings = mapM_ (logWarning . msg)
  where
-  sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
+  msg n = pack $ "Definition " <> show n <> " does not have a precondition. Setting it to True."
+
+makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
+makeModules cd cfg = do
+  let m = traverseCFG (snd <$> sources) cfg
+  emitWarnings (fst <$> names)
+  pure (runModuleL m)
+ where
+  names = filter (\ p -> isNothing $ preConds ^. at (fst p)) sources
+  mlist = cd_program cd & p_identifiers & Map.toList
+  sources = mlist & mapMaybe takeSourceAndPre
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
     let pre = preConds ^. at name . non Expr.True
-    pure (pc, pre)
+    pure (name, (pc, pre))
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
 extractConstraints env m = runCairoSemanticsT env (encodeSemantics m)
@@ -127,9 +138,9 @@ solveModule contractInfo smtPrefix m = do
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult = printingErrors $ do
-    verbosePrint m
+    logDebug m
     constraints <- extractConstraints contractInfo m
-    verbosePrint (debugFriendlyModel constraints)
+    logDebug (debugFriendlyModel constraints)
     solveSMT smtPrefix constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
   moduleName = nameOfModule (ci_identifiers contractInfo) m
@@ -146,9 +157,9 @@ solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
 solveContract cd = do
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
-  verbosePrint labeledInsts
+  logDebug labeledInsts
   cfg <- makeCFG checks identifiers getFunPc labeledInsts
-  verbosePrint cfg
+  logDebug cfg
   modules <- makeModules cd cfg
   for modules (solveModule contractInfo (cd_rawSmt cd))
  where
