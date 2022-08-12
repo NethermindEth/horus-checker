@@ -73,8 +73,11 @@ library
       Horus.Expr.Type.SMT
       Horus.Expr.Util
       Horus.Expr.Vars
+<<<<<<< HEAD
       Horus.Logger
       Horus.Logger.Runner
+=======
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner

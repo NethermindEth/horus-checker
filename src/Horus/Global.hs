@@ -38,7 +38,11 @@ import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
+<<<<<<< HEAD
 import Horus.SW.ScopedName (ScopedName)
+=======
+import Horus.Util (tShow)
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -122,7 +126,11 @@ makeModules cd cfg = do
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
     let pre = preConds ^. at name . non Expr.True
+<<<<<<< HEAD
     pure (name, (pc, pre))
+=======
+    pure (pc, pre)
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
 extractConstraints env m = runCairoSemanticsT env (encodeSemantics m)

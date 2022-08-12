@@ -49,6 +49,10 @@ import Prelude qualified (Bool (..))
 import Data.Constraint (Dict (..), (:-) (Sub), (\\))
 import Data.Functor (($>))
 import Data.Functor.Identity (Identity (..))
+<<<<<<< HEAD
+=======
+import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 import Data.Singletons (SingI, sing, withSingI)
 import Data.Text (Text)
 import Data.Typeable (Typeable, eqT, (:~:) (Refl))
@@ -165,9 +169,28 @@ cast' e = case cast @b e of
   CastOk{} -> Just e
   CastFail -> Nothing
 
+<<<<<<< HEAD
 foldL :: IsProper c => (forall a. IsProper a => Expr a) -> [Expr b] -> Expr c
 foldL acc [] = acc
 foldL acc (x : xs) = foldL (acc :*: x) xs \\ isProper x
+=======
+{- Given 'f' and 'args' applies 'args' to 'f' via ':*:', one by one.
+
+The reason that 'args' must be non-empty is because:
+
+1. We don't distinguish constants from functions. So, a nullary
+   function isn't parenthesized.
+2. Most of the SMT-solvers don't support variadic-argument functions
+   with zero arguments.
+-}
+foldL :: IsProper c => (forall a. IsProper a => Expr a) -> NonEmpty (Expr b) -> Expr c
+foldL acc (x :| xs) = case nonEmpty xs of
+  Nothing -> acc :*: x \\ isProper x
+  Just xs' -> foldL (acc :*: x) xs' \\ isProper x
+
+foldL' :: IsProper c => (forall a. IsProper a => Expr a) -> Expr c -> [Expr b] -> Expr c
+foldL' acc whenEmpty = maybe whenEmpty (foldL acc) . nonEmpty
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 unfoldVariadic ::
   forall arg res ty.
@@ -210,7 +233,11 @@ pattern Negate a <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "-")) :*: a
 pattern And :: () => (a ~ TBool) => [Expr TBool] -> Expr a
 pattern And cs <- (unfoldVariadic @TBool @TBool -> Just (Refl, "and", cs))
   where
+<<<<<<< HEAD
     And = foldL (Fun "and")
+=======
+    And = foldL' (Fun "and") True
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 -- smart constructors for basic operations
 
@@ -252,6 +279,10 @@ a .&& b = and [a, b]
 and :: [Expr TBool] -> Expr TBool
 and xs
   | False `elem` xs' = False
+<<<<<<< HEAD
+=======
+  | [] <- xs' = True
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
   | [x] <- xs' = x
   | otherwise = And xs'
  where
@@ -266,6 +297,7 @@ True .|| _ = True
 a .|| b = function "or" a b
 
 or :: [Expr TBool] -> Expr TBool
+<<<<<<< HEAD
 or = foldL (Fun "or")
 
 distinct :: [Expr a] -> Expr TBool
@@ -273,6 +305,15 @@ distinct = foldL (Fun "distinct")
 
 addMany :: [Expr TFelt] -> Expr TFelt
 addMany = foldL (Fun "+")
+=======
+or = foldL' (Fun "or") False
+
+distinct :: [Expr a] -> Expr TBool
+distinct = foldL' (Fun "distinct") True
+
+addMany :: [Expr TFelt] -> Expr TFelt
+addMany = foldL' (Fun "+") 0
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 infix 1 .=>
 (.=>) :: Expr TBool -> Expr TBool -> Expr TBool
@@ -305,7 +346,11 @@ infix 4 ./=
 a ./= b = distinct [a, b]
 
 leq :: [Expr TFelt] -> Expr TBool
+<<<<<<< HEAD
 leq = foldL (Fun "<=")
+=======
+leq = foldL' (Fun "<=") True
+>>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 ite :: Expr TBool -> Expr a -> Expr a -> Expr a
 ite cond x = function "ite" cond x \\ isProper x
