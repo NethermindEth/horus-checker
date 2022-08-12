@@ -46,14 +46,10 @@ rcBound :: Expr TFelt
 rcBound = Expr.const "range-check-bound"
 
 builtinCond :: Expr TFelt -> Builtin -> Expr TBool
-<<<<<<< HEAD
 builtinCond ptr RangeCheck = Expr.leq [0, memory ptr, rcBound - 1]
-=======
 builtinCond _ptr Pedersen = Expr.True
-builtinCond ptr RangeCheck = Expr.leq [0, memory ptr, rcBound - 1]
 builtinCond _ptr Ecdsa = Expr.True
 builtinCond _ptr Bitwise = Expr.True
->>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
 
 builtinStartName :: Builtin -> Text
 builtinStartName = (<> "!start") . Builtin.name
