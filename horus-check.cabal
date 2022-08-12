@@ -74,10 +74,15 @@ library
       Horus.Expr.Util
       Horus.Expr.Vars
 <<<<<<< HEAD
+<<<<<<< HEAD
       Horus.Logger
       Horus.Logger.Runner
 =======
 >>>>>>> 2074ed7 (introduce typed expressions and integrate them into Horus)
+=======
+      Horus.Logger
+      Horus.Logger.Runner
+>>>>>>> cb5a9f0 (Warning about missing preconditions.)
       Horus.Module
       Horus.Preprocessor
       Horus.Preprocessor.Runner
