@@ -136,7 +136,6 @@ instance Show Model where
 
 solve :: Text -> PreprocessorL SolverResult
 solve smtQuery = do
-  -- traceM (unpack smtQuery)
   magicTactics <-
     traverse
       mkTactic
