@@ -162,6 +162,9 @@ pop = liftF (Pop ())
 top :: CairoSemanticsT m CallEntry
 top = liftF (Top id)
 
+isCtxRoot :: CairoSemanticsT m Bool
+isCtxRoot = (callerOfRoot ==) . fst <$> top
+
 {- | Prepare the expression for usage in the model.
 
 That is, deduce AP from the ApTracking data by PC and replace FP name
@@ -355,15 +358,9 @@ mkBuiltinConstraintsForInst apEnd isLast b inst@(pc, Instruction{..}) =
         let calleePc = uncheckedCallDestination inst
             stackFrame = (pc, calleePc)
          in do
+              push stackFrame
               canInline <- isInlinable calleePc
-              if canInline
-                then push stackFrame
-                else do
-                  whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
-                    calleeFp <- withExecutionCtx stackFrame getFp
-                    calleeApEnd <- getAp (getNextPc inst)
-                    let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
-                    expect pre *> assert post
+              unless canInline $ mkBuiltinConstraintsForFunc apEnd False
       AssertEqual -> do
         res <- getRes fp inst
         case res of
@@ -372,18 +369,21 @@ mkBuiltinConstraintsForInst apEnd isLast b inst@(pc, Instruction{..}) =
             let isBuiltin = builtinStart b .<= op0 .|| builtinStart b .<= op1
             assert (isBuiltin .-> (op0 + op1 .== (op0 + op1) `TSMT.mod` p))
           _ -> pure ()
-      Ret -> do
-        -- when encountering a 'ret', the corresponding function can be inlined
-        stackFrame@(_, calleePc) <- top
-        pop
-        whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
-          calleeFp <- withExecutionCtx stackFrame getFp
-          (caller, _) <- top
-          calleeApEnd <- getAp (getNextPc inst)
-          let calleeApEnd' = if isLast && caller == callerOfRoot then apEnd else calleeApEnd
-          let (pre, post) = getBuiltinContract calleeFp calleeApEnd' b bo
-          expect pre *> assert post
+      -- 'ret's are not in the bytecote for functions that are not inlinable
+      Ret -> mkBuiltinConstraintsForFunc apEnd True
       _ -> pure ()
+ where
+  mkBuiltinConstraintsForFunc lastAp canInline = do
+    calleeFp <- getFp
+    (_, calleePc) <- top <* pop
+    whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
+      isRoot <- isCtxRoot
+      calleeApEnd <-
+        if not canInline || not isLast || not isRoot
+          then getAp (getNextPc inst)
+          else pure lastAp
+      let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
+      expect pre *> assert post
 
 checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsT m ()
 checkBuiltinNotRequired b = traverse_ check
