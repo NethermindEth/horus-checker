@@ -1,5 +1,5 @@
 module Horus.CairoSemantics.Runner
-  ( runT
+  ( run
   , MemoryVariable (..)
   , ConstraintsState (..)
   , makeModel
@@ -7,11 +7,10 @@ module Horus.CairoSemantics.Runner
   )
 where
 
-import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
-import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
-import Control.Monad.State (MonadState, StateT, runStateT)
-import Control.Monad.Trans (MonadTrans (..))
-import Control.Monad.Trans.Free.Church (iterTM)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Free.Church (iterM)
+import Control.Monad.Reader (ReaderT, ask, runReaderT)
+import Control.Monad.State (State, runState)
 import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
@@ -25,7 +24,7 @@ import Lens.Micro (Lens', (%~), (<&>))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsT, MemoryVariable (..))
+import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>))
@@ -74,24 +73,12 @@ emptyConstraintsState =
     , cs_nameCounter = 0
     }
 
-newtype ImplT m a
-  = ImplT (ReaderT ContractInfo (ExceptT Text (StateT ConstraintsState m)) a)
-  deriving newtype
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadReader ContractInfo
-    , MonadState ConstraintsState
-    , MonadError Text
-    )
+type Impl = ReaderT ContractInfo (ExceptT Text (State ConstraintsState))
 
-instance MonadTrans ImplT where
-  lift = ImplT . lift . lift . lift
-
-interpret :: forall m a. Monad m => CairoSemanticsT m a -> ImplT m a
-interpret = iterTM exec
+interpret :: forall a. CairoSemanticsL a -> Impl a
+interpret = iterM exec
  where
-  exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
+  exec :: CairoSemanticsF (Impl a) -> Impl a
   exec (Assert' a cont) = csAsserts %= (QFAss a :) >> cont
   exec (Expect' a cont) = csExpects %= (a :) >> cont
   exec (CheckPoint a cont) = do
@@ -209,19 +196,17 @@ makeModel ConstraintsState{..} =
     mem0 = Expr.const (mv_varName mv0)
     addr0 = Expr.const (mv_addrName mv0)
 
-runImplT :: Monad m => ContractInfo -> ImplT m a -> m (Either Text ConstraintsState)
-runImplT contractInfo (ImplT m) = do
-  (v, cs) <-
+runImpl :: ContractInfo -> Impl a -> Either Text ConstraintsState
+runImpl contractInfo m = v $> cs
+ where
+  (v, cs) =
     runReaderT m contractInfo
       & runExceptT
-      & flip runStateT emptyConstraintsState
-  pure (v $> cs)
+      & flip runState emptyConstraintsState
 
-runT :: Monad m => ContractInfo -> CairoSemanticsT m a -> m (Either Text ConstraintsState)
-runT contractInfo a = do
-  mbCs <- runImplT contractInfo (interpret a)
-  pure $
-    mbCs
-      <&> csMemoryVariables %~ reverse
-      <&> csAsserts %~ reverse
-      <&> csExpects %~ reverse
+run :: ContractInfo -> CairoSemanticsL a -> Either Text ConstraintsState
+run contractInfo a =
+  runImpl contractInfo (interpret a)
+    <&> csMemoryVariables %~ reverse
+    <&> csAsserts %~ reverse
+    <&> csExpects %~ reverse

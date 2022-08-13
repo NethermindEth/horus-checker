@@ -53,6 +53,7 @@ library
     exposed-modules:
       Horus.Arguments
       Horus.ContractDefinition
+      Horus.ContractInfo
       Horus.Global
       Horus.Global.Runner
       Horus.Instruction
@@ -66,7 +67,6 @@ library
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
       Horus.Command.SMT
-      Horus.ContractInfo
       Horus.Expr
       Horus.Expr.SMT
       Horus.Expr.Std

@@ -3,7 +3,6 @@
 module Horus.CairoSemantics
   ( encodeSemantics
   , CairoSemanticsF (..)
-  , CairoSemanticsT
   , CairoSemanticsL
   , BuiltinOffsets (..)
   , MemoryVariable (..)
@@ -11,10 +10,9 @@ module Horus.CairoSemantics
 where
 
 import Control.Monad (when)
-import Control.Monad.Trans.Free.Church (FT, liftF)
+import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor ((<&>))
-import Data.Functor.Identity (Identity)
 import Data.List (tails)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
@@ -78,52 +76,51 @@ data CairoSemanticsF a
   | Throw Text
   deriving stock (Functor)
 
-type CairoSemanticsT = FT CairoSemanticsF
-type CairoSemanticsL = CairoSemanticsT Identity
+type CairoSemanticsL = F CairoSemanticsF
 
-assert' :: Expr TBool -> CairoSemanticsT m ()
+assert' :: Expr TBool -> CairoSemanticsL ()
 assert' a = liftF (Assert' a ())
 
-expect' :: Expr TBool -> CairoSemanticsT m ()
+expect' :: Expr TBool -> CairoSemanticsL ()
 expect' a = liftF (Expect' a ())
 
-checkPoint :: ([MemoryVariable] -> Expr TBool) -> CairoSemanticsT m ()
+checkPoint :: ([MemoryVariable] -> Expr TBool) -> CairoSemanticsL ()
 checkPoint a = liftF (CheckPoint a ())
 
-declareMem :: Expr TFelt -> CairoSemanticsT m (Expr TFelt)
+declareMem :: Expr TFelt -> CairoSemanticsL (Expr TFelt)
 declareMem address = liftF (DeclareMem address id)
 
-getCallee :: LabeledInst -> CairoSemanticsT m ScopedName
+getCallee :: LabeledInst -> CairoSemanticsL ScopedName
 getCallee call = liftF (GetCallee call id)
 
-getFuncSpec :: ScopedName -> CairoSemanticsT m FuncSpec
+getFuncSpec :: ScopedName -> CairoSemanticsL FuncSpec
 getFuncSpec name = liftF (GetFuncSpec name id)
 
-declareLocalMem :: Expr TFelt -> CairoSemanticsT m MemoryVariable
+declareLocalMem :: Expr TFelt -> CairoSemanticsL MemoryVariable
 declareLocalMem address = liftF (DeclareLocalMem address id)
 
-getApTracking :: Label -> CairoSemanticsT m ApTracking
+getApTracking :: Label -> CairoSemanticsL ApTracking
 getApTracking inst = liftF (GetApTracking inst id)
 
-getFunPc :: Label -> CairoSemanticsT m Label
+getFunPc :: Label -> CairoSemanticsL Label
 getFunPc l = liftF (GetFunPc l id)
 
-getBuiltinOffsets :: Label -> Builtin -> CairoSemanticsT m (Maybe BuiltinOffsets)
+getBuiltinOffsets :: Label -> Builtin -> CairoSemanticsL (Maybe BuiltinOffsets)
 getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
 
-throw :: Text -> CairoSemanticsT m a
+throw :: Text -> CairoSemanticsL a
 throw t = liftF (Throw t)
 
-assert :: Expr TBool -> CairoSemanticsT m ()
+assert :: Expr TBool -> CairoSemanticsL ()
 assert a = assert' =<< memoryRemoval a
 
-expect :: Expr TBool -> CairoSemanticsT m ()
+expect :: Expr TBool -> CairoSemanticsL ()
 expect a = expect' =<< memoryRemoval a
 
-memoryRemoval :: Expr a -> CairoSemanticsT m (Expr a)
+memoryRemoval :: Expr a -> CairoSemanticsL (Expr a)
 memoryRemoval = Expr.transform step
  where
-  step :: Expr b -> CairoSemanticsT m (Expr b)
+  step :: Expr b -> CairoSemanticsL (Expr b)
   step (Memory x) = declareMem x
   step e = pure e
 
@@ -139,14 +136,14 @@ substitute what forWhat = Expr.canonicalize . Expr.transformId step
 That is, deduce AP from the ApTracking data by PC and replace FP name
 with the given one.
 -}
-prepare :: Label -> Expr TFelt -> Expr a -> CairoSemanticsT m (Expr a)
+prepare :: Label -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
 
-prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsT m (Expr a)
+prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare' ap fp expr = memoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
 prepareCheckPoint ::
-  Label -> Expr TFelt -> Expr TBool -> CairoSemanticsT m ([MemoryVariable] -> Expr TBool)
+  Label -> Expr TFelt -> Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
 prepareCheckPoint pc fp expr = do
   ap <- getAp pc
   exMemoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
@@ -155,18 +152,18 @@ encodeApTracking :: ApTracking -> Expr TFelt
 encodeApTracking ApTracking{..} =
   Expr.const ("ap!" <> tShow at_group) + fromIntegral at_offset
 
-getAp :: Label -> CairoSemanticsT m (Expr TFelt)
+getAp :: Label -> CairoSemanticsL (Expr TFelt)
 getAp pc = getApTracking pc <&> encodeApTracking
 
-moduleStartAp :: Module -> CairoSemanticsT m (Expr TFelt)
+moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleStartAp Module{m_prog = []} = pure (Expr.const "ap!")
 moduleStartAp Module{m_prog = (pc0, _) : _} = getAp pc0
 
-moduleEndAp :: Module -> CairoSemanticsT m (Expr TFelt)
+moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleEndAp Module{m_prog = []} = pure (Expr.const "ap!")
 moduleEndAp Module{m_prog = m_prog} = getAp (getNextPc (last m_prog))
 
-encodeSemantics :: Module -> CairoSemanticsT m ()
+encodeSemantics :: Module -> CairoSemanticsL ()
 encodeSemantics m@Module{..} = do
   let fp = Expr.const @TFelt "fp!"
   apStart <- moduleStartAp m
@@ -182,7 +179,7 @@ encodeSemantics m@Module{..} = do
     mkApConstraints fp apEnd neInsts
     mkBuiltinConstraints fp neInsts
 
-exMemoryRemoval :: Expr TBool -> CairoSemanticsT m ([MemoryVariable] -> Expr TBool)
+exMemoryRemoval :: Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
 exMemoryRemoval expr = do
   (expr', localMemVars, _referencesLocals) <- unsafeMemoryRemoval expr
   pure (intro expr' localMemVars)
@@ -210,7 +207,7 @@ exMemoryRemoval expr = do
         quantLmv = foldr (\mvar e -> Expr.ExistsFelt (mv_varName mvar) e) innerExpr lmv
      in foldr (\var e -> Expr.ExistsFelt var e) quantLmv exVars
 
-  unsafeMemoryRemoval :: Expr a -> CairoSemanticsT m (Expr a, [MemoryVariable], Bool)
+  unsafeMemoryRemoval :: Expr a -> CairoSemanticsL (Expr a, [MemoryVariable], Bool)
   unsafeMemoryRemoval (Memory addr) = do
     (addr', localMemVars, referencesLocals) <- unsafeMemoryRemoval addr
     if referencesLocals
@@ -235,7 +232,7 @@ exMemoryRemoval expr = do
     (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
     pure (Expr.ExitField e', localMemVars, referencesLocals)
 
-mkInstructionConstraints :: Expr TFelt -> Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
+mkInstructionConstraints :: Expr TFelt -> Map Label Bool -> LabeledInst -> CairoSemanticsL ()
 mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
   dstReg <- prepare pc fp (regToVar i_dstRegister)
   let dst = memory (dstReg + fromInteger i_dstOffset)
@@ -265,7 +262,7 @@ mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
       Nothing -> pure ()
     _ -> pure ()
 
-mkApConstraints :: Expr TFelt -> Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsT m ()
+mkApConstraints :: Expr TFelt -> Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkApConstraints fp apEnd insts = do
   for_ (zip (toList insts) (NonEmpty.tail insts)) $ \(inst, nextInst) -> do
     at1 <- getApTracking (fst inst)
@@ -283,7 +280,7 @@ mkApConstraints fp apEnd insts = do
  where
   lastInst = NonEmpty.last insts
 
-mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsT m ()
+mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkBuiltinConstraints fp insts = do
   funPc <- getFunPc (fst (NonEmpty.head insts))
   apEnd <- getAp (getNextPc (NonEmpty.last insts))
@@ -304,7 +301,7 @@ getBuiltinContract fp apEnd b bo = (pre, post)
   initialPtr = memory (fp - fromIntegral (bo_input bo))
   finalPtr = memory (apEnd - fromIntegral (bo_output bo))
 
-mkBuiltinConstraintsForInst :: Expr TFelt -> Builtin -> LabeledInst -> CairoSemanticsT m ()
+mkBuiltinConstraintsForInst :: Expr TFelt -> Builtin -> LabeledInst -> CairoSemanticsL ()
 mkBuiltinConstraintsForInst fp b inst@(pc, Instruction{..}) = case i_opCode of
   Call -> do
     let calleePc = uncheckedCallDestination inst
@@ -323,7 +320,7 @@ mkBuiltinConstraintsForInst fp b inst@(pc, Instruction{..}) = case i_opCode of
       _ -> pure ()
   _ -> pure ()
 
-checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsT m ()
+checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsL ()
 checkBuiltinNotRequired b = traverse_ check
  where
   check inst = whenJust (callDestination inst) $ \calleePc ->
@@ -336,7 +333,7 @@ checkBuiltinNotRequired b = traverse_ check
             <> ") that does require it"
         )
 
-getRes :: Expr TFelt -> LabeledInst -> CairoSemanticsT m (Expr TFelt)
+getRes :: Expr TFelt -> LabeledInst -> CairoSemanticsL (Expr TFelt)
 getRes fp (pc, Instruction{..}) = do
   op0Reg <- prepare pc fp (regToVar i_op0Register)
   let op0 = memory (op0Reg + fromInteger i_op0Offset)
@@ -352,7 +349,7 @@ getRes fp (pc, Instruction{..}) = do
     Mult -> op0 * op1
     Unconstrained -> 0
 
-getApIncrement :: Expr TFelt -> LabeledInst -> CairoSemanticsT m (Maybe (Expr TFelt))
+getApIncrement :: Expr TFelt -> LabeledInst -> CairoSemanticsL (Maybe (Expr TFelt))
 getApIncrement fp inst
   | Call <- i_opCode (snd inst) = pure Nothing
   | otherwise = fmap Just $ case i_apUpdate (snd inst) of

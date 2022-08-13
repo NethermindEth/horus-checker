@@ -17,13 +17,14 @@ import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo 
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.FuncSpec (FuncSpec, emptyFuncSpec)
-import Horus.SW.Identifier (Identifier (..), Member (..), Struct (..), getFunctionPc)
+import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (maybeToError, safeLast, tShow)
 
 data ContractInfo = ContractInfo
   { ci_instructions :: [LabeledInst]
   , ci_identifiers :: Identifiers
+  , ci_sources :: [(Function, FuncSpec)]
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
   , ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
@@ -41,6 +42,7 @@ mkContractInfo cd = do
     ContractInfo
       { ci_instructions = insts
       , ci_identifiers = identifiers
+      , ci_sources = sources
       , ci_getApTracking = getApTracking
       , ci_getBuiltinOffsets = getBuiltinOffsets
       , ci_getFunPc = getFunPc
@@ -54,6 +56,7 @@ mkContractInfo cd = do
   debugInfo = p_debugInfo (cd_program cd)
   identifiers = p_identifiers (cd_program cd)
   instructionLocations = di_instructionLocations debugInfo
+  sources = [(f, getFuncSpec name) | (name, IFunction f) <- Map.toList identifiers]
 
   functions :: [(ScopedName, Label)]
   functions = mapMaybe (\(name, f) -> (name,) <$> getFunctionPc f) (Map.toList identifiers)

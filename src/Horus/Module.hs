@@ -20,7 +20,8 @@ import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
 import Horus.Instruction (LabeledInst)
 import Horus.Program (Identifiers)
-import Horus.SW.Identifier (getFunctionPc, getLabelPc)
+import Horus.SW.FuncSpec (FuncSpec (..))
+import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.Util (tShow)
 
@@ -114,8 +115,8 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Text -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
-traverseCFG :: [(Label, Expr TBool)] -> CFG -> ModuleL ()
-traverseCFG sources cfg = for_ sources $ \(l, pre) ->
+traverseCFG :: [(Function, FuncSpec)] -> CFG -> ModuleL ()
+traverseCFG sources cfg = for_ sources $ \(Function{fu_pc = l}, FuncSpec{fs_pre = pre}) ->
   visit Map.empty [] (pre .&& ap .== fp) l ACNone
  where
   visit :: Map Label Bool -> [LabeledInst] -> Expr TBool -> Label -> ArcCondition -> ModuleL ()
