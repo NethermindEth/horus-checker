@@ -96,7 +96,7 @@ interpret = iterTM exec
     csAsserts .= []
     r <- cont
     restAss <- use csAsserts
-    csAsserts .= (ExistentialAss (\mv -> (a mv) .-> (SMT.and (map (builderToAss mv) restAss))) : initAss)
+    csAsserts .= (ExistentialAss (\mv -> a mv .-> SMT.and (map (builderToAss mv) restAss)) : initAss)
     pure r
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]

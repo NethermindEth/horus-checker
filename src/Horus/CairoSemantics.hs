@@ -221,7 +221,7 @@ exMemoryRemoval exVars expr = do
     bindingWrapper <- ask
     if null localMemVars && not (TSMT.referencesAny exVars x')
       then do
-        ((,[]) . TSMT.toUnsafe) <$> lift (alloc (TSMT.fromUnsafe (bindingWrapper x'))) -- No
+        (,[]) . TSMT.toUnsafe <$> lift (alloc (TSMT.fromUnsafe (bindingWrapper x'))) -- No
       else lift $ do
         mv <- allocLocal (TSMT.fromUnsafe (bindingWrapper x'))
         pure (SMT.const (unpack $ mv_varName mv), mv : localMemVars)
