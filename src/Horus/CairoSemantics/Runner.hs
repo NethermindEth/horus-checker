@@ -1,12 +1,11 @@
-module Horus.CairoSemantics.Runner
-  ( runT
-  , MemoryVariable (..)
-  , ConstraintsState (..)
-  , makeModel
-  , debugFriendlyModel
-  , usesLogicalVariables
-  )
-where
+module Horus.CairoSemantics.Runner (
+  runT,
+  MemoryVariable (..),
+  ConstraintsState (..),
+  makeModel,
+  debugFriendlyModel,
+  usesLogicalVariables,
+) where
 
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
@@ -17,7 +16,7 @@ import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails, union)
 import Data.Text (Text)
-import Data.Text qualified as Text (intercalate, head)
+import Data.Text qualified as Text (head, intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
@@ -74,7 +73,8 @@ emptyConstraintsState =
 
 usesLogicalVariables :: ConstraintsState -> Bool
 usesLogicalVariables cs = any isLV (cs_decls cs)
-  where isLV = (\txt -> Text.head txt == '$')
+ where
+  isLV txt = Text.head txt == '$'
 
 newtype ImplT m a
   = ImplT (ReaderT ContractInfo (ExceptT Text (StateT ConstraintsState m)) a)
