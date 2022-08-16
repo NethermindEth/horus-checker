@@ -1,11 +1,12 @@
-module Horus.CairoSemantics.Runner (
-  runT,
-  MemoryVariable (..),
-  ConstraintsState (..),
-  makeModel,
-  debugFriendlyModel,
-  usesLogicalVariables,
-) where
+module Horus.CairoSemantics.Runner
+  ( runT
+  , MemoryVariable (..)
+  , ConstraintsState (..)
+  , makeModel
+  , debugFriendlyModel
+  , usesLogicalVariables
+  )
+where
 
 import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
 import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
