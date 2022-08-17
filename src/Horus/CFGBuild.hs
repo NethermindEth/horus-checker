@@ -116,9 +116,6 @@ nextSegmentLabel s = getNextPc (NonEmpty.last (coerce s))
 segmentInsts :: Segment -> [LabeledInst]
 segmentInsts (Segment ne) = toList ne
 
-isControlFlow :: Instruction -> Bool
-isControlFlow i = i_opCode i == Call || i_pcUpdate i /= Regular
-
 buildFrame :: [LabeledInst] -> Identifiers -> CFGBuildL ()
 buildFrame rows identifiers = do
   let segments = breakIntoSegments labels rows
@@ -148,9 +145,6 @@ addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone
 
 addArcsFrom :: Segment -> CFGBuildL ()
 addArcsFrom s
-  | not (isControlFlow endInst) = do
-      let lTo = nextSegmentLabel s
-      addArc' lFrom lTo insts
   | Call <- i_opCode endInst = do
       let lTo = nextSegmentLabel s
       addArc' lFrom lTo insts
@@ -167,7 +161,9 @@ addArcsFrom s
           lTo2 = moveLabel endPc (fromInteger (i_imm endInst))
       addArc lFrom lTo1 insts (ACJnz endPc False)
       addArc lFrom lTo2 insts (ACJnz endPc True)
-  | otherwise = pure ()
+  | otherwise = do
+      let lTo = nextSegmentLabel s
+      addArc' lFrom lTo insts
  where
   lFrom = segmentLabel s
   (endPc, endInst) = NonEmpty.last (coerce s)
