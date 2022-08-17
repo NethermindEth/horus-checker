@@ -5,7 +5,6 @@ module Horus.Preprocessor.Solvers
   , runSolver
   , cvc5
   , mathsat
-  , isMathsat
   , z3
   )
 where
@@ -53,9 +52,6 @@ mathsat =
     , s_adjustModel = Text.drop 6 . Text.init -- extracting ... from (model ...)
     , s_auxFlags = []
     }
-
-isMathsat :: Solver -> Bool
-isMathsat s = s_name s == "mathsat"
 
 z3 :: Solver
 z3 =
