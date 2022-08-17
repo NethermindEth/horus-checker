@@ -26,6 +26,7 @@ import Horus.CairoSemantics.Runner
   , MemoryVariable (..)
   , debugFriendlyModel
   , makeModel
+  , usesLogicalVariables
   )
 import Horus.ContractDefinition
   ( Checks
@@ -38,7 +39,7 @@ import Horus.Instruction (labelInsructions, readAllInstructions)
 import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
-import Horus.Preprocessor.Solvers (Solver, SolverSettings)
+import Horus.Preprocessor.Solvers (Solver, SolverSettings, isMathsat)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.ScopedTSExpr (emptyScopedTSExpr)
@@ -142,7 +143,9 @@ solveModule contractInfo smtPrefix m = do
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
 solveSMT smtPrefix cs = do
   Config{..} <- askConfig
-  runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
+  if isMathsat cfg_solver && usesLogicalVariables cs
+    then throw "Using logical variables with MathSat solver."
+    else runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
   query = makeModel smtPrefix cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
