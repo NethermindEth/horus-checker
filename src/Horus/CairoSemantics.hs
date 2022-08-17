@@ -230,7 +230,7 @@ exMemoryRemoval exVars expr = do
     let l' = map fst res
         localMemVars = concatMap snd res
     pure (SMT.List l', localMemVars)
-  unsafeMemoryRemoval expr' = return (expr', [])
+  unsafeMemoryRemoval expr' = pure (expr', [])
 
 mkInstructionConstraints :: TSExpr Integer -> Map Label Bool -> LabeledInst -> CairoSemanticsT m ()
 mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
@@ -244,7 +244,8 @@ mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
       calleeFpAsAp <- (2 +) <$> getAp pc
       setNewFp <- prepare pc calleeFp (withEmptyScope $ Util.fp .== Util.ap + 2)
       saveOldFp <- prepare pc fp (withEmptyScope $ memory Util.ap .== Util.fp)
-      setNextPc <- prepare pc fp (withEmptyScope $ memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
+      setNextPc <-
+        prepare pc fp (withEmptyScope $ memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
       pre <- getPreByCall inst
       post <- getPostByCall inst
       let lvar_suff = "+" <> tShowLabel pc
