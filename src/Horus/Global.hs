@@ -129,10 +129,10 @@ data SolvingInfo = SolvingInfo
 solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
 solveModule contractInfo smtPrefix m = do
   Config{..} <- askConfig
-  result <- mkResult
   when
     (isMathsat cfg_solver && any callToLVarSpec (m_prog m))
     (throw "MathSat solver was used to analyze a call with a logical variable in it's specification.")
+  result <- mkResult
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult = printingErrors $ do
