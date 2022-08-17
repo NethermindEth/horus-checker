@@ -1,9 +1,12 @@
-module Horus.SW.ScopedName (ScopedName (..), fromText) where
+module Horus.SW.ScopedName (ScopedName (..), fromText, mainScope) where
 
 import Data.Aeson (FromJSON (..), FromJSONKey (..), FromJSONKeyFunction (..), withText)
 import Data.String (IsString (..))
 import Data.Text (Text, pack, unpack)
 import Data.Text qualified as Text (intercalate, splitOn)
+
+mainScope :: Text
+mainScope = "__main__"
 
 newtype ScopedName = ScopedName {sn_path :: [Text]} deriving (Eq, Ord)
 

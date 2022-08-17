@@ -6,8 +6,9 @@ import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Text (Text)
+import Data.Text qualified as Text
 
 import Horus.ContractDefinition (ContractDefinition (..))
 import Horus.Expr (Expr, Ty (..))
@@ -18,13 +19,14 @@ import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.FuncSpec (FuncSpec, emptyFuncSpec)
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
-import Horus.SW.ScopedName (ScopedName)
+import Horus.SW.ScopedName (ScopedName (..), mainScope)
 import Horus.Util (maybeToError, safeLast, tShow)
 
 data ContractInfo = ContractInfo
   { ci_instructions :: [LabeledInst]
   , ci_identifiers :: Identifiers
   , ci_sources :: [(Function, FuncSpec)]
+  , ci_storageVars :: [ScopedName]
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
   , ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
@@ -34,15 +36,19 @@ data ContractInfo = ContractInfo
   , ci_getRets :: forall m. MonadError Text m => ScopedName -> m [Label]
   }
 
-mkContractInfo :: MonadError Text m => ContractDefinition -> m ContractInfo
+mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' ContractInfo
 mkContractInfo cd = do
   insts <- mkInstructions
   retsByFun <- mkRetsByFun insts
+  storageVars <- mkStorageVars
+  let generatedNames = mkGeneratedNames storageVars
+  let sources = mkSources generatedNames
   pure
     ContractInfo
       { ci_instructions = insts
       , ci_identifiers = identifiers
       , ci_sources = sources
+      , ci_storageVars = storageVars
       , ci_getApTracking = getApTracking
       , ci_getBuiltinOffsets = getBuiltinOffsets
       , ci_getFunPc = getFunPc
@@ -56,7 +62,6 @@ mkContractInfo cd = do
   debugInfo = p_debugInfo (cd_program cd)
   identifiers = p_identifiers (cd_program cd)
   instructionLocations = di_instructionLocations debugInfo
-  sources = [(f, getFuncSpec name) | (name, IFunction f) <- Map.toList identifiers]
 
   functions :: [(ScopedName, Label)]
   functions = mapMaybe (\(name, f) -> (name,) <$> getFunctionPc f) (Map.toList identifiers)
@@ -101,9 +106,12 @@ mkContractInfo cd = do
             <&> \m -> -me_offset m + st_size returns + st_size implicits
         ]
 
+  getCallee :: MonadError Text m => LabeledInst -> m ScopedName
+  getCallee inst = callDestination' inst >>= getFunName'
+
   getFunName :: Label -> Maybe ScopedName
   getFunName l = do
-    ilInfo <- di_instructionLocations debugInfo Map.!? l
+    ilInfo <- instructionLocations Map.!? l
     safeLast (il_accessibleScopes ilInfo)
 
   getFunName' :: MonadError Text m => Label -> m ScopedName
@@ -123,14 +131,11 @@ mkContractInfo cd = do
 
   getInvariant name = Map.lookup name (cd_invariants cd)
 
-  getCallee :: MonadError Text m => LabeledInst -> m ScopedName
-  getCallee inst = callDestination' inst >>= getFunName'
-
-  ---- non-plain data producers, that either depend on a monad (for errors) or non-plain data
-  mkInstructions :: MonadError Text m => m [LabeledInst]
+  ---- non-plain data producers that depend on the outer monad (likely, for errors)
+  mkInstructions :: m' [LabeledInst]
   mkInstructions = fmap labelInstructions (readAllInstructions (p_code (cd_program cd)))
 
-  mkRetsByFun :: MonadError Text m => [LabeledInst] -> m (Map ScopedName [Label])
+  mkRetsByFun :: [LabeledInst] -> m' (Map ScopedName [Label])
   mkRetsByFun insts = do
     retAndFun <- sequenceA [fmap (,[pc]) (getFunName' pc) | (pc, inst) <- insts, isRet inst]
     let preliminaryRes = Map.fromListWith (++) retAndFun
@@ -140,7 +145,41 @@ mkContractInfo cd = do
     let insertFunWithNoRets fun = Map.insertWith (\_new old -> old) fun []
     pure (foldr (insertFunWithNoRets . fst) preliminaryRes functions)
 
+  mkStorageVars :: m' [ScopedName]
+  mkStorageVars = catMaybes <$> sequenceA parseResults
+   where
+    parseResults = map parseStorageVarFromFilename (Map.keys (di_fileContents debugInfo))
+
+  --- data producers that depend on non-plain data, expressed as parameters
+  mkGeneratedNames :: [ScopedName] -> [ScopedName]
+  mkGeneratedNames = concatMap svNames
+   where
+    svNames sv = [sv <> "addr", sv <> "read", sv <> "write"]
+
   mkGetRets :: MonadError Text m => Map ScopedName [Label] -> ScopedName -> m [Label]
   mkGetRets retsByFun name = maybeToError msg (retsByFun Map.!? name)
    where
     msg = "Can't find 'ret' instructions for " <> tShow name <> ". Is it a function?"
+
+  mkSources :: [ScopedName] -> [(Function, FuncSpec)]
+  mkSources generatedNames =
+    [ (f, getFuncSpec name)
+    | (name, IFunction f) <- Map.toList identifiers
+    , name `notElem` generatedNames
+    ]
+
+parseStorageVarFromFilename :: MonadError Text m => Text -> m (Maybe ScopedName)
+parseStorageVarFromFilename filename
+  | Just noPrefix <- Text.stripPrefix "autogen/starknet/storage_var/" filename
+  , Just stem <- Text.stripSuffix "/decl.cairo" noPrefix =
+      case Text.splitOn "/" stem of
+        [x] -> pure (Just (ScopedName [mainScope, x]))
+        _ ->
+          throwError
+            ( Text.concat
+                [ "The storage var declaration file contains an unexpected variable name "
+                , "(" <> tShow stem <> "). "
+                , "Does it have a non-main scope?"
+                ]
+            )
+  | otherwise = pure Nothing

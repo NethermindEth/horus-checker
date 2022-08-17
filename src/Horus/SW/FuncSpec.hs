@@ -11,6 +11,7 @@ data FuncSpec = FuncSpec
   { fs_pre :: Expr TBool
   , fs_post :: Expr TBool
   }
+  deriving stock (Show)
 
 emptyFuncSpec :: FuncSpec
 emptyFuncSpec = FuncSpec{fs_pre = Expr.True, fs_post = Expr.True}
