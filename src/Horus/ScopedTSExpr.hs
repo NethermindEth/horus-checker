@@ -8,6 +8,7 @@ module Horus.ScopedTSExpr
   , negateSTS
   , addLVarSuffix
   , withEmptyScope
+  , isEmptyScoped
   )
 where
 
@@ -15,7 +16,7 @@ import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, keysSet)
 import Data.Set (Set)
-import Data.Set qualified as Set (empty, map)
+import Data.Set qualified as Set (empty, map, null)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate, unpack)
 import Lens.Micro (Lens', over)
@@ -40,6 +41,9 @@ emptyScopedTSExpr = withEmptyScope SMT.True
 
 withEmptyScope :: TSExpr a -> ScopedTSExpr a
 withEmptyScope expr = ScopedTSExpr{stsexpr_scope = Set.empty, stsexpr_expr = expr}
+
+isEmptyScoped :: ScopedTSExpr a -> Bool
+isEmptyScoped stsexpr = Set.null $ stsexpr_scope stsexpr
 
 conjunctSTS :: [ScopedTSExpr Bool] -> ScopedTSExpr Bool
 conjunctSTS conjuncts =

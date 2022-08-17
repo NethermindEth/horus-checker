@@ -34,14 +34,14 @@ import Horus.ContractDefinition
   , cdChecks
   )
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
-import Horus.Instruction (labelInsructions, readAllInstructions)
-import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
+import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
+import Horus.Module (Module (m_prog), nameOfModule, runModuleL, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
-import Horus.Preprocessor.Solvers (Solver, SolverSettings)
+import Horus.Preprocessor.Solvers (Solver, SolverSettings, isMathsat)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
-import Horus.ScopedTSExpr (emptyScopedTSExpr)
+import Horus.ScopedTSExpr (emptyScopedTSExpr, isEmptyScoped)
 import Horus.Util (tShow)
 
 data Config = Config
@@ -128,7 +128,11 @@ data SolvingInfo = SolvingInfo
 
 solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
 solveModule contractInfo smtPrefix m = do
+  Config{..} <- askConfig
   result <- mkResult
+  when
+    (isMathsat cfg_solver && any callToLVarSpec (m_prog m))
+    (throw "MathSat solver was used to analyze a call with a logical variable in it's specification.")
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult = printingErrors $ do
@@ -138,6 +142,10 @@ solveModule contractInfo smtPrefix m = do
     solveSMT smtPrefix constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
   moduleName = nameOfModule (ci_identifiers contractInfo) m
+  callToLVarSpec lblInst@(_, inst) = case i_opCode inst of
+    Call -> not $ isEmptyScoped (getPre lblInst)
+    _ -> False
+  getPre = ci_getPreByCall contractInfo
 
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
 solveSMT smtPrefix cs = do
