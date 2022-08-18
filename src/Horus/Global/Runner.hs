@@ -11,6 +11,7 @@ import Text.Pretty.Simple (pPrintString)
 import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
+import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
 newtype ImplT m a = ImplT (ReaderT Config m a)
@@ -35,6 +36,7 @@ interpret = iterTM exec . runGlobalT
     lift (CFGBuild.runImplT (CFGBuild.interpret builder)) >>= liftEither >>= cont
   exec (RunCairoSemanticsT env builder cont) = do
     lift (CairoSemantics.runT env builder) >>= liftEither >>= cont
+  exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
   exec (AskConfig cont) = ask >>= cont
   exec (RunPreprocessor penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)
