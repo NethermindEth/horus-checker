@@ -23,7 +23,7 @@ import Control.Monad (liftM3)
 import Data.Array (assocs)
 import Data.Coerce (coerce)
 import Data.Function ((&))
-import Data.Graph (Graph, Vertex, graphFromEdges, reachable)
+import Data.Graph (Graph, Vertex, graphFromEdges', reachable)
 import Data.List (foldl', sort, union)
 import Data.Map qualified as Map
   ( Map
@@ -42,7 +42,7 @@ import Data.Map qualified as Map
   , toList
   , (!)
   )
-import Data.Maybe (fromJust, mapMaybe)
+import Data.Maybe (fromJust, isNothing, mapMaybe)
 
 import Data.Text (Text)
 import Horus.ContractDefinition (Checks (c_invariants, c_postConds, c_preConds))
@@ -64,7 +64,7 @@ import Horus.Program
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
 import Horus.SW.Std (FuncSpec (fs_name), stdFuncs)
-import Horus.Util (invert, safeLast)
+import Horus.Util (invert, safeHead, safeLast)
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -88,7 +88,7 @@ isRetArc (Just ArcRet) = True
 isRetArc _ = False
 
 isNormalArc :: FInfo -> Bool
-isNormalArc info = not (isCallArc info) && not (isRetArc info)
+isNormalArc = isNothing
 
 cgInsertArc :: CG -> (Label, Label) -> CG
 cgInsertArc cg@(CG verts arcs) (fro, to) =
@@ -97,9 +97,7 @@ cgInsertArc cg@(CG verts arcs) (fro, to) =
     else CG verts $ Map.insertWith (++) fro [to] arcs
 
 graphOfCG :: CG -> (Graph, Vertex -> (Label, Label, [Label]))
-graphOfCG cg =
-  let (graph, vertToNode, _) = graphFromEdges . map named . Map.assocs $ cg_arcs cg
-   in (graph, vertToNode)
+graphOfCG cg = graphFromEdges' . map named . Map.assocs $ cg_arcs cg
  where
   named (fro, tos) = (fro, fro, tos)
 
@@ -120,17 +118,9 @@ pcToFunOfProg prog = Map.mapMaybe ilInfoToFun . di_instructionLocations $ p_debu
     safeLast (il_accessibleScopes ilInfo) >>= getFunctionPc . (p_identifiers prog Map.!)
 
 fNameOfPc :: Identifiers -> Label -> Maybe ScopedName
-fNameOfPc idents lblpc =
-  if null fLblsAtPc
-    then Nothing
-    else Just $ head fLblsAtPc
+fNameOfPc idents lblpc = safeHead fLblsAtPc
  where
-  fLblsAtPc =
-    [ name
-    | (name, ident) <- Map.toList idents
-    , Just pc <- [getFunctionPc ident]
-    , pc == lblpc
-    ]
+  fLblsAtPc = [name | (name, ident) <- Map.toList idents, Just lblpc == getFunctionPc ident]
 
 uncheckedFNameOfPc :: Identifiers -> Label -> ScopedName
 uncheckedFNameOfPc idents = fromJust . fNameOfPc idents
