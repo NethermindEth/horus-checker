@@ -1,5 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-
 module Horus.Arguments
   ( Arguments (..)
   , argParser
@@ -8,11 +6,12 @@ module Horus.Arguments
 where
 
 import Control.Monad.Except (throwError)
+import Data.List (intercalate)
 import Data.Text (Text, unpack)
 import Options.Applicative
 
 import Horus.Global (Config (..))
-import Horus.Preprocessor.Solvers (Solver, SolverSettings (..), cvc5, mathsat, z3)
+import Horus.Preprocessor.Solvers (MultiSolver (..), SingleSolver, SolverSettings (..), cvc5, mathsat, z3)
 
 data Arguments = Arguments
   { arg_fileName :: FilePath
@@ -25,12 +24,37 @@ fileArgument = "COMPILED_FILE"
 defaultTimeoutMs :: Int
 defaultTimeoutMs = 3000
 
-solverReader :: ReadM Solver
-solverReader = eitherReader $ \case
-  "z3" -> pure z3
-  "cvc5" -> pure cvc5
-  "mathsat" -> pure mathsat
-  solver -> throwError ("Incorrect solver: " <> solver)
+singleSolverOptions :: [(String, SingleSolver)]
+singleSolverOptions = [("z3", z3), ("cvc5", cvc5), ("mathsat", mathsat)]
+
+singleSolverNames :: [String]
+singleSolverNames = map fst singleSolverOptions
+
+singleSolverReader :: ReadM SingleSolver
+singleSolverReader = eitherReader $ \s -> case lookup s singleSolverOptions of
+  Just solver -> pure solver
+  _ ->
+    throwError
+      ( "Incorrect solver: "
+          <> s
+          <> ". Available options are "
+          <> intercalate ", " singleSolverNames
+          <> "."
+      )
+
+singleSolverParser :: Parser SingleSolver
+singleSolverParser =
+  option
+    singleSolverReader
+    ( long "solver"
+        <> short 's'
+        <> metavar "SOLVER"
+        <> help "Solver to check the resulting smt queries."
+        <> completeWith singleSolverNames
+    )
+
+multiSolverParser :: Parser MultiSolver
+multiSolverParser = MultiSolver <$> some singleSolverParser
 
 argParser :: Parser Arguments
 argParser =
@@ -47,15 +71,7 @@ configParser =
           <> short 'v'
           <> help "If the flag is set all the intermediate steps are printed out."
       )
-    <*> option
-      solverReader
-      ( long "solver"
-          <> short 's'
-          <> metavar "SOLVER"
-          <> value z3
-          <> showDefault
-          <> help "Solver to check the resulting smt queries."
-      )
+    <*> multiSolverParser
     <*> ( SolverSettings
             <$> switch
               ( long "print-models"
