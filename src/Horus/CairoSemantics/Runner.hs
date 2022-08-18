@@ -34,6 +34,10 @@ data AssertionBuilder
   = QFAss (TSExpr Bool)
   | ExistentialAss ([MemoryVariable] -> TSExpr Bool)
 
+instance Show AssertionBuilder where
+  show (QFAss a) = show a
+  show (ExistentialAss f) = show (f [])
+
 builderToAss :: [MemoryVariable] -> AssertionBuilder -> TSExpr Bool
 builderToAss _ (QFAss e) = e
 builderToAss mv (ExistentialAss f) = f mv
@@ -93,10 +97,21 @@ interpret = iterTM exec
   exec (Expect' a cont) = csExpects %= (a :) >> cont
   exec (CheckPoint a cont) = do
     initAss <- use csAsserts
+    initExp <- use csExpects
     csAsserts .= []
+    csExpects .= []
     r <- cont
     restAss <- use csAsserts
-    csAsserts .= (ExistentialAss (\mv -> a mv .-> SMT.and (map (builderToAss mv) restAss)) : initAss)
+    restExp <- use csExpects
+    csAsserts
+      .= ( ExistentialAss
+            ( \mv ->
+                a mv
+                  .-> SMT.and ((map (builderToAss mv) restAss) ++ (map SMT.not restExp))
+            )
+            : initAss
+         )
+    csExpects .= initExp
     pure r
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
@@ -180,7 +195,9 @@ makeModel rawSmt ConstraintsState{..} =
           , memRestrictions
           , addrDefinitions
           , map (builderToAss cs_memoryVariables) cs_asserts
-          , [SMT.not (SMT.and cs_expects)]
+          , if null cs_expects
+              then []
+              else [SMT.not (SMT.and cs_expects)]
           ]
    in (decls <> map SMT.assert restrictions)
         & map showTSStmt

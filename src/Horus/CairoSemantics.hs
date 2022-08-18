@@ -180,9 +180,9 @@ encodeSemantics m@Module{..} = do
   pre <- prepare' apStart fp m_pre
   post <- prepare' apEnd fp m_post
   assert pre
-  expect post
   for_ m_prog $ \inst -> do
     mkInstructionConstraints fp m_jnzOracle inst
+  expect post
   whenJust (nonEmpty m_prog) $ \neInsts -> do
     mkApConstraints fp apEnd neInsts
     mkBuiltinConstraints fp neInsts
