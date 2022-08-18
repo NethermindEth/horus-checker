@@ -107,7 +107,7 @@ interpret = iterTM exec
       .= ( ExistentialAss
             ( \mv ->
                 a mv
-                  .-> SMT.and ((map (builderToAss mv) restAss) ++ (map SMT.not restExp))
+                  .-> SMT.and (map (builderToAss mv) restAss ++ map SMT.not restExp)
             )
             : initAss
          )
@@ -195,9 +195,7 @@ makeModel rawSmt ConstraintsState{..} =
           , memRestrictions
           , addrDefinitions
           , map (builderToAss cs_memoryVariables) cs_asserts
-          , if null cs_expects
-              then []
-              else [SMT.not (SMT.and cs_expects)]
+          , [SMT.not (SMT.and cs_expects) | not (null cs_expects)]
           ]
    in (decls <> map SMT.assert restrictions)
         & map showTSStmt
