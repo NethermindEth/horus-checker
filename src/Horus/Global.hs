@@ -30,7 +30,7 @@ import Horus.CairoSemantics.Runner
 import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdChecks)
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
 import Horus.Instruction (labelInsructions, readAllInstructions)
-import Horus.Module (Module, nameOfModule, runModuleL, traverseCFG)
+import Horus.Module (Module, ModuleL, nameOfModule, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
@@ -48,6 +48,7 @@ data Config = Config
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
   | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
+  | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | AskConfig (Config -> a)
   | PutStrLn' Text a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
@@ -74,6 +75,9 @@ runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
 
 runCairoSemanticsT :: ContractInfo -> CairoSemanticsT m a -> GlobalT m ConstraintsState
 runCairoSemanticsT env smt2Builder = liftF' (RunCairoSemanticsT env smt2Builder id)
+
+runModuleL :: ModuleL a -> GlobalT m [Module]
+runModuleL builder = liftF' (RunModuleL builder id)
 
 askConfig :: GlobalT m Config
 askConfig = liftF' (AskConfig id)
@@ -104,7 +108,7 @@ makeCFG checks identifiers labelToFun labeledInsts =
   runCFGBuildT (buildCFG checks identifiers labelToFun labeledInsts)
 
 makeModules :: ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules cd cfg = pure (runModuleL (traverseCFG sources cfg))
+makeModules cd cfg = runModuleL (traverseCFG sources cfg)
  where
   sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
   preConds = cd ^. cdChecks . cPreConds
