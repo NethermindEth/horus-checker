@@ -1,5 +1,7 @@
 module Horus.Preprocessor.Solvers
   ( Solver
+  , SingleSolver
+  , MultiSolver (..)
   , SolverSettings (..)
   , defaultSolverSettings
   , runSolver
@@ -10,19 +12,26 @@ module Horus.Preprocessor.Solvers
 where
 
 import Control.Exception.Safe (bracket)
+import Data.Foldable (foldlM)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 import Data.Text as Text (drop, init, pack, tail)
 import SimpleSMT qualified as SMT
 import System.Timeout (timeout)
 
-data Solver = Solver
+import Horus.Util (tShow)
+
+type Solver = MultiSolver
+
+newtype MultiSolver = MultiSolver [SingleSolver]
+
+data SingleSolver = SingleSolver
   { s_name :: Text
   , s_adjustModel :: Text -> Text
   , s_auxFlags :: [Text]
   }
 
-instance Show Solver where
+instance Show SingleSolver where
   show solver = unpack (s_name solver)
 
 data SolverSettings = SolverSettings
@@ -37,25 +46,25 @@ defaultSolverSettings =
     , ss_timeoutMillis = -1
     }
 
-cvc5 :: Solver
+cvc5 :: SingleSolver
 cvc5 =
-  Solver
+  SingleSolver
     { s_name = "cvc5"
     , s_adjustModel = Text.tail . Text.init
     , s_auxFlags = []
     }
 
-mathsat :: Solver
+mathsat :: SingleSolver
 mathsat =
-  Solver
+  SingleSolver
     { s_name = "mathsat"
     , s_adjustModel = Text.drop 6 . Text.init -- extracting ... from (model ...)
     , s_auxFlags = []
     }
 
-z3 :: Solver
+z3 :: SingleSolver
 z3 =
-  Solver
+  SingleSolver
     { s_name = "z3"
     , s_adjustModel = Text.tail . Text.init
     , s_auxFlags = ["-in"]
@@ -65,8 +74,8 @@ toSMTBool :: Bool -> String
 toSMTBool True = "true"
 toSMTBool False = "false"
 
-runSolver :: Solver -> SolverSettings -> Text -> IO (SMT.Result, Maybe Text)
-runSolver Solver{..} SolverSettings{..} query = solving $ \solver -> do
+runSingleSolver :: SingleSolver -> SolverSettings -> Text -> IO (SMT.Result, Maybe Text)
+runSingleSolver SingleSolver{..} SolverSettings{..} query = solving $ \solver -> do
   SMT.setOption solver ":produce-models" (toSMTBool ss_shouldProduceModels)
   SMT.loadString solver (unpack query)
   res <- SMT.check solver
@@ -87,6 +96,19 @@ runSolver Solver{..} SolverSettings{..} query = solving $ \solver -> do
     mbResult <- timeout (ss_timeoutMillis * 1000) f
     pure (fromMaybe timeoutResult mbResult)
   timeoutResult = (SMT.Unknown, Just (s_name <> ": Time is out."))
+
+runSolver :: Solver -> SolverSettings -> Text -> IO (SMT.Result, Maybe Text)
+runSolver (MultiSolver solvers) settings query =
+  foldlM combineResult (SMT.Unknown, Just "All solvers failed.") solvers
+ where
+  combineResult (SMT.Unknown, mbReason) nextSolver = do
+    (nextStatus, nextMbReason) <- runSingleSolver nextSolver settings query
+    case nextStatus of
+      SMT.Unknown -> pure (SMT.Unknown, mbReason <> annotateFailure nextSolver nextMbReason)
+      _ -> pure (nextStatus, nextMbReason)
+  combineResult res _ = pure res
+
+  annotateFailure solver reason = Just ("\n" <> tShow solver <> " failed with: ") <> reason
 
 withSolver :: Text -> [Text] -> (SMT.Solver -> IO a) -> IO a
 withSolver solverName args =
