@@ -3,6 +3,7 @@ module Horus.Util
   , toSignedFelt
   , whenJust
   , whenJustM
+  , safeHead
   , safeLast
   , Box (..)
   , topmostStepFT
@@ -38,6 +39,10 @@ whenJust (Just a) f = f a
 
 whenJustM :: Monad m => m (Maybe a) -> (a -> m ()) -> m ()
 whenJustM a f = a >>= flip whenJust f
+
+safeHead :: [a] -> Maybe a
+safeHead [] = Nothing
+safeHead (hd : _) = Just hd
 
 safeLast :: [a] -> Maybe a
 safeLast [] = Nothing
