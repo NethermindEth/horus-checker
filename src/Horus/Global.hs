@@ -18,7 +18,7 @@ import System.FilePath.Posix ((</>))
 
 import Horus.CFGBuild (CFGBuildL, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
-import Horus.CairoSemantics (CairoSemanticsL, encodeSemantics)
+import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
   , MemoryVariable (..)
@@ -27,7 +27,7 @@ import Horus.CairoSemantics.Runner
   )
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.Instruction (LabeledInst)
-import Horus.Module (Module (..), ModuleL, nameOfModule, traverseCFG)
+import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
@@ -127,7 +127,7 @@ verbosePrint what = verbosePutStrLn (tShow what)
 makeModules :: CFG -> GlobalL [Module]
 makeModules cfg = do
   sources <- getSources
-  runModuleL (traverseCFG sources cfg)
+  runModuleL (gatherModules cfg sources)
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
@@ -143,7 +143,7 @@ solveModule m = do
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult moduleName = printingErrors $ do
-    constraints <- runCairoSemanticsL (encodeSemantics m)
+    constraints <- runCairoSemanticsL (encodeModule m)
     outputSmtQueries moduleName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)

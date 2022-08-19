@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 
 module Horus.CairoSemantics
-  ( encodeSemantics
+  ( encodeModule
   , CairoSemanticsF (..)
   , CairoSemanticsL
   , BuiltinOffsets (..)
@@ -47,7 +47,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (Module (..))
+import Horus.Module (Module (..), ModuleSpec (..), PlainSpec (..), richToPlainSpec)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
@@ -155,27 +155,38 @@ encodeApTracking ApTracking{..} =
 getAp :: Label -> CairoSemanticsL (Expr TFelt)
 getAp pc = getApTracking pc <&> encodeApTracking
 
-moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
-moduleStartAp Module{m_prog = []} = pure (Expr.const "ap!")
-moduleStartAp Module{m_prog = (pc0, _) : _} = getAp pc0
+moduleStartAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
+moduleStartAp [] = pure (Expr.const "ap!")
+moduleStartAp ((pc0, _) : _) = getAp pc0
 
-moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
-moduleEndAp Module{m_prog = []} = pure (Expr.const "ap!")
-moduleEndAp Module{m_prog = m_prog} = getAp (getNextPc (last m_prog))
+moduleEndAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
+moduleEndAp [] = pure (Expr.const "ap!")
+moduleEndAp insts = getAp (getNextPc (last insts))
 
-encodeSemantics :: Module -> CairoSemanticsL ()
-encodeSemantics m@Module{..} = do
+encodeModule :: Module -> CairoSemanticsL ()
+encodeModule Module{..} = case m_spec of
+  MSRich spec -> encodeRichSpec m_prog m_jnzOracle spec
+  MSPlain spec -> encodePlainSpec m_prog m_jnzOracle spec
+
+encodeRichSpec :: [LabeledInst] -> Map Label Bool -> FuncSpec -> CairoSemanticsL ()
+encodeRichSpec insts oracle funcSpec = do
+  encodePlainSpec insts oracle plainSpec
+ where
+  plainSpec = richToPlainSpec funcSpec
+
+encodePlainSpec :: [LabeledInst] -> Map Label Bool -> PlainSpec -> CairoSemanticsL ()
+encodePlainSpec insts jnzOracle PlainSpec{..} = do
   let fp = Expr.const @TFelt "fp!"
-  apStart <- moduleStartAp m
-  apEnd <- moduleEndAp m
+  apStart <- moduleStartAp insts
+  apEnd <- moduleEndAp insts
   assert (fp .<= apStart)
-  pre <- prepare' apStart fp m_pre
-  post <- prepare' apEnd fp m_post
+  pre <- prepare' apStart fp ps_pre
+  post <- prepare' apEnd fp ps_post
   assert pre
-  for_ m_prog $ \inst -> do
-    mkInstructionConstraints fp m_jnzOracle inst
+  for_ insts $ \inst -> do
+    mkInstructionConstraints fp jnzOracle inst
   expect post
-  whenJust (nonEmpty m_prog) $ \neInsts -> do
+  whenJust (nonEmpty insts) $ \neInsts -> do
     mkApConstraints fp apEnd neInsts
     mkBuiltinConstraints fp neInsts
 

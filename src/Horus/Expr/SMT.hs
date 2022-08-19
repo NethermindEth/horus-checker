@@ -1,6 +1,7 @@
 module Horus.Expr.SMT
   ( toSMT
   , pprExpr
+  , parse
   , parseAssertion
   , parseArithmetic
   , inlineLets
