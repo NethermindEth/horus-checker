@@ -41,6 +41,8 @@ import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
+  , cfg_output_queries :: Bool
+  , cfg_output_optimized_queries :: Bool
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
   }
@@ -54,6 +56,7 @@ data GlobalF m a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
   | forall b. Catch (GlobalT m b) (Text -> GlobalT m b) (b -> a)
+  | WriteFile' Text Text a
 
 deriving instance Functor (GlobalF m)
 
@@ -95,6 +98,9 @@ throw t = liftF' (Throw t)
 catch :: GlobalT m a -> (Text -> GlobalT m a) -> GlobalT m a
 catch m h = liftF' (Catch m h id)
 
+writeFile' :: Text -> Text -> GlobalT m ()
+writeFile' file text = liftF' (WriteFile' file text ())
+
 verbosePutStrLn :: Text -> GlobalT m ()
 verbosePutStrLn what = do
   config <- askConfig
@@ -127,6 +133,10 @@ data SolvingInfo = SolvingInfo
 
 solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
 solveModule contractInfo smtPrefix m = do
+  Config{..} <- askConfig
+  when 
+    cfg_output_queries 
+    writeSmtFile
   result <- mkResult
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
@@ -137,6 +147,9 @@ solveModule contractInfo smtPrefix m = do
     solveSMT smtPrefix constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
   moduleName = nameOfModule (ci_identifiers contractInfo) m
+  writeSmtFile = do
+    constraints <- extractConstraints contractInfo m
+    writeFile' (ci_name contractInfo <> "_" <> moduleName <> ".smt2") (makeModel smtPrefix constraints)
 
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
 solveSMT smtPrefix cs = do
@@ -146,8 +159,8 @@ solveSMT smtPrefix cs = do
   query = makeModel smtPrefix cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
-solveContract cd = do
+solveContract :: Monad m => ContractDefinition -> Text -> GlobalT m [SolvingInfo]
+solveContract cd contract_name = do
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
   verbosePrint labeledInsts
@@ -156,7 +169,7 @@ solveContract cd = do
   modules <- makeModules cd cfg
   for modules (solveModule contractInfo (cd_rawSmt cd))
  where
-  contractInfo = mkContractInfo cd
+  contractInfo = mkContractInfo cd contract_name
   getFunPc = ci_getFunPc contractInfo
   identifiers = p_identifiers (cd_program cd)
   checks = cd_checks cd

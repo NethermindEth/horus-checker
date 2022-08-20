@@ -1,7 +1,7 @@
 module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad.Except (MonadError (..), liftEither, throwError)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
@@ -44,6 +44,7 @@ interpret = iterTM exec . runGlobalT
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
+  exec (WriteFile' file text cont) = (liftIO $ writeFile (unpack file) (unpack text)) >> cont
 
 runImplT :: Config -> ImplT m a -> m a
 runImplT config (ImplT m) = runReaderT m config
