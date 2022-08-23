@@ -89,6 +89,8 @@ library
       text,
       transformers,
       z3,
+      directory,
+      filepath
 
 executable horus-check
     import:                  deps

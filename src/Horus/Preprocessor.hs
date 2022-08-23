@@ -4,11 +4,14 @@ module Horus.Preprocessor
   , PreprocessorF (..)
   , PreprocessorL (..)
   , solve
+  , optimizeQuery
+  , goalListToTextList
   )
 where
 
 import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError (..))
+-- import Control.Monad(sequence)
 import Control.Monad.Free.Class (MonadFree)
 import Control.Monad.Trans.Free.Church (F, liftF)
 import Data.Foldable (foldlM)
@@ -136,16 +139,7 @@ instance Show Model where
 
 solve :: Text -> PreprocessorL SolverResult
 solve smtQuery = do
-  magicTactics <-
-    traverse
-      mkTactic
-      [ "simplify"
-      , "solve-eqs"
-      , "propagate-values"
-      , "simplify"
-      ]
-  goal <- runZ3 $ sexprToGoal smtQuery
-  preprocessGoal magicTactics goal >>= foldlM combineResult (Unknown Nothing)
+  optimizeQuery smtQuery >>= foldlM combineResult (Unknown Nothing)
  where
   combineResult (Sat mbModel) _ = pure (Sat mbModel)
   combineResult Unsat subgoal = do
@@ -161,6 +155,23 @@ solve smtQuery = do
       (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (processModel subgoal) mbModel
       (SMT.Unsat, _mbCore) -> pure Unsat
       (SMT.Unknown, mbReason) -> pure (Unknown mbReason)
+
+optimizeQuery :: Text -> PreprocessorL [Goal]
+optimizeQuery smtQuery = do
+  magicTactics <-
+    traverse
+      mkTactic
+      [ "simplify"
+      , "solve-eqs"
+      , "propagate-values"
+      , "simplify"
+      ]
+  goal <- runZ3 $ sexprToGoal smtQuery
+  preprocessGoal magicTactics goal
+
+goalListToTextList :: [Goal] -> PreprocessorL [Text]
+goalListToTextList goalList = do
+  runZ3 $ sequence (map goalToSExpr goalList)
 
 processModel :: Goal -> Text -> PreprocessorL SolverResult
 processModel goal tModel = do

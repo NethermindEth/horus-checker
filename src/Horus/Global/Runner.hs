@@ -14,6 +14,9 @@ import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath.Posix (takeDirectory)
+
 newtype ImplT m a = ImplT (ReaderT Config m a)
   deriving newtype
     ( Functor
@@ -44,10 +47,15 @@ interpret = iterTM exec . runGlobalT
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
-  exec (WriteFile' file text cont) = (liftIO $ writeFile (unpack file) (unpack text)) >> cont
+  exec (WriteFile' file text cont) = (liftIO $ createAndWriteFile (unpack file) (unpack text)) >> cont
 
 runImplT :: Config -> ImplT m a -> m a
 runImplT config (ImplT m) = runReaderT m config
 
 runT :: (MonadIO m, MonadError Text m) => Config -> GlobalT m a -> m a
 runT config = runImplT config . interpret
+
+createAndWriteFile :: FilePath -> String -> IO ()
+createAndWriteFile path content = do
+  createDirectoryIfMissing True $ takeDirectory path
+  writeFile path content
