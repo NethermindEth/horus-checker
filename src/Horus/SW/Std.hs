@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLists #-}
+
 module Horus.SW.Std (stdSpecs, FuncSpec (..)) where
 
 import Data.Map (Map)
@@ -8,9 +10,23 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Vars (ap, fp, memory, prime, rcBound)
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
+import Horus.Util (tShow)
 
 stdSpecs :: Map ScopedName FuncSpec
 stdSpecs = Map.fromList stdSpecsList
+
+mkReadSpec :: ScopedName -> Int -> FuncSpec
+mkReadSpec name arity = emptyFuncSpec{fs_post = memory (ap - 1) .== var}
+ where
+  offsets = [-3 - arity + 1 .. -3]
+  args = [memory (fp + fromIntegral offset) | offset <- offsets]
+  var = Expr.apply (Expr.Fun (tShow name)) args
+
+mkWriteSpec :: ScopedName -> Int -> FuncSpec
+mkWriteSpec name arity = emptyFuncSpec{fs_storage = [(name, [(args, memory (fp - 3))])]}
+ where
+  offsets = [-4 - arity + 1 .. -4]
+  args = [memory (fp + fromIntegral offset) | offset <- offsets]
 
 {- | A lexicographically sorted by fs_name list of specifications of
  standard library functions.
@@ -21,7 +37,11 @@ functions.
 -}
 stdSpecsList :: [(ScopedName, FuncSpec)]
 stdSpecsList =
-  [
+  [ ("__main__.stack.read", mkReadSpec "__main__.stack" 1)
+  , ("__main__.stack.write", mkWriteSpec "__main__.stack" 1)
+  , ("__main__.stack_ptr.read", mkReadSpec "__main__.stack_ptr" 0)
+  , ("__main__.stack_ptr.write", mkWriteSpec "__main__.stack_ptr" 0)
+  ,
     ( "starkware.cairo.common.math.assert_le"
     , emptyFuncSpec
         { fs_post =

@@ -88,6 +88,7 @@ library
       Horus.SW.FuncSpec
       Horus.SW.Identifier
       Horus.SW.ScopedName
+      Horus.SW.Storage
       Horus.Z3Util
     build-depends:
       aeson,

@@ -7,6 +7,7 @@ module Horus.CairoSemantics.Runner
   )
 where
 
+import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Free.Church (iterM)
 import Control.Monad.Reader (ReaderT, ask, runReaderT)
@@ -15,6 +16,7 @@ import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails)
+import Data.Map qualified as Map (null, unionWith)
 import Data.Maybe (mapMaybe)
 import Data.Singletons (sing)
 import Data.Some (foldSome)
@@ -35,7 +37,9 @@ import Horus.Expr.Type (STy (..))
 import Horus.Expr.Util (gatherNonStdFunctions)
 import Horus.Expr.Vars (prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
-import Horus.Util (fieldPrime, tShow)
+import Horus.SW.Storage (Storage)
+import Horus.SW.Storage qualified as Storage (read)
+import Horus.Util (fieldPrime, tShow, unlessM)
 
 data AssertionBuilder
   = QFAss (Expr TBool)
@@ -73,23 +77,46 @@ emptyConstraintsState =
     , cs_nameCounter = 0
     }
 
-type Impl = ReaderT ContractInfo (ExceptT Text (State ConstraintsState))
+data Env = Env
+  { e_constraints :: ConstraintsState
+  , e_storageEnabled :: Bool
+  , e_storage :: Storage
+  }
+
+eConstraints :: Lens' Env ConstraintsState
+eConstraints lMod g = fmap (\x -> g{e_constraints = x}) (lMod (e_constraints g))
+
+eStorageEnabled :: Lens' Env Bool
+eStorageEnabled lMod g = fmap (\x -> g{e_storageEnabled = x}) (lMod (e_storageEnabled g))
+
+eStorage :: Lens' Env Storage
+eStorage lMod g = fmap (\x -> g{e_storage = x}) (lMod (e_storage g))
+
+emptyEnv :: Env
+emptyEnv =
+  Env
+    { e_constraints = emptyConstraintsState
+    , e_storageEnabled = False
+    , e_storage = mempty
+    }
+
+type Impl = ReaderT ContractInfo (ExceptT Text (State Env))
 
 interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
   exec :: CairoSemanticsF (Impl a) -> Impl a
-  exec (Assert' a cont) = csAsserts %= (QFAss a :) >> cont
-  exec (Expect' a cont) = csExpects %= (a :) >> cont
+  exec (Assert' a cont) = eConstraints . csAsserts %= (QFAss a :) >> cont
+  exec (Expect' a cont) = eConstraints . csExpects %= (a :) >> cont
   exec (CheckPoint a cont) = do
-    initAss <- use csAsserts
-    initExp <- use csExpects
-    csAsserts .= []
-    csExpects .= []
+    initAss <- use (eConstraints . csAsserts)
+    initExp <- use (eConstraints . csExpects)
+    eConstraints . csAsserts .= []
+    eConstraints . csExpects .= []
     r <- cont
-    restAss <- use csAsserts
-    restExp <- use csExpects
-    csAsserts
+    restAss <- use (eConstraints . csAsserts)
+    restExp <- use (eConstraints . csExpects)
+    eConstraints . csAsserts
       .= ( ExistentialAss
             ( \mv ->
                 a mv
@@ -100,33 +127,33 @@ interpret = iterM exec
             )
             : initAss
          )
-    csExpects .= initExp
+    eConstraints . csExpects .= initExp
     pure r
   exec (DeclareMem address cont) = do
-    memVars <- use csMemoryVariables
+    memVars <- use (eConstraints . csMemoryVariables)
     case List.find ((address ==) . mv_addrExpr) memVars of
       Just MemoryVariable{..} -> cont (Expr.const mv_varName)
       Nothing -> do
-        freshCount <- csNameCounter <%= (+ 1)
+        freshCount <- eConstraints . csNameCounter <%= (+ 1)
         let name = "MEM!" <> tShow freshCount
         let addrName = "ADDR!" <> tShow freshCount
-        csMemoryVariables %= (MemoryVariable name addrName address :)
+        eConstraints . csMemoryVariables %= (MemoryVariable name addrName address :)
         cont (Expr.const name)
   exec (DeclareLocalMem address cont) = do
-    memVars <- use csMemoryVariables
+    memVars <- use (eConstraints . csMemoryVariables)
     case List.find ((address ==) . mv_addrExpr) memVars of
       Just mv -> cont mv
       Nothing -> do
-        freshCount <- csNameCounter <%= (+ 1)
+        freshCount <- eConstraints . csNameCounter <%= (+ 1)
         let name = "MEM!" <> tShow freshCount
         let addrName = "ADDR!" <> tShow freshCount
         cont (MemoryVariable name addrName address)
   exec (GetCallee inst cont) = do
     ci <- ask
     ci_getCallee ci inst >>= cont
-  exec (GetFuncSpec inst cont) = do
+  exec (GetFuncSpec name cont) = do
     ci <- ask
-    ci_getFuncSpec ci inst & cont
+    ci_getFuncSpec ci name & cont
   exec (GetApTracking label cont) = do
     ci <- ask
     ci_getApTracking ci label >>= cont
@@ -136,6 +163,24 @@ interpret = iterM exec
   exec (GetBuiltinOffsets label builtin cont) = do
     ci <- ask
     ci_getBuiltinOffsets ci label builtin >>= cont
+  exec (EnableStorage cont) = eStorageEnabled .= True >> cont
+  exec (ReadStorage name args cont) = do
+    unlessM (use eStorageEnabled) $
+      throwError ("Storage access isn't allowed in a plain spec: '" <> tShow name <> "'.")
+    storage <- use eStorage
+    cont (Storage.read storage name args)
+  exec (WriteStorage _name _args _value _cont) = error "not available"
+  exec (UpdateStorage newStorage cont) = do
+    storageEnabled <- use eStorageEnabled
+    unless (storageEnabled || Map.null newStorage) $
+      throwError "Storage access isn't allowed in a plain spec."
+    oldStorage <- use eStorage
+    let combined = Map.unionWith (<>) newStorage oldStorage
+    eStorage .= combined >> cont
+  exec (GetStorage cont) = do
+    unlessM (use eStorageEnabled) $
+      throwError "Storage access isn't allowed in a plain spec."
+    use eStorage >>= cont
   exec (Throw t) = throwError t
 
 debugFriendlyModel :: ConstraintsState -> Text
@@ -197,12 +242,12 @@ makeModel ConstraintsState{..} =
     addr0 = Expr.const (mv_addrName mv0)
 
 runImpl :: ContractInfo -> Impl a -> Either Text ConstraintsState
-runImpl contractInfo m = v $> cs
+runImpl contractInfo m = v $> e_constraints env
  where
-  (v, cs) =
+  (v, env) =
     runReaderT m contractInfo
       & runExceptT
-      & flip runState emptyConstraintsState
+      & flip runState emptyEnv
 
 run :: ContractInfo -> CairoSemanticsL a -> Either Text ConstraintsState
 run contractInfo a =

@@ -137,7 +137,7 @@ parseSexp' s@(SMT.List (SMT.Atom f : x1 : xTail))
   parseVariadic :: forall arg res. (IsProper arg, IsProper res) => Either Text (Some Expr)
   parseVariadic = do
     xs <- traverse (parseSexp @arg) (x1 :| xTail)
-    pureSome (Expr.foldL @res @arg (Fun fText) xs)
+    pureSome (Expr.apply1 @res @arg (Fun fText) xs)
 
   parseArithL :: (Expr TFelt -> Expr TFelt -> Expr TFelt) -> Either Text (Some Expr)
   parseArithL op = do

@@ -33,6 +33,7 @@ import Horus.Expr.Vars
   , prime
   , regToVar
   , pattern Memory
+  , pattern StorageVar
   )
 import Horus.Expr.Vars qualified as Vars (ap, fp)
 import Horus.Instruction
@@ -53,6 +54,9 @@ import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.ScopedName (ScopedName)
+import Horus.SW.ScopedName qualified as ScopedName (fromText)
+import Horus.SW.Storage (Storage)
+import Horus.SW.Storage qualified as Storage (getWrites, read)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 
 data MemoryVariable = MemoryVariable
@@ -73,6 +77,11 @@ data CairoSemanticsF a
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
+  | EnableStorage a
+  | ReadStorage ScopedName [Expr TFelt] (Expr TFelt -> a)
+  | WriteStorage ScopedName [Expr TFelt] (Expr TFelt) a
+  | UpdateStorage Storage a
+  | GetStorage (Storage -> a)
   | Throw Text
   deriving stock (Functor)
 
@@ -111,6 +120,21 @@ getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
 throw :: Text -> CairoSemanticsL a
 throw t = liftF (Throw t)
 
+enableStorage :: CairoSemanticsL ()
+enableStorage = liftF (EnableStorage ())
+
+readStorage :: ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
+readStorage name args = liftF (ReadStorage name args id)
+
+_writeStorage :: ScopedName -> [Expr TFelt] -> Expr TFelt -> CairoSemanticsL ()
+_writeStorage name args value = liftF (WriteStorage name args value ())
+
+updateStorage :: Storage -> CairoSemanticsL ()
+updateStorage storage = liftF (UpdateStorage storage ())
+
+getStorage :: CairoSemanticsL Storage
+getStorage = liftF (GetStorage id)
+
 assert :: Expr TBool -> CairoSemanticsL ()
 assert a = assert' =<< memoryRemoval a
 
@@ -122,6 +146,13 @@ memoryRemoval = Expr.transform step
  where
   step :: Expr b -> CairoSemanticsL (Expr b)
   step (Memory x) = declareMem x
+  step e = pure e
+
+storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
+storageRemoval = Expr.transform step
+ where
+  step :: Expr b -> CairoSemanticsL (Expr b)
+  step (StorageVar name args) = readStorage (ScopedName.fromText name) args
   step e = pure e
 
 substitute :: Text -> Expr TFelt -> Expr a -> Expr a
@@ -169,10 +200,21 @@ encodeModule Module{..} = case m_spec of
   MSPlain spec -> encodePlainSpec m_prog m_jnzOracle spec
 
 encodeRichSpec :: [LabeledInst] -> Map Label Bool -> FuncSpec -> CairoSemanticsL ()
-encodeRichSpec insts oracle funcSpec = do
+encodeRichSpec insts oracle funcSpec@(FuncSpec _pre _post storage) = do
+  enableStorage
+  let fp = Expr.const @TFelt "fp!"
+  apEnd <- moduleEndAp insts
+  preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec insts oracle plainSpec
+  accumulatedStorage <- getStorage
+  checkStorageIsSubset accumulatedStorage preparedStorage
+  checkStorageIsSubset preparedStorage accumulatedStorage
  where
   plainSpec = richToPlainSpec funcSpec
+
+checkStorageIsSubset :: Storage -> Storage -> CairoSemanticsL ()
+checkStorageIsSubset a b = for_ (Storage.getWrites a) $ \(name, args, _value) ->
+  expect (Storage.read a name args .== Storage.read b name args)
 
 encodePlainSpec :: [LabeledInst] -> Map Label Bool -> PlainSpec -> CairoSemanticsL ()
 encodePlainSpec insts jnzOracle PlainSpec{..} = do
@@ -245,33 +287,44 @@ exMemoryRemoval expr = do
 
 mkInstructionConstraints :: Expr TFelt -> Map Label Bool -> LabeledInst -> CairoSemanticsL ()
 mkInstructionConstraints fp jnzOracle inst@(pc, Instruction{..}) = do
-  dstReg <- prepare pc fp (regToVar i_dstRegister)
-  let dst = memory (dstReg + fromInteger i_dstOffset)
+  dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
-    Call -> do
-      let calleeFp = Expr.const ("fp@" <> tShow (unLabel pc))
-          calleePc = uncheckedCallDestination inst
-          nextPc = getNextPc inst
-      calleeFpAsAp <- (2 +) <$> getAp pc
-      setNewFp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
-      saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
-      setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
-      calleeSpec <- getCallee inst >>= getFuncSpec
-      let lvarSuffix = "+" <> tShowLabel pc
-      let pre = suffixLogicalVariables lvarSuffix (fs_pre calleeSpec)
-      let post = suffixLogicalVariables lvarSuffix (fs_post calleeSpec)
-      preparedPre <- prepare calleePc calleeFpAsAp pre
-      preparedPost <- prepare nextPc calleeFpAsAp post
-      preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFpAsAp pre
-      assert (Expr.and [setNewFp, saveOldFp, setNextPc])
-      checkPoint preparedPreCheckPoint
-      assert (preparedPre .&& preparedPost)
+    Call -> mkCallConstraints pc fp inst
     AssertEqual -> getRes fp inst >>= \res -> assert (res .== dst)
     Nop -> case jnzOracle Map.!? pc of
       Just False -> assert (dst .== 0)
       Just True -> assert (dst ./= 0)
       Nothing -> pure ()
     _ -> pure ()
+
+mkCallConstraints :: Label -> Expr TFelt -> LabeledInst -> CairoSemanticsL ()
+mkCallConstraints pc fp inst = do
+  calleeFpAsAp <- (2 +) <$> getAp pc
+  setNewFp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
+  saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
+  setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
+  (FuncSpec pre post storage) <- getCallee inst >>= getFuncSpec
+  let pre' = suffixLogicalVariables lvarSuffix pre
+  let post' = suffixLogicalVariables lvarSuffix post
+  preparedPre <- prepare calleePc calleeFpAsAp =<< storageRemoval pre'
+  preparedCheckPoint <- prepareCheckPoint calleePc calleeFpAsAp =<< storageRemoval pre'
+  updateStorage =<< traverseStorage (prepare nextPc calleeFpAsAp) storage
+  preparedPost <- prepare nextPc calleeFpAsAp =<< storageRemoval =<< storageRemoval post'
+  assert (Expr.and [setNewFp, saveOldFp, setNextPc])
+  checkPoint preparedCheckPoint
+  assert (preparedPre .&& preparedPost)
+ where
+  calleeFp = Expr.const ("fp@" <> tShow (unLabel pc))
+  calleePc = uncheckedCallDestination inst
+  nextPc = getNextPc inst
+  lvarSuffix = "+" <> tShowLabel pc
+
+traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
+traverseStorage preparer = traverse prepareWrites
+ where
+  prepareWrites = traverse prepareWrite
+  prepareWrite (args, value) = (,) <$> traverse prepareExpr args <*> prepareExpr value
+  prepareExpr e = storageRemoval e >>= preparer
 
 mkApConstraints :: Expr TFelt -> Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkApConstraints fp apEnd insts = do
