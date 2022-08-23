@@ -2,7 +2,7 @@ module Horus.SMTUtil
   ( prime
   , ap
   , fp
-  , regToTSExpr
+  , regToSTSExpr
   , memory
   , pattern Memory
   , rcBound
@@ -13,6 +13,7 @@ module Horus.SMTUtil
   , builtinAligned
   , builtinInSegment
   , builtinConstraint
+  , existsFelt
   )
 where
 
@@ -23,6 +24,7 @@ import SimpleSMT qualified (SExpr (..), Solver, newSolver, stop)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
 import Horus.SW.Builtin qualified as Builtin (name, size)
+import Horus.ScopedTSExpr (ScopedTSExpr, withEmptyScope)
 import SimpleSMT.Typed (TSExpr (..), (.&&), (.->), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as SMT
 
@@ -33,9 +35,9 @@ ap, fp :: TSExpr Integer
 ap = SMT.const "ap"
 fp = SMT.const "fp"
 
-regToTSExpr :: PointerRegister -> TSExpr Integer
-regToTSExpr AllocationPointer = ap
-regToTSExpr FramePointer = fp
+regToSTSExpr :: PointerRegister -> ScopedTSExpr Integer
+regToSTSExpr AllocationPointer = withEmptyScope ap
+regToSTSExpr FramePointer = withEmptyScope fp
 
 memory :: TSExpr Integer -> TSExpr Integer
 memory = SMT.function "memory"
@@ -84,3 +86,6 @@ builtinInSegment ptr b = builtinAligned ptr b .&& ptr .< builtinEnd b
 
 builtinConstraint :: TSExpr Integer -> Builtin -> TSExpr Bool
 builtinConstraint ptr b = builtinInSegment ptr b .-> builtinCond ptr b
+
+existsFelt :: Text -> (TSExpr Integer -> TSExpr Bool) -> TSExpr Bool
+existsFelt t f = SMT.existsInt t (\var -> f var .&& (0 .<= var .&& var .< prime))

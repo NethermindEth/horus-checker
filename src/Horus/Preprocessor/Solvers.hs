@@ -7,6 +7,9 @@ module Horus.Preprocessor.Solvers
   , runSolver
   , cvc5
   , mathsat
+  , isEmptySolver
+  , includesMathsat
+  , filterMathsat
   , z3
   )
 where
@@ -61,6 +64,19 @@ mathsat =
     , s_adjustModel = Text.drop 6 . Text.init -- extracting ... from (model ...)
     , s_auxFlags = []
     }
+
+isEmptySolver :: MultiSolver -> Bool
+isEmptySolver (MultiSolver []) = True
+isEmptySolver _ = False
+
+includesMathsat :: MultiSolver -> Bool
+includesMathsat (MultiSolver ls) = any isMathsat ls
+
+filterMathsat :: MultiSolver -> MultiSolver
+filterMathsat (MultiSolver ls) = MultiSolver (filter (not . isMathsat) ls)
+
+isMathsat :: SingleSolver -> Bool
+isMathsat s = s_name s == "mathsat"
 
 z3 :: SingleSolver
 z3 =
