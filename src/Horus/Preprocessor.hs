@@ -11,7 +11,6 @@ where
 
 import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError (..))
--- import Control.Monad(sequence)
 import Control.Monad.Free.Class (MonadFree)
 import Control.Monad.Trans.Free.Church (F, liftF)
 import Data.Foldable (foldlM)
@@ -171,7 +170,7 @@ optimizeQuery smtQuery = do
 
 goalListToTextList :: [Goal] -> PreprocessorL [Text]
 goalListToTextList goalList = do
-  runZ3 $ sequence (map goalToSExpr goalList)
+  runZ3 $ mapM goalToSExpr goalList
 
 processModel :: Goal -> Text -> PreprocessorL SolverResult
 processModel goal tModel = do

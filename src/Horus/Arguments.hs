@@ -74,7 +74,7 @@ configParser =
     <*> switch
       ( long "output-queries"
           <> help "Stores the (unoptimized) SMT queries for each module in .smt2 files."
-      ) 
+      )
     <*> switch
       ( long "output-optimized-queries"
           <> help "Stores the (optimized) SMT queries for each module in .smt2 files."

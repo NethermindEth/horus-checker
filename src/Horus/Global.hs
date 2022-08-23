@@ -15,6 +15,7 @@ import Data.Map qualified as Map (toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text, pack)
 import Data.Traversable (for)
+import Data.Foldable (for_)
 import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 
@@ -31,7 +32,7 @@ import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdC
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
 import Horus.Instruction (labelInsructions, readAllInstructions)
 import Horus.Module (Module, ModuleL, nameOfModule, traverseCFG)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve, optimizeQuery, goalListToTextList)
+import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (Identifiers, Program (..))
@@ -135,7 +136,7 @@ solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
 solveModule contractInfo smtPrefix m = do
   constraints <- extractConstraints contractInfo m
   outputSmtQueries contractInfo smtPrefix moduleName constraints
-  result <- (mkResult constraints)
+  result <- mkResult constraints
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult constraints = printingErrors $ do
@@ -148,37 +149,35 @@ solveModule contractInfo smtPrefix m = do
 outputSmtQueries :: ContractInfo -> Text -> Text -> ConstraintsState -> GlobalT m ()
 outputSmtQueries contractInfo smtPrefix moduleName constraints = do
   Config{..} <- askConfig
-  when 
-    cfg_output_queries 
+  when
+    cfg_output_queries
     writeSmtFile
-  when 
+  when
     cfg_output_optimized_queries
     writeSmtFileOptimized
+ where
+  query = makeModel smtPrefix constraints
+  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
-  where
-    query = makeModel smtPrefix constraints
-    memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
+  writeSmtFile = do
+    writeFile' (ci_dir contractInfo <> "/" <> ci_name contractInfo <> "_" <> moduleName <> ".smt2") query
 
-    writeSmtFile = do
-      writeFile' (ci_name contractInfo <> "_" <> moduleName <> ".smt2") query
+  getQueryList = do
+    queryList <- optimizeQuery query
+    goalListToTextList queryList
 
-    getQueryList = do 
-      queryList <- optimizeQuery query
-      goalListToTextList queryList
+  writeSmtFileOptimized = do
+    Config{..} <- askConfig
+    queries <- runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) getQueryList
+    writeSmtQueries queries contractInfo moduleName
 
-    writeSmtFileOptimized = do
-      Config{..} <- askConfig
-      queries <- runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) getQueryList
-      writeSmtQueries queries (ci_name contractInfo) moduleName
-
-
-writeSmtQueries :: [Text] -> Text -> Text -> GlobalT m ()
-writeSmtQueries queries contractName moduleName = do
-  _ <- for numberedQueries writeQueryFile
-  pure ()
-  where
-    numberedQueries = [(n,q) | n <- [1..length queries], q <- queries]
-    writeQueryFile (n,q) = writeFile' (contractName <> "_" <> moduleName <> "/" <> (pack (show n)) <> ".smt2") q
+writeSmtQueries :: [Text] -> ContractInfo -> Text -> GlobalT m ()
+writeSmtQueries queries contractInfo moduleName = do
+  for_ numberedQueries writeQueryFile
+ where
+  numberedQueries = [(n, q) | n <- [1 .. length queries], q <- queries]
+  newFileName n = ci_dir contractInfo <> "/" <> ci_name contractInfo <> "_" <> moduleName <> "/" <> pack (show n) <> ".smt2"
+  writeQueryFile (n, q) = writeFile' (newFileName n) q
 
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
 solveSMT smtPrefix cs = do
@@ -188,8 +187,8 @@ solveSMT smtPrefix cs = do
   query = makeModel smtPrefix cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-solveContract :: Monad m => ContractDefinition -> Text -> GlobalT m [SolvingInfo]
-solveContract cd contract_name = do
+solveContract :: Monad m => ContractDefinition -> FilePath -> GlobalT m [SolvingInfo]
+solveContract cd fileName = do
   insts <- readAllInstructions (p_code (cd_program cd))
   let labeledInsts = labelInsructions insts
   verbosePrint labeledInsts
@@ -198,7 +197,7 @@ solveContract cd contract_name = do
   modules <- makeModules cd cfg
   for modules (solveModule contractInfo (cd_rawSmt cd))
  where
-  contractInfo = mkContractInfo cd contract_name
+  contractInfo = mkContractInfo cd fileName
   getFunPc = ci_getFunPc contractInfo
   identifiers = p_identifiers (cd_program cd)
   checks = cd_checks cd

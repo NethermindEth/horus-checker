@@ -22,18 +22,15 @@ import Horus.ContractDefinition (cdChecks, stdChecks)
 import Horus.Global (SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (runT)
 import Horus.Util (tShow)
-import System.FilePath.Posix (takeBaseName)
 
 type EIO = ExceptT Text IO
 
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdChecks %~ (<> stdChecks)
-  infos <- Global.runT arg_config (solveContract contract contract_name)
+  infos <- Global.runT arg_config (solveContract contract arg_fileName)
   for_ infos $ \si -> liftIO $ do
     Text.putStrLn (ppSolvingInfo si)
-  where
-    contract_name = pack $ takeBaseName arg_fileName
 
 eioDecodeFileStrict :: FromJSON a => FilePath -> EIO a
 eioDecodeFileStrict path = do
