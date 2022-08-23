@@ -2,7 +2,7 @@ module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad.Except (MonadError (..), liftEither, throwError)
 import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
+import Control.Monad.State (MonadState, StateT, evalStateT, get, put)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Text (Text, unpack)
@@ -14,12 +14,12 @@ import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
-newtype ImplT m a = ImplT (ReaderT Config m a)
+newtype ImplT m a = ImplT (StateT Config m a)
   deriving newtype
     ( Functor
     , Applicative
     , Monad
-    , MonadReader Config
+    , MonadState Config
     , MonadIO
     )
 
@@ -37,7 +37,8 @@ interpret = iterTM exec . runGlobalT
   exec (RunCairoSemanticsT env builder cont) = do
     lift (CairoSemantics.runT env builder) >>= liftEither >>= cont
   exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
-  exec (AskConfig cont) = ask >>= cont
+  exec (AskConfig cont) = get >>= cont
+  exec (SetConfig conf cont) = put conf >> cont
   exec (RunPreprocessor penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)
     liftEither mPreprocessed >>= cont
@@ -45,8 +46,8 @@ interpret = iterTM exec . runGlobalT
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
 
-runImplT :: Config -> ImplT m a -> m a
-runImplT config (ImplT m) = runReaderT m config
+runImplT :: Monad m => Config -> ImplT m a -> m a
+runImplT config (ImplT m) = evalStateT m config
 
 runT :: (MonadIO m, MonadError Text m) => Config -> GlobalT m a -> m a
 runT config = runImplT config . interpret
