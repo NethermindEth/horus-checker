@@ -1,8 +1,8 @@
 add+T
 Unsat
-add.next
-Unsat
 add+F
+Unsat
+inc
 Unsat
 main
 Unsat

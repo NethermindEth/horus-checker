@@ -24,6 +24,7 @@ module SimpleSMT.Typed
   , (.<)
   , (.<=)
   , ite
+  , existsInt
   , substitute
   -- Statements
   , ppTSStmt
@@ -33,6 +34,7 @@ module SimpleSMT.Typed
   -- Unsafe
   , toUnsafe
   , fromUnsafe
+  , referencesAny
   )
 where
 
@@ -43,6 +45,7 @@ import Data.Coerce (coerce)
 import Data.Functor.Identity (Identity (..))
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromList)
+import Data.Set (Set, member)
 import Data.Text (Text, pack, unpack)
 import Lens.Micro (at, non, (&))
 import Lens.Micro.GHC ()
@@ -253,6 +256,12 @@ a .-> b = coerce SMT.implies a b
 ite :: TSExpr Bool -> TSExpr a -> TSExpr a -> TSExpr a
 ite = coerce SMT.ite
 
+existsInt :: Text -> (TSExpr Integer -> TSExpr Bool) -> TSExpr Bool
+existsInt t f = coerce (SMT.fun "exists" [bindings, coerce (f var)])
+ where
+  var = const t
+  bindings = SMT.List [SMT.List [coerce var, SMT.tInt]]
+
 ppTSStmt :: TSStmt -> Text
 ppTSStmt (TSStmt s) = pack (SMT.ppSExpr s "")
 
@@ -270,3 +279,7 @@ fromUnsafe = coerce
 
 toUnsafe :: TSExpr a -> SExpr
 toUnsafe = coerce
+
+referencesAny :: Set Text -> SExpr -> Bool
+referencesAny vars (SMT.List l) = any (referencesAny vars) l
+referencesAny vars (SMT.Atom a) = member (pack a) vars

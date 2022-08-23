@@ -1,0 +1,14 @@
+alloc
+Unsat
+f0
+Unsat
+f1
+Sat
+f2
+Sat
+f3+T
+Unsat
+f3+F
+Unsat
+f4
+Unsat
