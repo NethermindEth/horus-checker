@@ -19,25 +19,28 @@ import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
 import Lens.Micro.GHC ()
-import Lens.Micro.Mtl (use, (%=), (<%=))
+import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsT)
+import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsT, MemoryVariable (..))
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.SMTUtil (builtinEnd, builtinStart, prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.Util (enumerate, fieldPrime, tShow)
+
 import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as SMT
 
-data MemoryVariable = MemoryVariable
-  { mv_varName :: Text
-  , mv_addrName :: Text
-  , mv_addrExpr :: TSExpr Integer
-  }
+data AssertionBuilder
+  = QFAss (TSExpr Bool)
+  | ExistentialAss ([MemoryVariable] -> TSExpr Bool)
+
+builderToAss :: [MemoryVariable] -> AssertionBuilder -> TSExpr Bool
+builderToAss _ (QFAss e) = e
+builderToAss mv (ExistentialAss f) = f mv
 
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [MemoryVariable]
-  , cs_asserts :: [TSExpr Bool]
+  , cs_asserts :: [AssertionBuilder]
   , cs_expects :: [TSExpr Bool]
   , cs_decls :: [Text]
   , cs_nameCounter :: Int
@@ -46,7 +49,7 @@ data ConstraintsState = ConstraintsState
 csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
 csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
-csAsserts :: Lens' ConstraintsState [TSExpr Bool]
+csAsserts :: Lens' ConstraintsState [AssertionBuilder]
 csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
 
 csExpects :: Lens' ConstraintsState [TSExpr Bool]
@@ -86,8 +89,29 @@ interpret :: forall m a. Monad m => CairoSemanticsT m a -> ImplT m a
 interpret = iterTM exec
  where
   exec :: CairoSemanticsF (ImplT m a) -> ImplT m a
-  exec (Assert' a cont) = csAsserts %= (a :) >> cont
+  exec (Assert' a cont) = csAsserts %= (QFAss a :) >> cont
   exec (Expect' a cont) = csExpects %= (a :) >> cont
+  exec (CheckPoint a cont) = do
+    initAss <- use csAsserts
+    initExp <- use csExpects
+    csAsserts .= []
+    csExpects .= []
+    r <- cont
+    restAss <- use csAsserts
+    restExp <- use csExpects
+    csAsserts
+      .= ( ExistentialAss
+            ( \mv ->
+                a mv
+                  .-> SMT.and
+                    ( map (builderToAss mv) restAss
+                        ++ [SMT.not (SMT.and restExp) | not (null restExp)]
+                    )
+            )
+            : initAss
+         )
+    csExpects .= initExp
+    pure r
   exec (DeclareFelt name cont) = do
     csDecls %= List.union [name]
     cont (SMT.const name)
@@ -101,6 +125,15 @@ interpret = iterTM exec
         let addrName = "ADDR!" <> tShow freshCount
         csMemoryVariables %= (MemoryVariable name addrName address :)
         cont (SMT.const name)
+  exec (DeclareLocalMem address cont) = do
+    memVars <- use csMemoryVariables
+    case List.find ((address ==) . mv_addrExpr) memVars of
+      Just mv -> cont mv
+      Nothing -> do
+        freshCount <- csNameCounter <%= (+ 1)
+        let name = "MEM!" <> tShow freshCount
+        let addrName = "ADDR!" <> tShow freshCount
+        cont (MemoryVariable name addrName address)
   exec (GetPreByCall inst cont) = do
     getPreByCall <- asks ci_getPreByCall
     getPreByCall inst & cont
@@ -125,7 +158,7 @@ debugFriendlyModel ConstraintsState{..} =
       [ ["# Memory"]
       , memoryPairs
       , ["# Assert"]
-      , map SMT.showTSExpr cs_asserts
+      , map (SMT.showTSExpr . builderToAss cs_memoryVariables) cs_asserts
       , ["# Expect"]
       , map SMT.showTSExpr cs_expects
       ]
@@ -160,8 +193,8 @@ makeModel rawSmt ConstraintsState{..} =
           , feltRestrictions
           , memRestrictions
           , addrDefinitions
-          , cs_asserts
-          , [SMT.not (SMT.and cs_expects)]
+          , map (builderToAss cs_memoryVariables) cs_asserts
+          , [SMT.not (SMT.and cs_expects) | not (null cs_expects)]
           ]
    in (decls <> map SMT.assert restrictions)
         & map showTSStmt
