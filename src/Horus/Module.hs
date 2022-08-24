@@ -4,8 +4,6 @@ import Control.Applicative ((<|>))
 import Control.Monad (unless, when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
-import Data.DList (DList)
-import Data.DList qualified as D (singleton, toList)
 import Data.Foldable (for_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
@@ -14,7 +12,7 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Lens.Micro (ix, over, (^.))
 
-import Horus.CFGBuild (ArcCondition (..), Label)
+import Horus.CFGBuild (ArcCondition (..), Label (unLabel))
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CallStack
   ( CallStack
@@ -97,7 +95,7 @@ nameOfModule idents (Module _ post prog oracle _ _) =
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting Label (Bool -> ModuleL b) (b -> a)
+  | forall b. Visiting (NonEmpty Label, Label) (Bool -> ModuleL b) (b -> a)
   | Throw Text
   | forall b. Catch (ModuleL b) (Text -> ModuleL b) (b -> a)
 
@@ -123,7 +121,7 @@ emitModule m = liftF' (EmitModule m ())
 'm' additionally takes a parameter that tells whether 'l' has been
 visited before.
 -}
-visiting :: Label -> (Bool -> ModuleL b) -> ModuleL b
+visiting :: (NonEmpty Label, Label) -> (Bool -> ModuleL b) -> ModuleL b
 visiting l action = liftF' (Visiting l action id)
 
 throw :: Text -> ModuleL a
@@ -132,32 +130,31 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Text -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
--- TODO?: Technically, we could abuse CallStack to keep track 'uniformally' here,
--- for both ifs and callers. The 'caller pc' would be the 'if pc' instead,
--- e.g. something like (State CallStack) instead of the Reader (...) here
--- with push / pop. However, it reads easier for me having a callstack explicitly turned into
--- an explicitly visited set of labels.
 traverseCFG :: [(Label, ScopedTSExpr Bool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(fLabel, fpre) ->
-  visit Map.empty (initialWithFunc fLabel) [] (fover stsexprExpr (.&& ap .== fp) pre) fLabel ACNone Nothing
+  visit Map.empty (initialWithFunc fLabel) [] (over stsexprExpr (.&& ap .== fp) fpre) fLabel ACNone Nothing
  where
-  visit oracle callstack acc pre l arcCond f = do
+  visit oracle callstack acc pre l arcCond f =
     let callstack' = case f of
           Nothing -> callstack
           Just (ArcCall fCallerPc fCalledF) -> push (fCallerPc, fCalledF) callstack
           Just ArcRet -> snd $ pop callstack
         oracle' = updateOracle arcCond callstack' oracle
-        assertions = cfg_assertions cfg ^. ix l
         stackTraceAndLbl = (stackTrace callstack', l)
-    unless (null assertions) $
-      emitModule
-        (Module pre (SMT.and assertions) acc oracle' (calledFOfCallEntry $ top callstack') l)
-    visited <- ask
-    unless (stackTraceAndLbl `Set.member` visited) $
-      local (Set.insert stackTraceAndLbl) $
-        if null assertions
-          then visitArcs oracle' callstack' acc pre l
-          else visitArcs Map.empty callstack' [] (SMT.and assertions) l
+     in visiting stackTraceAndLbl $
+          \alreadyVisited -> do
+            when (alreadyVisited && null assertions) $ do
+              throwError ("There is a loop at PC " <> tShow (unLabel l) <> " with no invariant")
+            unless (null assertions) $
+              emitModule
+                (Module pre conjSTS acc oracle' (calledFOfCallEntry $ top callstack') l)
+            unless alreadyVisited $
+              if null assertions
+                then visitArcs oracle' callstack' acc pre l
+                else visitArcs Map.empty callstack' [] conjSTS l
+   where
+    assertions = cfg_assertions cfg ^. ix l
+    conjSTS = conjunctSTS assertions
   visitArcs oracle' callstack' acc pre l = do
     let outArcs = cfg_arcs cfg ^. ix l
     unless (null outArcs) $

@@ -15,8 +15,7 @@ import Data.Function ((&))
 import Data.List ((\\))
 import Data.Map qualified as Map (keys, toList)
 import Data.Maybe (mapMaybe)
-import Data.Set (Set, fromList)
-import Data.Set qualified as Set
+import Data.Set (fromList)
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
@@ -35,11 +34,11 @@ import Horus.CairoSemantics.Runner
   )
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.ContractDefinition (ContractDefinition (..), cPreConds, cdChecks)
-import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_identifiers), mkContractInfo)
+import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_getPreByCall, ci_identifiers), mkContractInfo)
 import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
-import Horus.Instruction (labelInsructions, readAllInstructions)
-import Horus.Module (Module (m_calledF), nameOfModule, runModuleL, traverseCFG)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
+import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
+import Horus.Module (Module (m_calledF, m_prog), ModuleL, nameOfModule, traverseCFG)
+import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve, optimizeQuery, goalListToTextList)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Program (..))
@@ -126,14 +125,14 @@ makeCFG inlinable cd labelToFun labeledInsts =
   runCFGBuildT (buildCFG (fromList inlinable) cd labelToFun labeledInsts)
 
 makeModules :: (Label -> Bool) -> ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules allow cd cfg = pure (runModuleL (traverseCFG sources cfg))
+makeModules allow cd cfg = runModuleL (traverseCFG sources cfg)
  where
   sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
     guard (allow pc)
-    let pre = preConds ^. at name . non SMT.True
+    let pre = preConds ^. at name . non emptyScopedTSExpr
     pure (pc, pre)
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ExecutionState
@@ -160,13 +159,13 @@ solveModule contractInfo smtPrefix m = do
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
   moduleName = nameOfModule (ci_identifiers contractInfo) m
 
-outputSmtQueries :: Text -> Text -> ConstraintsState -> GlobalT m ()
-outputSmtQueries smtPrefix moduleName constraints = do
+outputSmtQueries :: Text -> Text -> ExecutionState -> GlobalT m ()
+outputSmtQueries smtPrefix moduleName es@(_, constraints) = do
   Config{..} <- askConfig
   whenJust cfg_outputQueries writeSmtFile
   whenJust cfg_outputOptimizedQueries writeSmtFileOptimized
  where
-  query = makeModel smtPrefix constraints
+  query = makeModel smtPrefix es
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
   writeSmtFile dir = do
@@ -196,7 +195,7 @@ checkMathsat contractInfo m = do
     do
       let solver' = filterMathsat solver
       if isEmptySolver solver'
-        then throw "MathSat solver was used to analyze a call with a logical variable in it's specification."
+        then throw "MathSat was used to analyze a call with a logical variable in its specification."
         else setConfig conf{cfg_solver = solver'}
  where
   callToLVarSpec lblInst@(_, inst) = case i_opCode inst of
@@ -204,8 +203,8 @@ checkMathsat contractInfo m = do
     _ -> False
   getPre = ci_getPreByCall contractInfo
 
-solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
-solveSMT smtPrefix cs@(_, cs) = do
+solveSMT :: Text -> ExecutionState -> GlobalT m SolverResult
+solveSMT smtPrefix es@(_, cs) = do
   Config{..} <- askConfig
   runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
@@ -236,10 +235,10 @@ solveContract cd = do
   verbosePrint labeledInsts
   cfg <- makeCFG inlinable cd getFunPc labeledInsts
   verbosePrint cfg
-  modules <- makeModules cd cfg
-  for modules (solveModule contractInfo (cd_rawSmt cd))
+  modules <- makeModules (isStandardSource inlinable (p_identifiers program)) cd cfg
+  results <- for modules (solveModule contractInfo (cd_rawSmt cd))
+  inlinedResults <- additionalResults inlinable cd labeledInsts
+  pure (results ++ inlinedResults)
  where
-  contractInfo = mkContractInfo cd
-  getFunPc = ci_getFunPc contractInfo
-  identifiers = p_identifiers (cd_program cd)
-  checks = cd_checks cd
+  isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)
+  program = cd_program cd
