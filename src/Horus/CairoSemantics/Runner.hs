@@ -17,6 +17,7 @@ import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails, union)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
@@ -29,7 +30,7 @@ import Horus.ContractInfo (ContractInfo (..))
 import Horus.SMTUtil (builtinEnd, builtinStart, prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.Util (enumerate, fieldPrime, tShow)
-import SimpleSMT.Typed (TSExpr, showTSStmt, (.->), (.<), (.<=), (.==))
+import SimpleSMT.Typed (TSExpr, showTSStmt, unAnd, (.->), (.<), (.<=), (.==), (.||))
 import SimpleSMT.Typed qualified as SMT
 
 data AssertionBuilder
@@ -53,7 +54,7 @@ type ExecutionState = (CallStack, ConstraintsState)
 csMemoryVariables :: Lens' ExecutionState [MemoryVariable]
 csMemoryVariables lMod (st, g) = fmap (\x -> (st, g{cs_memoryVariables = x})) (lMod (cs_memoryVariables g))
 
-csAsserts :: Lens' ExecutionState [TSExpr Bool]
+csAsserts :: Lens' ExecutionState [AssertionBuilder]
 csAsserts lMod (st, g) = fmap (\x -> (st, g{cs_asserts = x})) (lMod (cs_asserts g))
 
 csExpects :: Lens' ExecutionState [TSExpr Bool]
@@ -109,11 +110,10 @@ interpret = iterTM exec
     csAsserts
       .= ( ExistentialAss
             ( \mv ->
-                a mv
-                  .-> SMT.and
-                    ( map (builderToAss mv) restAss
-                        ++ [SMT.not (SMT.and restExp) | not (null restExp)]
-                    )
+                let rest = map (builderToAss mv) restAss
+                    asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) rest
+                 in (a mv .|| SMT.not (SMT.and (filter (/= a mv) asAtoms)))
+                      .-> SMT.and (rest ++ [SMT.not (SMT.and restExp) | not (null restExp)])
             )
             : initAss
          )
@@ -158,7 +158,6 @@ interpret = iterTM exec
     get >>= cont . digestOfCallStack fNames . fst
   exec (GetOracle cont) = do
     get >>= cont . stackTrace . fst
-  -- TODO? What's the lense incantation for these?
   exec (Push entry cont) = do
     modify (Bifunc.first (push entry)) >> cont
   exec (Pop cont) = do

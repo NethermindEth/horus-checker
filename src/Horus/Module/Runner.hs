@@ -13,10 +13,11 @@ import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
 
-import Horus.CFGBuild (Label (..))
+import Data.List.NonEmpty (NonEmpty)
+import Horus.Label (Label (..))
 import Horus.Module (Module (..), ModuleF (..), ModuleL (..))
 
-type Impl = ReaderT (Set Label) (ExceptT Text (Writer (DList Module)))
+type Impl = ReaderT (Set (NonEmpty Label, Label)) (ExceptT Text (Writer (DList Module)))
 
 interpret :: ModuleL a -> Impl a
 interpret = iterM exec . runModuleL

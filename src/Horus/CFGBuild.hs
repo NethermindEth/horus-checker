@@ -54,7 +54,7 @@ data ArcCondition = ACNone | ACJnz Label Bool
 data CFGBuildF a
   = AddVertex Label a
   | AddArc Label Label [LabeledInst] ArcCondition FInfo a
-  | AddAssertion Label (TSExpr Bool) a
+  | AddAssertion Label (ScopedTSExpr Bool) a
   | Throw Text
   deriving (Functor)
 
@@ -169,8 +169,8 @@ addAssertions inlinable retsByFun checks prog = do
       case (mbPre, mbPost) of
         (Nothing, Nothing) ->
           when (pc `Set.notMember` inlinable) $
-            for_ (retsByFun ^. ix pc) (`addAssertion` SMT.True)
-        _ -> for_ (retsByFun ^. ix pc) (`addAssertion` fromMaybe SMT.True mbPost)
+            for_ (retsByFun ^. ix pc) (`addAssertion` emptyScopedTSExpr)
+        _ -> for_ (retsByFun ^. ix pc) (`addAssertion` fromMaybe emptyScopedTSExpr mbPost)
     whenJust (getLabelPc def) $ \pc ->
       whenJust (c_invariants checks ^. at idName) (pc `addAssertion`)
 
