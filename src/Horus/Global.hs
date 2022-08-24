@@ -42,8 +42,8 @@ import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
-  , cfg_output_queries :: Bool
-  , cfg_output_optimized_queries :: Bool
+  , cfg_outputQueries :: Bool
+  , cfg_outputOptimizedQueries :: Bool
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
   }
@@ -150,10 +150,10 @@ outputSmtQueries :: ContractInfo -> Text -> Text -> ConstraintsState -> GlobalT 
 outputSmtQueries contractInfo smtPrefix moduleName constraints = do
   Config{..} <- askConfig
   when
-    cfg_output_queries
+    cfg_outputQueries
     writeSmtFile
   when
-    cfg_output_optimized_queries
+    cfg_outputOptimizedQueries
     writeSmtFileOptimized
  where
   query = makeModel smtPrefix constraints
@@ -173,9 +173,8 @@ outputSmtQueries contractInfo smtPrefix moduleName constraints = do
 
 writeSmtQueries :: [Text] -> ContractInfo -> Text -> GlobalT m ()
 writeSmtQueries queries contractInfo moduleName = do
-  for_ numberedQueries writeQueryFile
+  for_ (zip [1::Int ..] queries) writeQueryFile
  where
-  numberedQueries = [(n, q) | n <- [1 .. length queries], q <- queries]
   newFileName n = ci_dir contractInfo <> "/" <> ci_name contractInfo <> "_" <> moduleName <> "/" <> pack (show n) <> ".smt2"
   writeQueryFile (n, q) = writeFile' (newFileName n) q
 
