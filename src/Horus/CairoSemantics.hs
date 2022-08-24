@@ -23,7 +23,6 @@ import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
 import Data.Set (Set)
 import Data.Set qualified as Set (toList)
-import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 import Lens.Micro ((^.))
 import SimpleSMT qualified as SMT (SExpr (..), const)
@@ -240,7 +239,11 @@ exMemoryRemoval exVars expr = do
     [addr .== mv_addrExpr .-> TSMT.const var .== TSMT.const mv_varName | MemoryVariable{..} <- rest]
   intro :: TSExpr Bool -> [MemoryVariable] -> [MemoryVariable] -> TSExpr Bool
   intro ex lmv gmv =
-    let globMemRestrictions = [addr1 .== addr2 .-> TSMT.const var1 .== TSMT.const var2 | MemoryVariable var1 _ addr1 <- lmv, MemoryVariable var2 _ addr2 <- gmv]
+    let globMemRestrictions =
+          [ addr1 .== addr2 .-> TSMT.const var1 .== TSMT.const var2
+          | MemoryVariable var1 _ addr1 <- lmv
+          , MemoryVariable var2 _ addr2 <- gmv
+          ]
         locMemRestrictions = concatMap restrictMemTail (tails lmv)
         inner_expr = TSMT.and (ex : (locMemRestrictions ++ globMemRestrictions))
         quant_lmv = foldr (\mvar e -> existsFelt (mv_varName mvar) (const e)) inner_expr lmv
@@ -269,10 +272,17 @@ exMemoryRemoval exVars expr = do
     pure (SMT.List l', localMemVars)
   unsafeMemoryRemoval expr' = pure (expr', [])
 
+withExecutionCtx :: CallEntry -> FT CairoSemanticsF m b -> FT CairoSemanticsF m b
+withExecutionCtx ctx action = do
+  push ctx
+  res <- action
+  pop
+  pure res
+
 mkInstructionConstraints :: Map (NonEmpty Label, Label) Bool -> LabeledInst -> CairoSemanticsT m ()
 mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
   fp <- getFp
-  dstReg <- prepare pc fp (regToTSExpr i_dstRegister)
+  dstReg <- prepare pc fp (regToSTSExpr i_dstRegister)
   let dst = memory (dstReg + fromInteger i_dstOffset)
   case i_opCode of
     Call ->
@@ -281,18 +291,29 @@ mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
           stackFrame = (pc, calleePc)
        in do
             calleeFp <- withExecutionCtx stackFrame getFp
-            nextAp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
-            saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
-            setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
+            nextAp <- prepare pc calleeFp (withEmptyScope $ Util.fp .== Util.ap + 2)
+            saveOldFp <- prepare pc fp (withEmptyScope $ memory Util.ap .== Util.fp)
+            setNextPc <-
+              prepare
+                pc
+                fp
+                ( withEmptyScope $ memory (Util.ap + 1) .== fromIntegral (unLabel nextPc)
+                )
             assert (TSMT.and [nextAp, saveOldFp, setNextPc])
-            canInline <- isInlinable $ uncheckedCallDestination lInst
             push stackFrame
+            canInline <- isInlinable $ uncheckedCallDestination lInst
             unless canInline $ do
-              preparedPre <- getPreByCall lInst >>= prepare calleePc calleeFp
+              pre <- getPreByCall lInst
+              post <- getPostByCall lInst
+              preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp pre
+              let lvar_suff = "+" <> tShowLabel pc
+                  pre' = addLVarSuffix lvar_suff pre
+                  post' = addLVarSuffix lvar_suff post
+              preparedPre <- prepare calleePc calleeFp pre'
               pop
-              preparedPost <- getPostByCall lInst >>= prepare nextPc calleeFp
-              expect preparedPre
-              assert preparedPost
+              preparedPost <- prepare nextPc calleeFp post'
+              checkPoint preparedPreCheckPoint
+              assert (preparedPre .&& preparedPost)
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
     Nop -> do
       trace <- getOracle

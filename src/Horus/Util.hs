@@ -13,6 +13,7 @@ module Horus.Util
   , enumerate
   , maybeToError
   , onSnd
+  , invert
   )
 where
 
@@ -70,6 +71,7 @@ enumerate = [minBound ..]
 
 maybeToError :: MonadError e m => e -> Maybe a -> m a
 maybeToError e = maybe (throwError e) pure
+
 invert :: Ord v => Map k v -> Map v [k]
 invert m = fromListWith (++) [(v, [k]) | (k, v) <- Data.Map.toList m]
 
