@@ -20,7 +20,7 @@ import Lens.Micro.Mtl ((%=))
 
 import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildT (..), Label, LabeledInst)
 import Horus.FunctionAnalysis (FInfo)
-import SimpleSMT.Typed (TSExpr)
+import Horus.ScopedTSExpr (ScopedTSExpr)
 
 newtype ImplT m a = ImplT (ExceptT Text (StateT CFG m) a)
   deriving newtype (Functor, Applicative, Monad, MonadState CFG, MonadError Text)
@@ -31,7 +31,7 @@ instance MonadTrans ImplT where
 data CFG = CFG
   { cfg_vertices :: [Label]
   , cfg_arcs :: Map Label [(Label, [LabeledInst], ArcCondition, FInfo)]
-  , cfg_assertions :: Map Label [TSExpr Bool]
+  , cfg_assertions :: Map Label [ScopedTSExpr Bool]
   }
   deriving (Show)
 

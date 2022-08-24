@@ -35,6 +35,7 @@ module SimpleSMT.Typed
   , toUnsafe
   , fromUnsafe
   , referencesAny
+  , unAnd
   )
 where
 
@@ -236,6 +237,10 @@ and xs
   xs' = filter (/= True) (concatMap unfold xs)
   unfold (And cs) = cs
   unfold x = [x]
+
+unAnd :: TSExpr Bool -> Maybe [TSExpr Bool]
+unAnd (And xs) = Just xs
+unAnd _ = Nothing
 
 infixr 2 .||
 (.||) :: TSExpr Bool -> TSExpr Bool -> TSExpr Bool

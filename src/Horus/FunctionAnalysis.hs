@@ -19,7 +19,7 @@ module Horus.FunctionAnalysis
 where
 
 import Control.Applicative ((<|>))
-import Control.Monad (liftM3)
+import Control.Monad (liftM2, liftM3)
 import Data.Array (assocs)
 import Data.Coerce (coerce)
 import Data.Function ((&))
@@ -42,7 +42,7 @@ import Data.Map qualified as Map
   , toList
   , (!)
   )
-import Data.Maybe (fromJust, isNothing, mapMaybe)
+import Data.Maybe (fromJust, fromMaybe, isNothing, mapMaybe)
 
 import Data.Text (Text)
 import Horus.ContractDefinition (Checks (c_invariants, c_postConds, c_preConds))
@@ -91,10 +91,13 @@ isNormalArc :: FInfo -> Bool
 isNormalArc = isNothing
 
 cgInsertArc :: CG -> (Label, Label) -> CG
-cgInsertArc cg@(CG verts arcs) (fro, to) =
+cgInsertArc = liftM2 (.) fromMaybe cgMbInsertArc
+
+cgMbInsertArc :: CG -> (Label, Label) -> Maybe CG
+cgMbInsertArc (CG verts arcs) (fro, to) =
   if fro `notElem` verts || to `notElem` verts
-    then cg
-    else CG verts $ Map.insertWith (++) fro [to] arcs
+    then Nothing
+    else Just . CG verts $ Map.insertWith (++) fro [to] arcs
 
 graphOfCG :: CG -> (Graph, Vertex -> (Label, Label, [Label]))
 graphOfCG cg = graphFromEdges' . map named . Map.assocs $ cg_arcs cg
