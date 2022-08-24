@@ -134,12 +134,12 @@ data SolvingInfo = SolvingInfo
 
 solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
 solveModule contractInfo smtPrefix m = do
-  constraints <- extractConstraints contractInfo m
-  outputSmtQueries contractInfo smtPrefix moduleName constraints
-  result <- mkResult constraints
+  result <- mkResult
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
-  mkResult constraints = printingErrors $ do
+  mkResult = printingErrors $ do
+    constraints <- extractConstraints contractInfo m
+    outputSmtQueries contractInfo smtPrefix moduleName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
     solveSMT smtPrefix constraints
