@@ -16,7 +16,6 @@ import Options.Applicative
   , info
   , progDesc
   )
-import System.FilePath.Posix (takeBaseName)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdChecks, stdChecks)
@@ -29,7 +28,7 @@ type EIO = ExceptT Text IO
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdChecks %~ (<> stdChecks)
-  infos <- Global.runT arg_config (solveContract contract (pack $ takeBaseName arg_fileName))
+  infos <- Global.runT arg_config (solveContract contract)
   for_ infos $ \si -> liftIO $ do
     Text.putStrLn (ppSolvingInfo si)
 

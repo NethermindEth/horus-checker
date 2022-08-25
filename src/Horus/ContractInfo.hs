@@ -29,11 +29,10 @@ data ContractInfo = ContractInfo
   , ci_getPostByCall :: LabeledInst -> TSExpr Bool
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_identifiers :: Identifiers
-  , ci_name :: Text
   }
 
-mkContractInfo :: ContractDefinition -> Text -> ContractInfo
-mkContractInfo cd contractName =
+mkContractInfo :: ContractDefinition -> ContractInfo
+mkContractInfo cd =
   ContractInfo
     { ci_getFunPc = getFunPc
     , ci_getBuiltinOffsets = getBuiltinOffsets
@@ -41,7 +40,6 @@ mkContractInfo cd contractName =
     , ci_getPostByCall = getPostByCall
     , ci_getApTracking = getApTracking
     , ci_identifiers = identifiers
-    , ci_name = contractName
     }
  where
   debugInfo = p_debugInfo (cd_program cd)
