@@ -75,14 +75,14 @@ configParser =
       ( strOption
           ( long "output-queries"
               <> metavar "DIR"
-              <> help "Stores the (unoptimized) SMT queries for each module in .smt2 files."
+              <> help "Stores the (unoptimized) SMT queries for each module in .smt2 files inside DIR."
           )
       )
     <*> optional
       ( strOption
           ( long "output-optimized-queries"
               <> metavar "DIR"
-              <> help "Stores the (optimized) SMT queries for each module in .smt2 files."
+              <> help "Stores the (optimized) SMT queries for each module in .smt2 files inside DIR."
           )
       )
     <*> multiSolverParser

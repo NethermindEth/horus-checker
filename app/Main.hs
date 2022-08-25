@@ -16,14 +16,13 @@ import Options.Applicative
   , info
   , progDesc
   )
+import System.FilePath.Posix (takeBaseName)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdChecks, stdChecks)
 import Horus.Global (SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (runT)
 import Horus.Util (tShow)
-
-import System.FilePath.Posix (takeBaseName)
 
 type EIO = ExceptT Text IO
 

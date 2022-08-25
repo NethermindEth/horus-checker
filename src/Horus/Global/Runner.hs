@@ -7,6 +7,8 @@ import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Text (Text, unpack)
 import Data.Text.IO qualified as Text (writeFile)
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath.Posix (takeDirectory)
 import Text.Pretty.Simple (pPrintString)
 
 import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
@@ -14,9 +16,6 @@ import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
 import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
-
-import System.Directory (createDirectoryIfMissing)
-import System.FilePath.Posix (takeDirectory)
 
 newtype ImplT m a = ImplT (ReaderT Config m a)
   deriving newtype

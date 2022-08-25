@@ -13,7 +13,7 @@ import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_)
 import Data.Function ((&))
 import Data.Map qualified as Map (toList)
-import Data.Maybe (fromJust, isJust, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
@@ -37,7 +37,7 @@ import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
-import Horus.Util (tShow)
+import Horus.Util (tShow, whenJust)
 import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data Config = Config
@@ -149,12 +149,8 @@ solveModule contractInfo smtPrefix m = do
 outputSmtQueries :: ContractInfo -> Text -> Text -> ConstraintsState -> GlobalT m ()
 outputSmtQueries contractInfo smtPrefix moduleName constraints = do
   Config{..} <- askConfig
-  when
-    (isJust cfg_outputQueries)
-    (writeSmtFile $ fromJust cfg_outputQueries)
-  when
-    (isJust cfg_outputOptimizedQueries)
-    (writeSmtFileOptimized $ fromJust cfg_outputOptimizedQueries)
+  whenJust cfg_outputQueries writeSmtFile
+  whenJust cfg_outputOptimizedQueries writeSmtFileOptimized
  where
   query = makeModel smtPrefix constraints
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
