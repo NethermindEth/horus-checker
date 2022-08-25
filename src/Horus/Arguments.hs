@@ -71,13 +71,19 @@ configParser =
           <> short 'v'
           <> help "If the flag is set all the intermediate steps are printed out."
       )
-    <*> switch
-      ( long "output-queries"
-          <> help "Stores the (unoptimized) SMT queries for each module in .smt2 files."
+    <*> optional
+      ( strOption
+          ( long "output-queries"
+              <> metavar "DIR"
+              <> help "Stores the (unoptimized) SMT queries for each module in .smt2 files."
+          )
       )
-    <*> switch
-      ( long "output-optimized-queries"
-          <> help "Stores the (optimized) SMT queries for each module in .smt2 files."
+    <*> optional
+      ( strOption
+          ( long "output-optimized-queries"
+              <> metavar "DIR"
+              <> help "Stores the (optimized) SMT queries for each module in .smt2 files."
+          )
       )
     <*> multiSolverParser
     <*> ( SolverSettings

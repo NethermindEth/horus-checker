@@ -23,12 +23,14 @@ import Horus.Global (SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (runT)
 import Horus.Util (tShow)
 
+import System.FilePath.Posix (takeBaseName)
+
 type EIO = ExceptT Text IO
 
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdChecks %~ (<> stdChecks)
-  infos <- Global.runT arg_config (solveContract contract arg_fileName)
+  infos <- Global.runT arg_config (solveContract contract (pack $ takeBaseName arg_fileName))
   for_ infos $ \si -> liftIO $ do
     Text.putStrLn (ppSolvingInfo si)
 

@@ -8,7 +8,7 @@ import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Map qualified as Map ((!), (!?))
 import Data.Maybe (fromMaybe)
-import Data.Text (Text, pack)
+import Data.Text (Text)
 
 import Horus.ContractDefinition (Checks (..), ContractDefinition (..))
 import Horus.Instruction (LabeledInst, callDestination)
@@ -22,8 +22,6 @@ import Horus.Util (maybeToError, safeLast, tShow)
 import SimpleSMT.Typed (TSExpr)
 import SimpleSMT.Typed qualified as SMT (pattern True)
 
-import System.FilePath.Posix (takeBaseName, takeDirectory)
-
 data ContractInfo = ContractInfo
   { ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
@@ -31,12 +29,11 @@ data ContractInfo = ContractInfo
   , ci_getPostByCall :: LabeledInst -> TSExpr Bool
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_identifiers :: Identifiers
-  , ci_dir :: Text
   , ci_name :: Text
   }
 
-mkContractInfo :: ContractDefinition -> FilePath -> ContractInfo
-mkContractInfo cd fileName =
+mkContractInfo :: ContractDefinition -> Text -> ContractInfo
+mkContractInfo cd contractName =
   ContractInfo
     { ci_getFunPc = getFunPc
     , ci_getBuiltinOffsets = getBuiltinOffsets
@@ -44,8 +41,7 @@ mkContractInfo cd fileName =
     , ci_getPostByCall = getPostByCall
     , ci_getApTracking = getApTracking
     , ci_identifiers = identifiers
-    , ci_dir = pack $ takeDirectory fileName
-    , ci_name = pack $ takeBaseName fileName
+    , ci_name = contractName
     }
  where
   debugInfo = p_debugInfo (cd_program cd)

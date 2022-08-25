@@ -48,7 +48,7 @@ interpret = iterTM exec . runGlobalT
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
-  exec (WriteFile' file text cont) = liftIO (createAndWriteFile (unpack file) text) >> cont
+  exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
 
 runImplT :: Config -> ImplT m a -> m a
 runImplT config (ImplT m) = runReaderT m config
