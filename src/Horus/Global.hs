@@ -29,17 +29,22 @@ import Horus.CairoSemantics.Runner
   , debugFriendlyModel
   , makeModel
   )
-import Horus.ContractDefinition (Checks, ContractDefinition (..), cPreConds, cdChecks)
+import Horus.ContractDefinition
+  ( Checks
+  , ContractDefinition (..)
+  , cPreConds
+  , cdChecks
+  )
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
-import Horus.Instruction (labelInsructions, readAllInstructions)
-import Horus.Module (Module, ModuleL, nameOfModule, traverseCFG)
+import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
+import Horus.Module (Module (m_prog), ModuleL, nameOfModule, traverseCFG)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
-import Horus.Preprocessor.Solvers (Solver, SolverSettings)
+import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
+import Horus.ScopedTSExpr (emptyScopedTSExpr, isEmptyScoped)
 import Horus.Util (tShow, whenJust)
-import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -54,6 +59,7 @@ data GlobalF m a
   | forall b. RunCairoSemanticsT ContractInfo (CairoSemanticsT m b) (ConstraintsState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | AskConfig (Config -> a)
+  | SetConfig Config a
   | PutStrLn' Text a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
@@ -86,6 +92,9 @@ runModuleL builder = liftF' (RunModuleL builder id)
 
 askConfig :: GlobalT m Config
 askConfig = liftF' (AskConfig id)
+
+setConfig :: Config -> GlobalT m ()
+setConfig conf = liftF' (SetConfig conf ())
 
 runPreprocessor :: PreprocessorEnv -> PreprocessorL a -> GlobalT m a
 runPreprocessor penv preprocessor =
@@ -122,7 +131,7 @@ makeModules cd cfg = runModuleL (traverseCFG sources cfg)
   preConds = cd ^. cdChecks . cPreConds
   takeSourceAndPre (name, idef) = do
     pc <- getFunctionPc idef
-    let pre = preConds ^. at name . non SMT.True
+    let pre = preConds ^. at name . non emptyScopedTSExpr
     pure (pc, pre)
 
 extractConstraints :: ContractInfo -> Module -> GlobalT m ConstraintsState
@@ -135,6 +144,7 @@ data SolvingInfo = SolvingInfo
 
 solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
 solveModule contractInfo smtPrefix m = do
+  checkMathsat contractInfo m
   result <- mkResult
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
@@ -174,6 +184,22 @@ writeSmtQueries queries dir moduleName = do
  where
   newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
   writeQueryFile (n, q) = writeFile' (newFileName n) q
+
+checkMathsat :: ContractInfo -> Module -> GlobalT m ()
+checkMathsat contractInfo m = do
+  conf <- askConfig
+  let solver = cfg_solver conf
+  when (includesMathsat solver && any callToLVarSpec (m_prog m)) $
+    do
+      let solver' = filterMathsat solver
+      if isEmptySolver solver'
+        then throw "MathSat solver was used to analyze a call with a logical variable in it's specification."
+        else setConfig conf{cfg_solver = solver'}
+ where
+  callToLVarSpec lblInst@(_, inst) = case i_opCode inst of
+    Call -> not $ isEmptyScoped (getPre lblInst)
+    _ -> False
+  getPre = ci_getPreByCall contractInfo
 
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult
 solveSMT smtPrefix cs = do
