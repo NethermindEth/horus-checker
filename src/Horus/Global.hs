@@ -18,6 +18,7 @@ import Data.Text (Text, unpack)
 import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
+import System.FilePath.Posix ((</>))
 
 import Horus.CFGBuild (CFGBuildT, Label, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
@@ -156,7 +157,7 @@ outputSmtQueries smtPrefix moduleName constraints = do
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
   writeSmtFile dir = do
-    writeFile' (dir <> "/" <> unpack moduleName <> ".smt2") query
+    writeFile' (dir </> unpack moduleName <> ".smt2") query
 
   getQueryList = do
     queryList <- optimizeQuery query
@@ -171,7 +172,7 @@ writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalT m ()
 writeSmtQueries queries dir moduleName = do
   for_ (zip [1 :: Int ..] queries) writeQueryFile
  where
-  newFileName n = dir <> "/" <> unpack moduleName <> "/" <> show n <> ".smt2"
+  newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
   writeQueryFile (n, q) = writeFile' (newFileName n) q
 
 solveSMT :: Text -> ConstraintsState -> GlobalT m SolverResult

@@ -75,7 +75,9 @@ library
       aeson,
       array,
       containers,
+      directory,
       dlist,
+      filepath,
       free,
       hashable,
       microlens,
@@ -89,8 +91,6 @@ library
       text,
       transformers,
       z3,
-      directory,
-      filepath
 
 executable horus-check
     import:                  deps
