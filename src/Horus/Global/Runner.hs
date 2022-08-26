@@ -1,11 +1,14 @@
 module Horus.Global.Runner (interpret, runImplT, runT) where
 
 import Control.Monad.Except (MonadError (..), liftEither, throwError)
-import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.State (MonadState, StateT, evalStateT, get, put)
 import Control.Monad.Trans (MonadTrans (..))
 import Control.Monad.Trans.Free.Church (iterTM)
 import Data.Text (Text, unpack)
+import Data.Text.IO qualified as Text (writeFile)
+import System.Directory (createDirectoryIfMissing)
+import System.FilePath.Posix (takeDirectory)
 import Text.Pretty.Simple (pPrintString)
 
 import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
@@ -45,9 +48,15 @@ interpret = iterTM exec . runGlobalT
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
+  exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
 
 runImplT :: Monad m => Config -> ImplT m a -> m a
 runImplT config (ImplT m) = evalStateT m config
 
 runT :: (MonadIO m, MonadError Text m) => Config -> GlobalT m a -> m a
 runT config = runImplT config . interpret
+
+createAndWriteFile :: FilePath -> Text -> IO ()
+createAndWriteFile file content = do
+  createDirectoryIfMissing True $ takeDirectory file
+  Text.writeFile file content

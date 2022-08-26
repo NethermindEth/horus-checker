@@ -10,13 +10,15 @@ where
 import Control.Monad (when)
 import Control.Monad.Except (MonadError (..), MonadTrans, lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
+import Data.Foldable (for_)
 import Data.Function ((&))
 import Data.Map qualified as Map (toList)
 import Data.Maybe (mapMaybe)
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Data.Traversable (for)
 import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
+import System.FilePath.Posix ((</>))
 
 import Horus.CFGBuild (CFGBuildT, Label, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
@@ -36,16 +38,18 @@ import Horus.ContractDefinition
 import Horus.ContractInfo (ContractInfo (..), mkContractInfo)
 import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
 import Horus.Module (Module (m_prog), ModuleL, nameOfModule, traverseCFG)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve)
+import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
 import Horus.ScopedTSExpr (emptyScopedTSExpr, isEmptyScoped)
-import Horus.Util (tShow)
+import Horus.Util (tShow, whenJust)
 
 data Config = Config
   { cfg_verbose :: Bool
+  , cfg_outputQueries :: Maybe FilePath
+  , cfg_outputOptimizedQueries :: Maybe FilePath
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
   }
@@ -60,6 +64,7 @@ data GlobalF m a
   | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
   | Throw Text
   | forall b. Catch (GlobalT m b) (Text -> GlobalT m b) (b -> a)
+  | WriteFile' FilePath Text a
 
 deriving instance Functor (GlobalF m)
 
@@ -104,6 +109,9 @@ throw t = liftF' (Throw t)
 catch :: GlobalT m a -> (Text -> GlobalT m a) -> GlobalT m a
 catch m h = liftF' (Catch m h id)
 
+writeFile' :: FilePath -> Text -> GlobalT m ()
+writeFile' file text = liftF' (WriteFile' file text ())
+
 verbosePutStrLn :: Text -> GlobalT m ()
 verbosePutStrLn what = do
   config <- askConfig
@@ -141,12 +149,41 @@ solveModule contractInfo smtPrefix m = do
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult = printingErrors $ do
-    verbosePrint m
     constraints <- extractConstraints contractInfo m
+    outputSmtQueries smtPrefix moduleName constraints
+    verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
     solveSMT smtPrefix constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
   moduleName = nameOfModule (ci_identifiers contractInfo) m
+
+outputSmtQueries :: Text -> Text -> ConstraintsState -> GlobalT m ()
+outputSmtQueries smtPrefix moduleName constraints = do
+  Config{..} <- askConfig
+  whenJust cfg_outputQueries writeSmtFile
+  whenJust cfg_outputOptimizedQueries writeSmtFileOptimized
+ where
+  query = makeModel smtPrefix constraints
+  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
+
+  writeSmtFile dir = do
+    writeFile' (dir </> unpack moduleName <> ".smt2") query
+
+  getQueryList = do
+    queryList <- optimizeQuery query
+    goalListToTextList queryList
+
+  writeSmtFileOptimized dir = do
+    Config{..} <- askConfig
+    queries <- runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) getQueryList
+    writeSmtQueries queries dir moduleName
+
+writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalT m ()
+writeSmtQueries queries dir moduleName = do
+  for_ (zip [1 :: Int ..] queries) writeQueryFile
+ where
+  newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
+  writeQueryFile (n, q) = writeFile' (newFileName n) q
 
 checkMathsat :: ContractInfo -> Module -> GlobalT m ()
 checkMathsat contractInfo m = do
