@@ -11,8 +11,6 @@ module Horus.CairoSemantics
 where
 
 import Control.Monad (when)
-import Control.Monad.Reader (ReaderT (..), ask, local)
-import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Free.Church (FT, liftF)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor.Identity (Identity)
@@ -195,35 +193,34 @@ allocLocal address = declareLocalMem (address `TSMT.mod` prime)
 
 exMemoryRemoval :: Set LVar -> TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
 exMemoryRemoval exVars expr = do
-  (sexpr, lMemVars) <- runReaderT (unsafeMemoryRemoval (TSMT.toUnsafe expr)) id
+  (sexpr, lMemVars) <- unsafeMemoryRemoval (TSMT.toUnsafe expr)
   pure (intro (TSMT.fromUnsafe sexpr) lMemVars)
  where
   restrictMemTail [] = []
   restrictMemTail (MemoryVariable var _ addr : rest) =
     [addr .== mv_addrExpr .-> TSMT.const var .== TSMT.const mv_varName | MemoryVariable{..} <- rest]
+
   intro :: TSExpr Bool -> [MemoryVariable] -> [MemoryVariable] -> TSExpr Bool
   intro ex lmv gmv =
-    let globMemRestrictions = [addr1 .== addr2 .-> TSMT.const var1 .== TSMT.const var2 | MemoryVariable var1 _ addr1 <- lmv, MemoryVariable var2 _ addr2 <- gmv]
+    let globMemRestrictions =
+          [ addr1 .== addr2 .-> TSMT.const var1 .== TSMT.const var2
+          | MemoryVariable var1 _ addr1 <- lmv
+          , MemoryVariable var2 _ addr2 <- gmv
+          ]
         locMemRestrictions = concatMap restrictMemTail (tails lmv)
         inner_expr = TSMT.and (ex : (locMemRestrictions ++ globMemRestrictions))
         quant_lmv = foldr (\mvar e -> existsFelt (mv_varName mvar) (const e)) inner_expr lmv
      in foldr (\var e -> existsFelt var (const e)) quant_lmv exVars
-  unsafeMemoryRemoval :: SMT.SExpr -> ReaderT (SMT.SExpr -> SMT.SExpr) (CairoSemanticsT m) (SMT.SExpr, [MemoryVariable])
-  unsafeMemoryRemoval (SMT.List [SMT.Atom "let", SMT.List bindings, x]) = do
-    res <- traverse unsafeMemoryRemoval bindings
-    let bindings' = map fst res
-        bindingLocalMemVars = concatMap snd res
-        wrapper x' = SMT.List [SMT.Atom "let", SMT.List bindings', x']
-    (x', xLocalMemVars) <- local (. wrapper) (unsafeMemoryRemoval x)
-    pure (wrapper x', bindingLocalMemVars ++ xLocalMemVars)
+
+  unsafeMemoryRemoval :: SMT.SExpr -> CairoSemanticsT m (SMT.SExpr, [MemoryVariable])
   unsafeMemoryRemoval (SMT.List [SMT.Atom "memory", x]) = do
     (x', localMemVars) <- unsafeMemoryRemoval x
-    bindingWrapper <- ask
     if null localMemVars && not (TSMT.referencesAny exVars x')
       then do
-        (,[]) . TSMT.toUnsafe <$> lift (alloc (TSMT.fromUnsafe (bindingWrapper x'))) -- No
-      else lift $ do
-        mv <- allocLocal (TSMT.fromUnsafe (bindingWrapper x'))
+        mv <- alloc (TSMT.fromUnsafe x')
+        pure (TSMT.toUnsafe mv, [])
+      else do
+        mv <- allocLocal (TSMT.fromUnsafe x')
         pure (SMT.const (unpack $ mv_varName mv), mv : localMemVars)
   unsafeMemoryRemoval (SMT.List l) = do
     res <- traverse unsafeMemoryRemoval l
