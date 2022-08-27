@@ -42,9 +42,10 @@ import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToText
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Program (..))
+import Horus.SMTUtil (gatherLogicalVariables)
 import Horus.SW.Identifier (getFunctionPc)
-import Horus.ScopedTSExpr (emptyScopedTSExpr, isEmptyScoped)
 import Horus.Util (tShow, whenJust)
+import SimpleSMT.Typed qualified as TSMT (TSExpr (True))
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -199,8 +200,10 @@ checkMathsat contractInfo m = do
         else setConfig conf{cfg_solver = solver'}
  where
   callToLVarSpec lblInst@(_, inst) = case i_opCode inst of
-    Call -> not $ isEmptyScoped (getPre lblInst)
+    Call -> not (null lvars)
     _ -> False
+   where
+    lvars = gatherLogicalVariables (getPre lblInst)
   getPre = ci_getPreByCall contractInfo
 
 solveSMT :: Text -> ExecutionState -> GlobalT m SolverResult

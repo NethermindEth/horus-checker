@@ -7,6 +7,7 @@ module SimpleSMT.Typed
   , ppTSExpr
   , showTSExpr
   , transform'
+  , transform'_
   , transformId'
   , canonicalize
   , function
@@ -43,6 +44,7 @@ import Prelude hiding (False, Int, True, and, const, div, mod, not)
 
 import Control.Monad.Reader (Reader, local, runReader)
 import Data.Coerce (coerce)
+import Data.Functor (void, ($>))
 import Data.Functor.Identity (Identity (..))
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromList)
@@ -118,6 +120,9 @@ transform' f' e' = fromUnsafe <$> go f' (toUnsafe e')
  where
   go f (SMT.Atom x) = f (SMT.Atom x)
   go f (SMT.List l) = (f . SMT.List) =<< traverse (go f) l
+
+transform'_ :: Monad f => (SExpr -> f ()) -> TSExpr a -> f ()
+transform'_ f = void . transform' (\e -> f e $> e)
 
 const :: Text -> TSExpr a
 const = function
