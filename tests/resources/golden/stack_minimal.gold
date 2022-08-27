@@ -8,7 +8,7 @@ main_
 Unsat
 cairo.lang.compiler.lib.registers.get_ap
 Unsat
-empty: ScopedTSExpr {stsexpr_scope = fromList [], stsexpr_expr = (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))}
+empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))
 Unsat
 _Stack.empty
 Unsat
