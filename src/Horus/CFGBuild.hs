@@ -37,8 +37,9 @@ import Horus.Instruction
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
-import Horus.ScopedTSExpr (ScopedTSExpr, emptyScopedTSExpr)
 import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
+import SimpleSMT.Typed (TSExpr)
+import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -46,7 +47,7 @@ data ArcCondition = ACNone | ACJnz Label Bool
 data CFGBuildF a
   = AddVertex Label a
   | AddArc Label Label [LabeledInst] ArcCondition a
-  | AddAssertion Label (ScopedTSExpr Bool) a
+  | AddAssertion Label (TSExpr Bool) a
   | Throw Text
   deriving (Functor)
 
@@ -62,7 +63,7 @@ addVertex l = liftF' (AddVertex l ())
 addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> CFGBuildT m ()
 addArc lFrom lTo insts test = liftF' (AddArc lFrom lTo insts test ())
 
-addAssertion :: Label -> ScopedTSExpr Bool -> CFGBuildT m ()
+addAssertion :: Label -> TSExpr Bool -> CFGBuildT m ()
 addAssertion l assertion = liftF' (AddAssertion l assertion ())
 
 throw :: Text -> CFGBuildT m a
@@ -156,7 +157,7 @@ addAssertions :: Map Label [Label] -> Checks -> Identifiers -> CFGBuildT m ()
 addAssertions retsByFun checks identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> do
     whenJust (getFunctionPc def) $ \pc -> do
-      let post = c_postConds checks ^. at idName . non emptyScopedTSExpr
+      let post = c_postConds checks ^. at idName . non SMT.True
       for_ (retsByFun ^. ix pc) (`addAssertion` post)
     whenJust (getLabelPc def) $ \pc ->
       whenJust (c_invariants checks ^. at idName) (pc `addAssertion`)

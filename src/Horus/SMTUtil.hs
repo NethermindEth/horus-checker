@@ -2,7 +2,7 @@ module Horus.SMTUtil
   ( prime
   , ap
   , fp
-  , regToSTSExpr
+  , regToTSExpr
   , memory
   , pattern Memory
   , rcBound
@@ -14,17 +14,22 @@ module Horus.SMTUtil
   , builtinInSegment
   , builtinConstraint
   , existsFelt
+  , gatherLogicalVariables
+  , suffixLogicalVariables
   )
 where
 
 import Control.Exception.Safe (bracket)
-import Data.Text (Text, unpack)
+import Control.Monad.Writer (execWriter, tell)
+import Data.List qualified as List (isPrefixOf)
+import Data.Set (Set)
+import Data.Set qualified as Set (singleton)
+import Data.Text (Text, pack, unpack)
 import SimpleSMT qualified (SExpr (..), Solver, newSolver, stop)
 
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
 import Horus.SW.Builtin qualified as Builtin (name, size)
-import Horus.ScopedTSExpr (ScopedTSExpr, withEmptyScope)
 import SimpleSMT.Typed (TSExpr (..), (.&&), (.->), (.<), (.<=), (.==))
 import SimpleSMT.Typed qualified as SMT
 
@@ -35,9 +40,9 @@ ap, fp :: TSExpr Integer
 ap = SMT.const "ap"
 fp = SMT.const "fp"
 
-regToSTSExpr :: PointerRegister -> ScopedTSExpr Integer
-regToSTSExpr AllocationPointer = withEmptyScope ap
-regToSTSExpr FramePointer = withEmptyScope fp
+regToTSExpr :: PointerRegister -> TSExpr Integer
+regToTSExpr AllocationPointer = ap
+regToTSExpr FramePointer = fp
 
 memory :: TSExpr Integer -> TSExpr Integer
 memory = SMT.function "memory"
@@ -89,3 +94,15 @@ builtinConstraint ptr b = builtinInSegment ptr b .-> builtinCond ptr b
 
 existsFelt :: Text -> (TSExpr Integer -> TSExpr Bool) -> TSExpr Bool
 existsFelt t f = SMT.existsInt t (\var -> f var .&& (0 .<= var .&& var .< prime))
+
+gatherLogicalVariables :: TSExpr a -> Set Text
+gatherLogicalVariables = execWriter . SMT.transform'_ step
+ where
+  step (SimpleSMT.Atom x) | "$" `List.isPrefixOf` x = tell (Set.singleton (pack x))
+  step _ = pure ()
+
+suffixLogicalVariables :: Text -> TSExpr a -> TSExpr a
+suffixLogicalVariables suffix = SMT.transformId' step
+ where
+  step (SimpleSMT.Atom x) | "$" `List.isPrefixOf` x = SimpleSMT.Atom (x <> unpack suffix)
+  step e = e
