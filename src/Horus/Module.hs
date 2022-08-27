@@ -9,8 +9,8 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
-import Data.Text qualified as Text
-import Lens.Micro (ix, over, (^.))
+import Data.Text qualified as Text (concat, cons, intercalate, length)
+import Lens.Micro (ix, (^.))
 
 import Horus.CFGBuild (ArcCondition (..), Label (unLabel))
 import Horus.CFGBuild.Runner (CFG (..))
@@ -34,13 +34,13 @@ import Horus.SW.Identifier
   , getLabelPc
   )
 import Horus.SW.ScopedName (ScopedName (..))
-import Horus.ScopedTSExpr (ScopedTSExpr, conjunctSTS, stsexprExpr)
 import Horus.Util (tShow)
-import SimpleSMT.Typed ((.&&), (.==))
+import SimpleSMT.Typed (TSExpr, (.&&), (.==))
+import SimpleSMT.Typed qualified as SMT (and)
 
 data Module = Module
-  { m_pre :: ScopedTSExpr Bool
-  , m_post :: ScopedTSExpr Bool
+  { m_pre :: TSExpr Bool
+  , m_post :: TSExpr Bool
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
