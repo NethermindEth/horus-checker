@@ -45,8 +45,9 @@ import Horus.Instruction
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Program (..))
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
-import Horus.ScopedTSExpr (ScopedTSExpr, emptyScopedTSExpr)
 import Horus.Util (Box (..), appendList, topmostStepFT, whenJust)
+import SimpleSMT.Typed (TSExpr)
+import SimpleSMT.Typed qualified as SMT (TSExpr (True))
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -70,7 +71,7 @@ addVertex l = liftF' (AddVertex l ())
 addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> FInfo -> CFGBuildT m ()
 addArc lFrom lTo insts test f = liftF' (AddArc lFrom lTo insts test f ())
 
-addAssertion :: Label -> ScopedTSExpr Bool -> CFGBuildT m ()
+addAssertion :: Label -> TSExpr Bool -> CFGBuildT m ()
 addAssertion l assertion = liftF' (AddAssertion l assertion ())
 
 throw :: Text -> CFGBuildT m a

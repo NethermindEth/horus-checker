@@ -21,10 +21,8 @@ import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
-import Data.Set (Set)
 import Data.Set qualified as Set (toList)
 import Data.Text (Text, unpack)
-import Lens.Micro ((^.))
 import SimpleSMT qualified as SMT (SExpr (..), const)
 
 import Horus.CallStack as CS (CallEntry, callerOfRoot)
@@ -50,15 +48,16 @@ import Horus.SMTUtil
   , builtinEnd
   , builtinStart
   , existsFelt
+  , gatherLogicalVariables
   , memory
   , prime
-  , regToSTSExpr
+  , regToTSExpr
+  , suffixLogicalVariables
   , pattern Memory
   )
 import Horus.SMTUtil qualified as Util (ap, fp)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
-import Horus.ScopedTSExpr (LVar, ScopedTSExpr, addLVarSuffix, stsexprExpr, stsexprScope, withEmptyScope)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 import SimpleSMT.Typed (TSExpr (Mod, (:+)), (.&&), (.->), (./=), (.<), (.<=), (.==), (.||))
 import SimpleSMT.Typed qualified as TSMT
@@ -77,8 +76,8 @@ data CairoSemanticsF a
   | DeclareFelt Text (TSExpr Integer -> a)
   | DeclareMem (TSExpr Integer) (TSExpr Integer -> a)
   | DeclareLocalMem (TSExpr Integer) (MemoryVariable -> a)
-  | GetPreByCall LabeledInst (ScopedTSExpr Bool -> a)
-  | GetPostByCall LabeledInst (ScopedTSExpr Bool -> a)
+  | GetPreByCall LabeledInst (TSExpr Bool -> a)
+  | GetPostByCall LabeledInst (TSExpr Bool -> a)
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
@@ -109,10 +108,10 @@ declareFelt t = liftF (DeclareFelt t id)
 declareMem :: TSExpr Integer -> CairoSemanticsT m (TSExpr Integer)
 declareMem address = liftF (DeclareMem address id)
 
-getPreByCall :: LabeledInst -> CairoSemanticsT m (ScopedTSExpr Bool)
+getPreByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
 getPreByCall inst = liftF (GetPreByCall inst id)
 
-getPostByCall :: LabeledInst -> CairoSemanticsT m (ScopedTSExpr Bool)
+getPostByCall :: LabeledInst -> CairoSemanticsT m (TSExpr Bool)
 getPostByCall inst = liftF (GetPostByCall inst id)
 
 declareLocalMem :: TSExpr Integer -> CairoSemanticsT m MemoryVariable
@@ -169,22 +168,19 @@ isCtxRoot = (callerOfRoot ==) . fst <$> top
 That is, deduce AP from the ApTracking data by PC and replace FP name
 with the given one.
 -}
-prepare :: Label -> TSExpr Integer -> ScopedTSExpr a -> CairoSemanticsT m (TSExpr a)
+prepare :: Label -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
 prepare pc fp stsexpr = getAp pc >>= \ap -> prepare' ap fp stsexpr
 
-prepare' :: TSExpr Integer -> TSExpr Integer -> ScopedTSExpr a -> CairoSemanticsT m (TSExpr a)
-prepare' ap fp stsexpr = do
-  let stsexpr_scope = stsexpr ^. stsexprScope
-      stsexpr_expr = stsexpr ^. stsexprExpr
-  mapM_ declareFelt (Set.toList stsexpr_scope)
-  memoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap stsexpr_expr))
+prepare' :: TSExpr Integer -> TSExpr Integer -> TSExpr a -> CairoSemanticsT m (TSExpr a)
+prepare' ap fp expr = do
+  mapM_ declareFelt (Set.toList (gatherLogicalVariables expr))
+  memoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr))
 
-prepareCheckPoint :: Label -> TSExpr Integer -> ScopedTSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
-prepareCheckPoint pc fp stsexpr = do
-  let stsexpr_scope = stsexpr ^. stsexprScope
-      stsexpr_expr = stsexpr ^. stsexprExpr
+prepareCheckPoint ::
+  Label -> TSExpr Integer -> TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
+prepareCheckPoint pc fp expr = do
   ap <- getAp pc
-  exMemoryRemoval stsexpr_scope (TSMT.substitute "fp" fp . TSMT.substitute "ap" ap $ stsexpr_expr)
+  exMemoryRemoval (TSMT.substitute "fp" fp (TSMT.substitute "ap" ap expr))
 
 encodeApTracking :: Text -> ApTracking -> CairoSemanticsT m (TSExpr Integer)
 encodeApTracking traceDescr ApTracking{..} =
@@ -229,11 +225,13 @@ alloc address = declareMem (address `TSMT.mod` prime)
 allocLocal :: TSExpr Integer -> CairoSemanticsT m MemoryVariable
 allocLocal address = declareLocalMem (address `TSMT.mod` prime)
 
-exMemoryRemoval :: Set LVar -> TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
-exMemoryRemoval exVars expr = do
+exMemoryRemoval :: TSExpr Bool -> CairoSemanticsT m ([MemoryVariable] -> TSExpr Bool)
+exMemoryRemoval expr = do
   (sexpr, lMemVars) <- unsafeMemoryRemoval (TSMT.toUnsafe expr)
   pure (intro (TSMT.fromUnsafe sexpr) lMemVars)
  where
+  exVars = gatherLogicalVariables expr
+
   restrictMemTail [] = []
   restrictMemTail (MemoryVariable var _ addr : rest) =
     [addr .== mv_addrExpr .-> TSMT.const var .== TSMT.const mv_varName | MemoryVariable{..} <- rest]
@@ -416,12 +414,12 @@ checkBuiltinNotRequired b = traverse_ check
 
 getRes :: TSExpr Integer -> LabeledInst -> CairoSemanticsT m (TSExpr Integer)
 getRes fp (pc, Instruction{..}) = do
-  op0Reg <- prepare pc fp (regToSTSExpr i_op0Register)
+  op0Reg <- prepare pc fp (regToTSExpr i_op0Register)
   let op0 = memory (op0Reg + fromInteger i_op0Offset)
   op1 <- case i_op1Source of
     Op0 -> pure (memory (op0 + fromInteger i_op1Offset))
     RegisterSource reg -> do
-      op1Reg <- prepare pc fp (regToSTSExpr reg)
+      op1Reg <- prepare pc fp (regToTSExpr reg)
       pure (memory (op1Reg + fromInteger i_op1Offset))
     Imm -> pure (fromInteger i_imm)
   pure $ case i_resLogic of

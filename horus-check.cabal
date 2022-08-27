@@ -62,7 +62,6 @@ library
       Horus.Preprocessor
       Horus.Preprocessor.Runner
       Horus.Preprocessor.Solvers
-      Horus.ScopedTSExpr
       Horus.SMTUtil
       Horus.SW.Builtin
       Horus.SW.CairoType
