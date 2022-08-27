@@ -9,8 +9,8 @@ import Data.Foldable (for_)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
-import Data.Text qualified as Text
-import Lens.Micro (ix, over, (^.))
+import Data.Text qualified as Text (concat, cons, intercalate, length)
+import Lens.Micro (ix, (^.))
 
 import Horus.CFGBuild (ArcCondition (..), Label (..))
 import Horus.CFGBuild.Runner (CFG (..))
@@ -22,13 +22,13 @@ import Horus.SW.Identifier
   , getLabelPc
   )
 import Horus.SW.ScopedName (ScopedName (..))
-import Horus.ScopedTSExpr (ScopedTSExpr, conjunctSTS, stsexprExpr)
 import Horus.Util (tShow)
-import SimpleSMT.Typed ((.&&), (.==))
+import SimpleSMT.Typed (TSExpr, (.&&), (.==))
+import SimpleSMT.Typed qualified as SMT (and)
 
 data Module = Module
-  { m_pre :: ScopedTSExpr Bool
-  , m_post :: ScopedTSExpr Bool
+  { m_pre :: TSExpr Bool
+  , m_post :: TSExpr Bool
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map Label Bool
   }
@@ -116,24 +116,24 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Text -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
-traverseCFG :: [(Label, ScopedTSExpr Bool)] -> CFG -> ModuleL ()
+traverseCFG :: [(Label, TSExpr Bool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(l, pre) ->
-  visit Map.empty [] (over stsexprExpr (.&& ap .== fp) pre) l ACNone
+  visit Map.empty [] (pre .&& ap .== fp) l ACNone
  where
-  visit :: Map Label Bool -> [LabeledInst] -> ScopedTSExpr Bool -> Label -> ArcCondition -> ModuleL ()
+  visit :: Map Label Bool -> [LabeledInst] -> TSExpr Bool -> Label -> ArcCondition -> ModuleL ()
   visit oracle acc pre l arcCond = visiting l $ \alreadyVisited -> do
     when (alreadyVisited && null assertions) $ do
       throwError ("There is a loop at PC " <> tShow (unLabel l) <> " with no invariant")
-    unless (null assertions) $ do
-      emitModule (Module pre conjSTS acc oracle')
-    unless alreadyVisited $ do
+    unless (null assertions) $
+      emitModule (Module pre (SMT.and assertions) acc oracle')
+    unless alreadyVisited $
       if null assertions
         then visitArcs oracle' acc pre l
-        else visitArcs Map.empty [] conjSTS l
+        else visitArcs Map.empty [] (SMT.and assertions) l
    where
     oracle' = updateOracle arcCond oracle
     assertions = cfg_assertions cfg ^. ix l
-    conjSTS = conjunctSTS assertions
+
   visitArcs oracle acc pre l = do
     for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
       visit oracle (acc <> insts) pre lTo test

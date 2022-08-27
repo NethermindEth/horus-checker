@@ -18,14 +18,15 @@ import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.Identifier (Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName)
-import Horus.ScopedTSExpr (ScopedTSExpr, emptyScopedTSExpr)
 import Horus.Util (maybeToError, safeLast, tShow)
+import SimpleSMT.Typed (TSExpr)
+import SimpleSMT.Typed qualified as SMT (pattern True)
 
 data ContractInfo = ContractInfo
   { ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
-  , ci_getPreByCall :: LabeledInst -> ScopedTSExpr Bool
-  , ci_getPostByCall :: LabeledInst -> ScopedTSExpr Bool
+  , ci_getPreByCall :: LabeledInst -> TSExpr Bool
+  , ci_getPostByCall :: LabeledInst -> TSExpr Bool
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_identifiers :: Identifiers
   }
@@ -90,17 +91,13 @@ mkContractInfo cd =
             <&> \m -> -me_offset m + st_size returns + st_size implicits
         ]
 
-  getPre :: ScopedName -> Maybe (ScopedTSExpr Bool)
   getPre name = cd & cd_checks & c_preConds & (Map.!? name)
-  getPost :: ScopedName -> Maybe (ScopedTSExpr Bool)
   getPost name = cd & cd_checks & c_postConds & (Map.!? name)
 
-  getPreByCall :: LabeledInst -> ScopedTSExpr Bool
-  getPreByCall inst = fromMaybe emptyScopedTSExpr $ do
+  getPreByCall inst = fromMaybe SMT.True $ do
     callDestination inst >>= getFunName >>= getPre
 
-  getPostByCall :: LabeledInst -> ScopedTSExpr Bool
-  getPostByCall inst = fromMaybe emptyScopedTSExpr $ do
+  getPostByCall inst = fromMaybe SMT.True $ do
     callDestination inst >>= getFunName >>= getPost
 
   getApTracking :: MonadError Text m => Label -> m ApTracking

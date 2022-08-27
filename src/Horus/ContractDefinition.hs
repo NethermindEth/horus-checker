@@ -12,16 +12,17 @@ module Horus.ContractDefinition
 where
 
 import Data.Aeson (FromJSON (..), withObject, (.!=), (.:), (.:?))
+import Data.Coerce (coerce)
 import Data.Map (Map)
 import Data.Map qualified as Map (empty, fromAscList)
 import Data.Text (Text)
+import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens')
 
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.Std (FuncSpec (..), stdFuncs)
-import Horus.ScopedTSExpr (ScopedTSExpr, withEmptyScope)
-import Horus.Util (onSnd)
+import SimpleSMT.Typed (TSExpr, canonicalize, parseAssertion)
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
@@ -39,25 +40,25 @@ cdRawSmt :: Lens' ContractDefinition Text
 cdRawSmt lMod g = fmap (\x -> g{cd_rawSmt = x}) (lMod (cd_rawSmt g))
 
 data Checks = Checks
-  { c_preConds :: Map ScopedName (ScopedTSExpr Bool)
-  , c_postConds :: Map ScopedName (ScopedTSExpr Bool)
-  , c_invariants :: Map ScopedName (ScopedTSExpr Bool)
+  { c_preConds :: Map ScopedName (TSExpr Bool)
+  , c_postConds :: Map ScopedName (TSExpr Bool)
+  , c_invariants :: Map ScopedName (TSExpr Bool)
   }
 
-cPreConds :: Lens' Checks (Map ScopedName (ScopedTSExpr Bool))
+cPreConds :: Lens' Checks (Map ScopedName (TSExpr Bool))
 cPreConds lMod g = fmap (\x -> g{c_preConds = x}) (lMod (c_preConds g))
 
-cPostConds :: Lens' Checks (Map ScopedName (ScopedTSExpr Bool))
+cPostConds :: Lens' Checks (Map ScopedName (TSExpr Bool))
 cPostConds lMod g = fmap (\x -> g{c_postConds = x}) (lMod (c_postConds g))
 
-cInvariants :: Lens' Checks (Map ScopedName (ScopedTSExpr Bool))
+cInvariants :: Lens' Checks (Map ScopedName (TSExpr Bool))
 cInvariants lMod g = fmap (\x -> g{c_invariants = x}) (lMod (c_invariants g))
 
 stdChecks :: Checks
 stdChecks =
   Checks
-    { c_preConds = Map.fromAscList (map (onSnd withEmptyScope) pres)
-    , c_postConds = Map.fromAscList (map (onSnd withEmptyScope) posts)
+    { c_preConds = Map.fromAscList pres
+    , c_postConds = Map.fromAscList posts
     , c_invariants = Map.empty
     }
  where
@@ -70,24 +71,40 @@ instance FromJSON ContractDefinition where
       <*> v .:? "checks" .!= mempty
       <*> v .:? "smt" .!= ""
 
+newtype HSExpr a = HSExpr (TSExpr a)
+  deriving newtype (Show)
+
+instance FromJSON (HSExpr Bool) where
+  parseJSON = withObject "HSExpr" $ \v -> do
+    exprLines <- v .: "bool_ref"
+    case parseAssertion (Text.intercalate "\n" exprLines) of
+      Just tsexpr -> pure (HSExpr (canonicalize tsexpr))
+      _ -> fail "Can't parse an smt2 sexp"
+
+elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (TSExpr a)
+elimHSExpr = coerce
+
+introHSExpr :: Map ScopedName (TSExpr a) -> Map ScopedName (HSExpr a)
+introHSExpr = coerce
+
 instance FromJSON Checks where
   parseJSON = withObject "Checks" $ \v ->
     Checks
-      <$> v .: "pre_conds"
-      <*> v .: "post_conds"
-      <*> v .: "invariants"
+      <$> fmap elimHSExpr (v .: "pre_conds")
+      <*> fmap elimHSExpr (v .: "post_conds")
+      <*> fmap elimHSExpr (v .: "invariants")
 
 instance Show Checks where
   show cs =
     "Checks \n"
       <> "{ c_preConds = "
-      <> show (c_preConds cs)
+      <> show (introHSExpr (c_preConds cs))
       <> "\n"
       <> ", c_postConds = "
-      <> show (c_postConds cs)
+      <> show (introHSExpr (c_postConds cs))
       <> "\n"
       <> ", c_invariants = "
-      <> show (c_invariants cs)
+      <> show (introHSExpr (c_invariants cs))
       <> "\n"
       <> "}"
 
