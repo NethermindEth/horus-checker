@@ -38,7 +38,7 @@ import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_getPreByCall, ci_identi
 import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
 import Horus.Instruction (Instruction (i_opCode), OpCode (Call), labelInsructions, readAllInstructions)
 import Horus.Module (Module (m_calledF, m_prog), ModuleL, nameOfModule, traverseCFG)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), solve, optimizeQuery, goalListToTextList)
+import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Program (..))
