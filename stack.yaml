@@ -42,7 +42,7 @@ packages:
 #
 extra-deps:
   - git: https://github.com/murcake/simple-smt.git
-    commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
+    commit: 497a69edd8ba98874d832a94a410964ce2264e7e
   - git: https://github.com/IagoAbal/haskell-z3.git
     commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
 
