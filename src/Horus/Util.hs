@@ -4,22 +4,24 @@ module Horus.Util
   , whenJust
   , whenJustM
   , safeLast
-  , Box (..)
   , topmostStepFT
   , appendList
   , tShow
   , commonPrefix
   , enumerate
   , maybeToError
-  , onSnd
+  , eqT'
   )
 where
 
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (isJust)
+import Data.Some (Some (..))
 import Data.Text (Text, pack)
 import Data.Text qualified as Text
+import Data.Typeable (Typeable, eqT)
 
 fieldPrime :: Integer
 fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
@@ -42,10 +44,8 @@ safeLast :: [a] -> Maybe a
 safeLast [] = Nothing
 safeLast l = Just (last l)
 
-data Box f = forall a. Box {unBox :: f a}
-
-topmostStepFT :: Applicative m => FT f m a -> m (Maybe (Box f))
-topmostStepFT ft = runFT ft (const (pure Nothing)) (\_ step -> pure (Just (Box step)))
+topmostStepFT :: Applicative m => FT f m a -> m (Maybe (Some f))
+topmostStepFT ft = runFT ft (const (pure Nothing)) (\_ step -> pure (Just (Some step)))
 
 appendList :: NonEmpty a -> [a] -> NonEmpty a
 appendList (x :| xs) ys = x :| xs <> ys
@@ -65,5 +65,5 @@ enumerate = [minBound ..]
 maybeToError :: MonadError e m => e -> Maybe a -> m a
 maybeToError e = maybe (throwError e) pure
 
-onSnd :: (b -> c) -> (a, b) -> (a, c)
-onSnd f (a, b) = (a, f b)
+eqT' :: forall k (a :: k) (b :: k). (Typeable a, Typeable b) => Bool
+eqT' = isJust (eqT @a @b)
