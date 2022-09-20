@@ -10,11 +10,11 @@ packages:
     git: https://github.com/murcake/simple-smt.git
     pantry-tree:
       size: 357
-      sha256: 29342bcf3b56e2710741d2c881f8ebe1ba0134799a05f1ec479c7561cebc936d
-    commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
+      sha256: 52b7da75230a4cbc27007b8560371a007d3ce5f4773023dc8f1f43299e99a414
+    commit: 497a69edd8ba98874d832a94a410964ce2264e7e
   original:
     git: https://github.com/murcake/simple-smt.git
-    commit: 4286d76888cf0d850d925713cd2a991e89cad5f9
+    commit: 497a69edd8ba98874d832a94a410964ce2264e7e
 - completed:
     name: z3
     version: '408.2'
