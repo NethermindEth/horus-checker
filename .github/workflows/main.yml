@@ -22,16 +22,16 @@ jobs:
         run: |
           find app src -name *.hs -exec fourmolu --mode 'check' {} +
 
-    - name: 'Set up HLint'
-      uses: rwe/actions-hlint-setup@v1
-      with:
-        version: '3.1.6'
+      - name: 'Set up HLint'
+        uses: rwe/actions-hlint-setup@v1
+        with:
+          version: '3.1.6'
 
-    - name: 'Run HLint'
-      uses: rwe/actions-hlint-run@v2
-      with:
-        path: '["src/", "app/"]'
-        fail-on: warning
+      - name: 'Run HLint'
+        uses: rwe/actions-hlint-run@v2
+        with:
+          path: '["src/", "app/"]'
+          fail-on: warning
 
       # - name: Run HLint
       #   run: |
