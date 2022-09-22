@@ -22,9 +22,16 @@ jobs:
         run: |
           find app src -name *.hs -exec fourmolu --mode 'check' {} +
 
-      - name: Run HLint
-        run: |
-          curl -sSL https://raw.github.com/ndmitchell/hlint/master/misc/run.sh | sh -s src app
+      - name: 'Set up HLint'
+        uses: rwe/actions-hlint-setup@v1
+        with:
+          version: '3.4.1'
+
+      - name: 'Run HLint'
+        uses: rwe/actions-hlint-run@v2
+        with:
+          path: '["src/", "app/"]'
+          fail-on: suggestion
 
   test:
     runs-on: ubuntu-latest

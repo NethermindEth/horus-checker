@@ -130,4 +130,4 @@ withSolver :: Text -> [Text] -> (SMT.Solver -> IO a) -> IO a
 withSolver solverName args =
   bracket
     (SMT.newSolver (unpack solverName) (map unpack args) Nothing)
-    SMT.stop
+    SMT.forceStop
