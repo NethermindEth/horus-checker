@@ -4,7 +4,7 @@ import Control.Monad.Except (Except, catchError, runExcept, throwError)
 import Control.Monad.Free.Church (iterM)
 import Control.Monad.Reader (ReaderT, ask, local, runReaderT)
 import Control.Monad.Writer (WriterT, execWriterT, tell)
-import Data.Bifunctor (first, second)
+import Data.Bifunctor (bimap)
 import Data.DList (DList)
 import Data.DList qualified as D (singleton)
 import Data.Foldable (toList)
@@ -33,9 +33,11 @@ interpret = iterM exec . runModuleL
 
 run :: ModuleL a -> Either Text [Module]
 run m =
-  interpret m
-    & flip runReaderT Set.empty
-    & execWriterT
-    & runExcept
-    & first tShow
-    & second toList
+  bimap
+    tShow
+    toList
+    ( interpret m
+        & flip runReaderT Set.empty
+        & execWriterT
+        & runExcept
+    )
