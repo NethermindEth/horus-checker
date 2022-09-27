@@ -24,7 +24,7 @@ instance FromJSON FuncSpec where
     FuncSpec
       <$> fmap elimHSExpr (v .: "pre")
       <*> fmap elimHSExpr (v .: "post")
-      <*> (Storage.parse =<< (v .: "state"))
+      <*> (Storage.parse =<< (v .: "storage_update"))
 
 elimHSExpr :: HSExpr a -> Expr a
 elimHSExpr = coerce
