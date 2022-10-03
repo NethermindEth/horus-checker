@@ -21,8 +21,8 @@ data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_specs :: Map ScopedName FuncSpec
   , cd_invariants :: Map ScopedName (Expr TBool)
-  -- The value indicates the number of arguments of the storage variable.
-  , cd_storageVars :: Map ScopedName Int
+  , -- The value indicates the number of arguments of the storage variable.
+    cd_storageVars :: Map ScopedName Int
   }
 
 cdProgram :: Lens' ContractDefinition Program

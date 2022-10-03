@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedLists #-}
 
-module Horus.SW.Std (stdSpecs, FuncSpec (..)) where
+module Horus.SW.Std (stdSpecs, FuncSpec (..), mkReadSpec, mkWriteSpec) where
 
 import Data.Map (Map)
 import Data.Map qualified as Map (fromList)
@@ -37,11 +37,7 @@ functions.
 -}
 stdSpecsList :: [(ScopedName, FuncSpec)]
 stdSpecsList =
-  [ ("__main__.stack.read", mkReadSpec "__main__.stack" 1)
-  , ("__main__.stack.write", mkWriteSpec "__main__.stack" 1)
-  , ("__main__.stack_ptr.read", mkReadSpec "__main__.stack_ptr" 0)
-  , ("__main__.stack_ptr.write", mkWriteSpec "__main__.stack_ptr" 0)
-  ,
+  [
     ( "starkware.cairo.common.math.assert_le"
     , emptyFuncSpec
         { fs_post =

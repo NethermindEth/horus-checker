@@ -19,6 +19,7 @@ import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.FuncSpec (FuncSpec, emptyFuncSpec)
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName (..))
+import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
 
 data ContractInfo = ContractInfo
@@ -39,14 +40,14 @@ mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' Cont
 mkContractInfo cd = do
   insts <- mkInstructions
   retsByFun <- mkRetsByFun insts
-  let generatedNames = mkGeneratedNames storageVars
+  let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
   pure
     ContractInfo
       { ci_instructions = insts
       , ci_identifiers = identifiers
       , ci_sources = sources
-      , ci_storageVars = storageVars
+      , ci_storageVars = storageVarsNames
       , ci_getApTracking = getApTracking
       , ci_getBuiltinOffsets = getBuiltinOffsets
       , ci_getFunPc = getFunPc
@@ -60,7 +61,7 @@ mkContractInfo cd = do
   debugInfo = p_debugInfo (cd_program cd)
   identifiers = p_identifiers (cd_program cd)
   instructionLocations = di_instructionLocations debugInfo
-  storageVars = Map.keys (cd_storageVars cd)
+  storageVarsNames = Map.keys (cd_storageVars cd)
 
   functions :: [(ScopedName, Label)]
   functions = mapMaybe (\(name, f) -> (name,) <$> getFunctionPc f) (Map.toList identifiers)
@@ -126,7 +127,21 @@ mkContractInfo cd = do
 
   -- TODO: getFuncSpec and getInvariant should check that the name is
   -- indeed a function or a label.
-  getFuncSpec name = Map.findWithDefault emptyFuncSpec name (cd_specs cd)
+  getFuncSpec :: ScopedName -> FuncSpec
+  getFuncSpec name = Map.findWithDefault emptyFuncSpec name allSpecs
+
+  allSpecs :: Map ScopedName FuncSpec
+  allSpecs = Map.union (cd_specs cd) storageVarsSpecs
+
+  storageVarsSpecs :: Map ScopedName FuncSpec
+  storageVarsSpecs =
+    Map.foldrWithKey
+      ( \name arity m ->
+          Map.insert (name <> "read") (mkReadSpec name arity) $
+            Map.insert (name <> "write") (mkWriteSpec name arity) m
+      )
+      Map.empty
+      (cd_storageVars cd)
 
   getInvariant name = Map.lookup name (cd_invariants cd)
 
