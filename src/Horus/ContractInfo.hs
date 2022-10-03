@@ -6,9 +6,8 @@ import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
-import Data.Text qualified as Text
 
 import Horus.ContractDefinition (ContractDefinition (..))
 import Horus.Expr (Expr, Ty (..))
@@ -19,7 +18,7 @@ import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.FuncSpec (FuncSpec, emptyFuncSpec)
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
-import Horus.SW.ScopedName (ScopedName (..), mainScope)
+import Horus.SW.ScopedName (ScopedName (..))
 import Horus.Util (maybeToError, safeLast, tShow)
 
 data ContractInfo = ContractInfo
@@ -40,7 +39,6 @@ mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' Cont
 mkContractInfo cd = do
   insts <- mkInstructions
   retsByFun <- mkRetsByFun insts
-  storageVars <- mkStorageVars
   let generatedNames = mkGeneratedNames storageVars
   let sources = mkSources generatedNames
   pure
@@ -62,6 +60,7 @@ mkContractInfo cd = do
   debugInfo = p_debugInfo (cd_program cd)
   identifiers = p_identifiers (cd_program cd)
   instructionLocations = di_instructionLocations debugInfo
+  storageVars = Map.keys (cd_storageVars cd)
 
   functions :: [(ScopedName, Label)]
   functions = mapMaybe (\(name, f) -> (name,) <$> getFunctionPc f) (Map.toList identifiers)
@@ -145,11 +144,6 @@ mkContractInfo cd = do
     let insertFunWithNoRets fun = Map.insertWith (\_new old -> old) fun []
     pure (foldr (insertFunWithNoRets . fst) preliminaryRes functions)
 
-  mkStorageVars :: m' [ScopedName]
-  mkStorageVars = catMaybes <$> sequenceA parseResults
-   where
-    parseResults = map parseStorageVarFromFilename (Map.keys (di_fileContents debugInfo))
-
   --- data producers that depend on non-plain data, expressed as parameters
   mkGeneratedNames :: [ScopedName] -> [ScopedName]
   mkGeneratedNames = concatMap svNames
@@ -167,19 +161,3 @@ mkContractInfo cd = do
     | (name, IFunction f) <- Map.toList identifiers
     , name `notElem` generatedNames
     ]
-
-parseStorageVarFromFilename :: MonadError Text m => Text -> m (Maybe ScopedName)
-parseStorageVarFromFilename filename
-  | Just noPrefix <- Text.stripPrefix "autogen/starknet/storage_var/" filename
-  , Just stem <- Text.stripSuffix "/decl.cairo" noPrefix =
-      case Text.splitOn "/" stem of
-        [x] -> pure (Just (ScopedName [mainScope, x]))
-        _ ->
-          throwError
-            ( Text.concat
-                [ "The storage var declaration file contains an unexpected variable name "
-                , "(" <> tShow stem <> "). "
-                , "Does it have a non-main scope?"
-                ]
-            )
-  | otherwise = pure Nothing
