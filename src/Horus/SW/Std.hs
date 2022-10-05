@@ -4,7 +4,7 @@ import Data.List qualified as List (sortOn)
 
 import Horus.Expr (Expr (ExitField), Ty (..), (.&&), (.<), (.<=), (.==))
 import Horus.Expr qualified as Expr
-import Horus.Expr.Vars (ap, fp, memory, prime, rcBound)
+import Horus.Expr.Vars (ap, fp, memory, prime, rcBound, block_timestamp, caller_address, contract_address)
 import Horus.SW.ScopedName (ScopedName)
 
 data FuncSpec = FuncSpec
@@ -92,5 +92,20 @@ stdFuncs = List.sortOn fs_name specs
         { fs_name = "starkware.cairo.lang.compiler.lib.registers.get_fp_and_pc"
         , fs_pre = Expr.True
         , fs_post = memory (ap - 2) .== memory (fp - 2) .&& memory (ap - 1) .== memory (fp - 1)
+        }
+    , FuncSpec
+        { fs_name = "starkware.starknet.common.syscalls.get_block_timestamp"
+        , fs_pre = Expr.True
+        , fs_post = memory (ap - 1) .== block_timestamp
+        }
+    , FuncSpec
+        { fs_name = "starkware.starknet.common.syscalls.get_caller_address"
+        , fs_pre = Expr.True
+        , fs_post = memory (ap - 1) .== caller_address
+        }
+    , FuncSpec
+        { fs_name = "starkware.starknet.common.syscalls.get_contract_address"
+        , fs_pre = Expr.True
+        , fs_post = memory (ap - 1) .== contract_address
         }
     ]

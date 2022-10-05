@@ -12,6 +12,9 @@ module Horus.Expr.Vars
   , builtinAligned
   , builtinInSegment
   , builtinConstraint
+  , caller_address
+  , contract_address
+  , block_timestamp
   )
 where
 
@@ -41,6 +44,17 @@ pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
 pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
+
+-- Syscalls
+block_timestamp :: Expr TFelt
+block_timestamp = Expr.const "block_timestamp"
+
+caller_address :: Expr TFelt
+caller_address = Expr.const "caller_address"
+
+contract_address :: Expr TFelt
+contract_address = Expr.const "contract_address"
+-- 
 
 rcBound :: Expr TFelt
 rcBound = Expr.const "range-check-bound"
