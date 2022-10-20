@@ -56,7 +56,7 @@ import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
-import Horus.SW.Storage qualified as Storage (getWrites, read)
+import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 
 data MemoryVariable = MemoryVariable
@@ -79,7 +79,6 @@ data CairoSemanticsF a
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
   | EnableStorage a
   | ReadStorage ScopedName [Expr TFelt] (Expr TFelt -> a)
-  | WriteStorage ScopedName [Expr TFelt] (Expr TFelt) a
   | UpdateStorage Storage a
   | GetStorage (Storage -> a)
   | Throw Text
@@ -125,9 +124,6 @@ enableStorage = liftF (EnableStorage ())
 
 readStorage :: ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
 readStorage name args = liftF (ReadStorage name args id)
-
-_writeStorage :: ScopedName -> [Expr TFelt] -> Expr TFelt -> CairoSemanticsL ()
-_writeStorage name args value = liftF (WriteStorage name args value ())
 
 updateStorage :: Storage -> CairoSemanticsL ()
 updateStorage storage = liftF (UpdateStorage storage ())
@@ -207,14 +203,9 @@ encodeRichSpec insts oracle funcSpec@(FuncSpec _pre _post storage) = do
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec insts oracle plainSpec
   accumulatedStorage <- getStorage
-  checkStorageIsSubset accumulatedStorage preparedStorage
-  checkStorageIsSubset preparedStorage accumulatedStorage
+  expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec
-
-checkStorageIsSubset :: Storage -> Storage -> CairoSemanticsL ()
-checkStorageIsSubset a b = for_ (Storage.getWrites a) $ \(name, args, _value) ->
-  expect (Storage.read a name args .== Storage.read b name args)
 
 encodePlainSpec :: [LabeledInst] -> Map Label Bool -> PlainSpec -> CairoSemanticsL ()
 encodePlainSpec insts jnzOracle PlainSpec{..} = do

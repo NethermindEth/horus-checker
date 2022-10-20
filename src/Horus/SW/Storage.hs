@@ -1,4 +1,4 @@
-module Horus.SW.Storage (Storage, read, getWrites, parse) where
+module Horus.SW.Storage (Storage, read, getWrites, parse, equivalenceExpr) where
 
 import Prelude hiding (read)
 
@@ -15,6 +15,14 @@ import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
 
 type Storage = Map ScopedName [([Expr TFelt], Expr TFelt)]
+
+equivalenceExpr :: Storage -> Storage -> Expr TBool
+equivalenceExpr a b = Expr.and [checkStorageIsSubset a b, checkStorageIsSubset b a]
+
+checkStorageIsSubset :: Storage -> Storage -> Expr TBool
+checkStorageIsSubset a b = Expr.and $ map equalReads (getWrites a)
+ where
+  equalReads (name, args, _value) = (read a name args .== read b name args)
 
 read :: Storage -> ScopedName -> [Expr TFelt] -> Expr TFelt
 read storage name args = buildReadChain args baseCase writes
