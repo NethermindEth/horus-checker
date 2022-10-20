@@ -22,7 +22,7 @@ equivalenceExpr a b = Expr.and [checkStorageIsSubset a b, checkStorageIsSubset b
 checkStorageIsSubset :: Storage -> Storage -> Expr TBool
 checkStorageIsSubset a b = Expr.and $ map equalReads (getWrites a)
  where
-  equalReads (name, args, _value) = (read a name args .== read b name args)
+  equalReads (name, args, _value) = read a name args .== read b name args
 
 read :: Storage -> ScopedName -> [Expr TFelt] -> Expr TFelt
 read storage name args = buildReadChain args baseCase writes
