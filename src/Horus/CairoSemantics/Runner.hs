@@ -169,7 +169,6 @@ interpret = iterM exec
       throwError ("Storage access isn't allowed in a plain spec: '" <> tShow name <> "'.")
     storage <- use eStorage
     cont (Storage.read storage name args)
-  exec (WriteStorage _name _args _value _cont) = error "not available"
   exec (UpdateStorage newStorage cont) = do
     storageEnabled <- use eStorageEnabled
     unless (storageEnabled || Map.null newStorage) $

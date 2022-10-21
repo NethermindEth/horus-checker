@@ -143,6 +143,7 @@ mkContractInfo cd = do
       Map.empty
       (cd_storageVars cd)
 
+  getInvariant :: ScopedName -> Maybe (Expr TBool)
   getInvariant name = Map.lookup name (cd_invariants cd)
 
   ---- non-plain data producers that depend on the outer monad (likely, for errors)

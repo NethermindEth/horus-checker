@@ -186,7 +186,7 @@ checkMathsat m = do
   when (includesMathsat solver && usesLvars) $ do
     let solver' = filterMathsat solver
     if isEmptySolver solver'
-      then throw "MathSat solver was used to analyze a call with a logical variable in it's specification."
+      then throw "MathSat solver was used to analyze a call with a logical variable in its specification."
       else setConfig conf{cfg_solver = solver'}
  where
   -- FIXME should check not just pre, but also post
