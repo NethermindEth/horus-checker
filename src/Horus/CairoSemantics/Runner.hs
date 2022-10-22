@@ -182,6 +182,7 @@ interpret = iterM exec
     use eStorage >>= cont
   exec (Throw t) = throwError t
 
+  plainSpecStorageAccessErr :: Text
   plainSpecStorageAccessErr = "Storage access isn't allowed in a plain spec."
 
 debugFriendlyModel :: ConstraintsState -> Text
