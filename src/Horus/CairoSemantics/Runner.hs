@@ -166,21 +166,24 @@ interpret = iterM exec
   exec (EnableStorage cont) = eStorageEnabled .= True >> cont
   exec (ReadStorage name args cont) = do
     unlessM (use eStorageEnabled) $
-      throwError ("Storage access isn't allowed in a plain spec: '" <> tShow name <> "'.")
+      throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
     storage <- use eStorage
     cont (Storage.read storage name args)
   exec (UpdateStorage newStorage cont) = do
     storageEnabled <- use eStorageEnabled
     unless (storageEnabled || Map.null newStorage) $
-      throwError "Storage access isn't allowed in a plain spec."
+      throwError plainSpecStorageAccessErr
     oldStorage <- use eStorage
     let combined = Map.unionWith (<>) newStorage oldStorage
     eStorage .= combined >> cont
   exec (GetStorage cont) = do
     unlessM (use eStorageEnabled) $
-      throwError "Storage access isn't allowed in a plain spec."
+      throwError plainSpecStorageAccessErr
     use eStorage >>= cont
   exec (Throw t) = throwError t
+
+  plainSpecStorageAccessErr :: Text
+  plainSpecStorageAccessErr = "Storage access isn't allowed in a plain spec."
 
 debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
