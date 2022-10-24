@@ -1,7 +1,7 @@
 %lang starknet
 from starkware.starknet.common.syscalls import get_block_timestamp
 
-# @post $Return.user == get_caller_address()
+# @post $Return.user == get_block_timestamp()
 func test{syscall_ptr : felt*}() -> (user):
     let (user) = get_block_timestamp()
     return (user=user)
