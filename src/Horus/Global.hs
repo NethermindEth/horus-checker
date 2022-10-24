@@ -45,6 +45,7 @@ import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (..))
 import Horus.SW.Identifier (getFunctionPc)
+import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 
 data Config = Config
@@ -220,9 +221,11 @@ solveContract cd = do
   cfg <- makeCFG checks identifiers getFunPc labeledInsts
   verbosePrint cfg
   modules <- makeModules cd cfg
-  for modules (solveModule contractInfo (cd_rawSmt cd))
+  for (removeTrusted modules) (solveModule contractInfo (cd_rawSmt cd))
  where
   contractInfo = mkContractInfo cd
   getFunPc = ci_getFunPc contractInfo
   identifiers = p_identifiers (cd_program cd)
   checks = cd_checks cd
+  moduleName m = nameOfModule (ci_identifiers contractInfo) m
+  removeTrusted modules = filter (\m -> not $ (moduleName m) `elem` trustedStdFuncs) modules

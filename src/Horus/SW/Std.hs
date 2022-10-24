@@ -1,6 +1,7 @@
-module Horus.SW.Std (FuncSpec (..), stdFuncs) where
+module Horus.SW.Std (FuncSpec (..), stdFuncs, trustedStdFuncs) where
 
 import Data.List qualified as List (sortOn)
+import Data.Text (Text)
 
 import Horus.Expr (Expr (ExitField), Ty (..), (.&&), (.<), (.<=), (.==))
 import Horus.Expr qualified as Expr
@@ -12,6 +13,16 @@ data FuncSpec = FuncSpec
   , fs_pre :: Expr TBool
   , fs_post :: Expr TBool
   }
+
+{- | A list of names of trusted standard library functions.
+These functions will not be checked against their specifications.
+-}
+trustedStdFuncs :: [Text]
+trustedStdFuncs =
+    [ "starknet.common.syscalls.get_block_timestamp"
+    , "starknet.common.syscalls.get_caller_address"
+    , "starknet.common.syscalls.get_contract_address"
+    ]
 
 {- | A lexicographically sorted by fs_name list of specifications of
  standard library functions.
