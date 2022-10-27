@@ -8,7 +8,9 @@ module Horus.Expr
   , Cast (..)
   , cast
   , cast'
-  , foldL
+  , unfoldVariadic
+  , apply
+  , apply1
   , function
   , const
   , transform
@@ -49,6 +51,7 @@ import Prelude hiding
 import Prelude qualified (Bool (..))
 
 import Data.Constraint (Dict (..), (:-) (Sub), (\\))
+import Data.Foldable (toList)
 import Data.Functor (($>))
 import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
@@ -172,20 +175,27 @@ cast' e = case cast @b e of
 
 {- Given 'f' and 'args' applies 'args' to 'f' via ':*:', one by one.
 
-The reason that 'args' must be non-empty is because:
+The result might a function application (parenthesized) or a constant
+(non-parenthesized).
+-}
+apply :: SingI c => (forall a. SingI a => Expr a) -> [Expr b] -> Expr c
+apply acc [] = acc
+apply acc (x : xs) = apply (acc :*: x) xs \\ isProper x
+
+{- Given 'f' and 'args' applies 'args' to 'f' via ':*:', one by one.
+
+Sometimes we want to ensure that 'args' must be non-empty because:
 
 1. We don't distinguish constants from functions. So, a nullary
    function isn't parenthesized.
 2. Most of the SMT-solvers don't support variadic-argument functions
    with zero arguments.
 -}
-foldL :: SingI c => (forall a. SingI a => Expr a) -> NonEmpty (Expr b) -> Expr c
-foldL acc (x :| xs) = case nonEmpty xs of
-  Nothing -> acc :*: x \\ isProper x
-  Just xs' -> foldL (acc :*: x) xs' \\ isProper x
+apply1 :: SingI c => (forall a. SingI a => Expr a) -> NonEmpty (Expr b) -> Expr c
+apply1 acc xs = apply acc (toList xs)
 
-foldL' :: SingI c => (forall a. SingI a => Expr a) -> Expr c -> [Expr b] -> Expr c
-foldL' acc whenEmpty = maybe whenEmpty (foldL acc) . nonEmpty
+apply1' :: SingI c => (forall a. SingI a => Expr a) -> Expr c -> [Expr b] -> Expr c
+apply1' acc whenEmpty = maybe whenEmpty (apply1 acc) . nonEmpty
 
 unfoldVariadic ::
   forall arg res ty.
@@ -230,7 +240,7 @@ pattern Negate a <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "-")) :*: a
 pattern And :: () => (a ~ TBool) => [Expr TBool] -> Expr a
 pattern And cs <- (unfoldVariadic @TBool @TBool -> Just (Refl, "and", cs))
   where
-    And = foldL' (Fun "and") True
+    And = apply1' (Fun "and") True
 
 -- smart constructors for basic operations
 
@@ -287,13 +297,13 @@ True .|| _ = True
 a .|| b = function "or" a b
 
 or :: [Expr TBool] -> Expr TBool
-or = foldL' (Fun "or") False
+or = apply1' (Fun "or") False
 
 distinct :: [Expr a] -> Expr TBool
-distinct = foldL' (Fun "distinct") True
+distinct = apply1' (Fun "distinct") True
 
 addMany :: [Expr TFelt] -> Expr TFelt
-addMany = foldL' (Fun "+") 0
+addMany = apply1' (Fun "+") 0
 
 infix 1 .=>
 (.=>) :: Expr TBool -> Expr TBool -> Expr TBool
@@ -321,14 +331,18 @@ a .>= b = function ">=" a b
 
 infix 4 .==
 (.==) :: Expr TFelt -> Expr TFelt -> Expr TBool
-a .== b = function "=" a b
+a .== b
+  | a == b = True
+  | otherwise = function "=" a b
 
 infix 4 ./=
 (./=) :: Expr TFelt -> Expr TFelt -> Expr TBool
 a ./= b = distinct [a, b]
 
 leq :: [Expr TFelt] -> Expr TBool
-leq = foldL' (Fun "<=") True
+leq = apply1' (Fun "<=") True
 
 ite :: Expr TBool -> Expr a -> Expr a -> Expr a
-ite cond x = function "ite" cond x \\ isProper x
+ite True t _f = t
+ite False _t f = f
+ite cond t f = function "ite" cond t f \\ isProper t

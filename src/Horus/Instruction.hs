@@ -1,7 +1,7 @@
 module Horus.Instruction
   ( Instruction (..)
   , LabeledInst
-  , labelInsructions
+  , labelInstructions
   , PointerRegister (..)
   , Register (..)
   , Op1Source (..)
@@ -13,12 +13,14 @@ module Horus.Instruction
   , readAllInstructions
   , instructionSize
   , getNextPc
+  , isRet
   , uncheckedCallDestination
   , callDestination
   , jumpDestination
   , toSemiAsm
   , isRet
   , isCall
+  , toSemiAsmUnsafe
   )
 where
 
@@ -26,7 +28,7 @@ import Control.Monad.Except (MonadError, throwError)
 import Data.Bits
 import Data.Coerce (coerce)
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 
 import Horus.Label (Label (..), moveLabel)
 import Horus.Util (tShow, toSignedFelt)
@@ -77,8 +79,8 @@ data Instruction = Instruction
 
 type LabeledInst = (Label, Instruction)
 
-labelInsructions :: [Instruction] -> [LabeledInst]
-labelInsructions insts = zip (coerce pcs) insts
+labelInstructions :: [Instruction] -> [LabeledInst]
+labelInstructions insts = zip (coerce pcs) insts
  where
   pcs = scanl (+) 0 (map instructionSize insts)
 
@@ -88,6 +90,10 @@ instructionSize _ = 1
 
 getNextPc :: LabeledInst -> Label
 getNextPc (pc, i) = moveLabel pc (instructionSize i)
+
+isRet :: Instruction -> Bool
+isRet Instruction{i_opCode = Ret} = True
+isRet _ = False
 
 uncheckedCallDestination :: LabeledInst -> Label
 uncheckedCallDestination (pc, i)
@@ -207,6 +213,11 @@ readInstruction (i :| is) = do
   opCodeMap False False True = return AssertEqual
   opCodeMap False False False = return Nop
   opCodeMap _ _ _ = throwError "wrong opcode"
+
+toSemiAsmUnsafe :: Instruction -> Text
+toSemiAsmUnsafe i = case toSemiAsm i of
+  Left err -> error ("Can't print " <> show i <> ": " <> unpack err)
+  Right res -> res
 
 toSemiAsm :: MonadError Text m => Instruction -> m Text
 toSemiAsm Instruction{..} = do
