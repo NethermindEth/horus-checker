@@ -10,7 +10,7 @@ import Data.Text.IO qualified as Text (putStrLn)
 import System.Environment (getArgs)
 
 import Horus.ContractDefinition (cd_program)
-import Horus.Instruction (labelInsructions, readAllInstructions, toSemiAsm)
+import Horus.Instruction (labelInstructions, readAllInstructions, toSemiAsm)
 import Horus.Label (Label (..))
 import Horus.Program (p_code)
 
@@ -22,7 +22,7 @@ main' = do
   contract <- eioDecodeFileStrict filename
   instructions <- readAllInstructions (p_code (cd_program contract))
   semiAsms <- traverse toSemiAsm instructions
-  let labels = map fst (labelInsructions instructions)
+  let labels = map fst (labelInstructions instructions)
   for_ (zip labels semiAsms) $ \(Label pc, semiAsm) -> liftIO $ do
     Text.putStrLn (Text.justifyLeft 40 ' ' semiAsm <> " # pc: " <> pack (show pc))
 

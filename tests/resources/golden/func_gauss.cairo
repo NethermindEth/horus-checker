@@ -5,7 +5,7 @@ func main():
     ret
 end
 # @pre [fp - 3] > 0
-# @post res == (([fp - 3] + 1) * [fp - 3]) / 2
+# @post $Return.res == (([fp - 3] + 1) * [fp - 3]) / 2
 func gauss(n) -> (res):
     [ap] = 0; ap++                       # sum
     [ap] = 1; ap++                       # i

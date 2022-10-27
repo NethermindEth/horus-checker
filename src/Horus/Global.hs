@@ -1,5 +1,5 @@
 module Horus.Global
-  ( GlobalT (..)
+  ( GlobalL (..)
   , GlobalF (..)
   , Config (..)
   , solveContract
@@ -8,8 +8,8 @@ module Horus.Global
 where
 
 import Control.Monad (forM, guard, when)
-import Control.Monad.Except (MonadError (..), MonadTrans, lift)
-import Control.Monad.Trans.Free.Church (FT, liftF)
+import Control.Monad.Except (MonadError (..))
+import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
 import Data.Function ((&))
 import Data.List ((\\))
@@ -18,13 +18,12 @@ import Data.Maybe (mapMaybe)
 import Data.Set (fromList)
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
-import Lens.Micro (at, non, (^.))
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
 import Horus.CFGBuild (CFGBuildT (), Label, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
-import Horus.CairoSemantics (CairoSemanticsT, encodeSemantics)
+import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
   , ExecutionState
@@ -38,13 +37,17 @@ import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_getPreByCall, ci_identi
 import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
 import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.Instruction (Instruction (..), OpCode (Call), labelInsructions, readAllInstructions)
-import Horus.Module (Module (m_calledF, ..), ModuleL, nameOfModule, traverseCFG)
+import Horus.Instruction (LabeledInst)
+import Horus.Module (Module (m_calledF, ..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Program (..))
 import Horus.SW.Identifier (getFunctionPc)
+import Horus.Program (Identifiers)
+import Horus.SW.FuncSpec (FuncSpec, fs_pre)
+import Horus.SW.Identifier (Function (..))
+import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow, whenJust)
 
 data Config = Config
@@ -58,67 +61,85 @@ data Config = Config
 data GlobalF m a
   = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
   | forall b. RunCairoSemanticsT CallStack ContractInfo (CairoSemanticsT m b) (ExecutionState -> a)
+data GlobalF a
+  = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
+  | forall b. RunCairoSemanticsL (CairoSemanticsL b) (ConstraintsState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
-  | AskConfig (Config -> a)
+  | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
+  | GetCallee LabeledInst (ScopedName -> a)
+  | GetConfig (Config -> a)
+  | GetFuncSpec ScopedName (FuncSpec -> a)
+  | GetIdentifiers (Identifiers -> a)
+  | GetSources ([(Function, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
-  | forall b. RunPreprocessor PreprocessorEnv (PreprocessorL b) (b -> a)
-  | Throw Text
-  | forall b. Catch (GlobalT m b) (Text -> GlobalT m b) (b -> a)
   | WriteFile' FilePath Text a
+  | Throw Text
+  | forall b. Catch (GlobalL b) (Text -> GlobalL b) (b -> a)
 
-deriving instance Functor (GlobalF m)
+deriving instance Functor GlobalF
 
-newtype GlobalT m a = GlobalT {runGlobalT :: FT (GlobalF m) m a}
+newtype GlobalL a = GlobalL {runGlobalL :: F GlobalF a}
   deriving newtype (Functor, Applicative, Monad)
 
-instance MonadTrans GlobalT where
-  lift = GlobalT . lift
-
-instance MonadError Text (GlobalT m) where
+instance MonadError Text GlobalL where
   throwError = throw
   catchError = catch
 
-liftF' :: GlobalF m a -> GlobalT m a
-liftF' = GlobalT . liftF
+liftF' :: GlobalF a -> GlobalL a
+liftF' = GlobalL . liftF
 
-runCFGBuildT :: CFGBuildT m a -> GlobalT m CFG
-runCFGBuildT cfgBuilder = liftF' (RunCFGBuildT cfgBuilder id)
+runCFGBuildL :: CFGBuildL a -> GlobalL CFG
+runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 
 runCairoSemanticsT :: CallStack -> ContractInfo -> CairoSemanticsT m a -> GlobalT m ExecutionState
 runCairoSemanticsT initStack env smt2Builder = liftF' (RunCairoSemanticsT initStack env smt2Builder id)
+runCairoSemanticsL :: CairoSemanticsL a -> GlobalL ConstraintsState
+runCairoSemanticsL smt2Builder = liftF' (RunCairoSemanticsL smt2Builder id)
 
-runModuleL :: ModuleL a -> GlobalT m [Module]
+runModuleL :: ModuleL a -> GlobalL [Module]
 runModuleL builder = liftF' (RunModuleL builder id)
 
-askConfig :: GlobalT m Config
-askConfig = liftF' (AskConfig id)
+runPreprocessorL :: PreprocessorEnv -> PreprocessorL a -> GlobalL a
+runPreprocessorL penv preprocessor =
+  liftF' (RunPreprocessorL penv preprocessor id)
 
-setConfig :: Config -> GlobalT m ()
+getCallee :: LabeledInst -> GlobalL ScopedName
+getCallee inst = liftF' (GetCallee inst id)
+
+getConfig :: GlobalL Config
+getConfig = liftF' (GetConfig id)
+
+getFuncSpec :: ScopedName -> GlobalL FuncSpec
+getFuncSpec name = liftF' (GetFuncSpec name id)
+
+getSources :: GlobalL [(Function, FuncSpec)]
+getSources = liftF' (GetSources id)
+
+getIdentifiers :: GlobalL Identifiers
+getIdentifiers = liftF' (GetIdentifiers id)
+
+setConfig :: Config -> GlobalL ()
 setConfig conf = liftF' (SetConfig conf ())
 
-runPreprocessor :: PreprocessorEnv -> PreprocessorL a -> GlobalT m a
-runPreprocessor penv preprocessor =
-  liftF' (RunPreprocessor penv preprocessor id)
-
-putStrLn' :: Text -> GlobalT m ()
+putStrLn' :: Text -> GlobalL ()
 putStrLn' what = liftF' (PutStrLn' what ())
 
-throw :: Text -> GlobalT m a
-throw t = liftF' (Throw t)
-
-catch :: GlobalT m a -> (Text -> GlobalT m a) -> GlobalT m a
-catch m h = liftF' (Catch m h id)
-
-writeFile' :: FilePath -> Text -> GlobalT m ()
+writeFile' :: FilePath -> Text -> GlobalL ()
 writeFile' file text = liftF' (WriteFile' file text ())
 
-verbosePutStrLn :: Text -> GlobalT m ()
+throw :: Text -> GlobalL a
+throw t = liftF' (Throw t)
+
+catch :: GlobalL a -> (Text -> GlobalL a) -> GlobalL a
+catch m h = liftF' (Catch m h id)
+
+verbosePutStrLn :: Text -> GlobalL ()
 verbosePutStrLn what = do
-  config <- askConfig
+  config <- getConfig
   when (cfg_verbose config) (putStrLn' what)
 
-verbosePrint :: Show a => a -> GlobalT m ()
+verbosePrint :: Show a => a -> GlobalL ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
 makeCFG :: [Label] -> ContractDefinition -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
@@ -145,20 +166,21 @@ data SolvingInfo = SolvingInfo
   , si_result :: SolverResult
   }
 
-solveModule :: ContractInfo -> Text -> Module -> GlobalT m SolvingInfo
-solveModule contractInfo smtPrefix m = do
-  checkMathsat contractInfo m
-  result <- mkResult
+solveModule :: Module -> GlobalL SolvingInfo
+solveModule m = do
+  checkMathsat m
+  identifiers <- getIdentifiers
+  let moduleName = nameOfModule identifiers m
+  result <- mkResult moduleName
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
-  mkResult = printingErrors $ do
-    constraints <- extractConstraints contractInfo m
-    outputSmtQueries smtPrefix moduleName constraints
+  mkResult moduleName = printingErrors $ do
+    constraints <- runCairoSemanticsL (encodeModule m)
+    outputSmtQueries moduleName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
-    solveSMT smtPrefix constraints
+    solveSMT constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
-  moduleName = nameOfModule (ci_identifiers contractInfo) m
 
 outputSmtQueries :: Text -> Text -> ExecutionState -> GlobalT m ()
 outputSmtQueries smtPrefix moduleName es@(_, constraints) = do
@@ -177,34 +199,36 @@ outputSmtQueries smtPrefix moduleName es@(_, constraints) = do
     goalListToTextList queryList
 
   writeSmtFileOptimized dir = do
-    Config{..} <- askConfig
-    queries <- runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) getQueryList
+    Config{..} <- getConfig
+    queries <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) getQueryList
     writeSmtQueries queries dir moduleName
 
-writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalT m ()
+writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalL ()
 writeSmtQueries queries dir moduleName = do
   for_ (zip [1 :: Int ..] queries) writeQueryFile
  where
   newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
   writeQueryFile (n, q) = writeFile' (newFileName n) q
 
-checkMathsat :: ContractInfo -> Module -> GlobalT m ()
-checkMathsat contractInfo m = do
-  conf <- askConfig
+checkMathsat :: Module -> GlobalL ()
+checkMathsat m = do
+  conf <- getConfig
   let solver = cfg_solver conf
-  when (includesMathsat solver && any callToLVarSpec (m_prog m)) $
-    do
-      let solver' = filterMathsat solver
-      if isEmptySolver solver'
-        then throw "MathSat was used to analyze a call with a logical variable in its specification."
-        else setConfig conf{cfg_solver = solver'}
+  usesLvars <- or <$> traverse instUsesLvars (m_prog m)
+  when (includesMathsat solver && usesLvars) $ do
+    let solver' = filterMathsat solver
+    if isEmptySolver solver'
+      then throw "MathSat solver was used to analyze a call with a logical variable in its specification."
+      else setConfig conf{cfg_solver = solver'}
  where
-  callToLVarSpec lblInst@(_, inst) = case i_opCode inst of
-    Call -> not (null lvars)
-    _ -> False
-   where
-    lvars = gatherLogicalVariables (getPre lblInst)
-  getPre = ci_getPreByCall contractInfo
+  -- FIXME should check not just pre, but also post
+  instUsesLvars i = falseIfError $ do
+    callee <- getCallee i
+    spec <- getFuncSpec callee
+    let lvars = gatherLogicalVariables (fs_pre spec)
+    pure (not (null lvars))
+
+  falseIfError a = a `catchError` const (pure False)
 
 solveSMT :: Text -> ExecutionState -> GlobalT m SolverResult
 solveSMT smtPrefix es@(_, cs) = do
