@@ -4,6 +4,7 @@ module Horus.Util
   , whenJust
   , whenJustM
   , safeHead
+  , unlessM
   , safeLast
   , topmostStepFT
   , appendList
@@ -17,6 +18,7 @@ module Horus.Util
   )
 where
 
+import Control.Monad (unless)
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
@@ -49,6 +51,11 @@ whenJustM a f = a >>= flip whenJust f
 safeHead :: [a] -> Maybe a
 safeHead [] = Nothing
 safeHead (hd : _) = Just hd
+
+unlessM :: Monad m => m Bool -> m () -> m ()
+unlessM mC a = do
+  c <- mC
+  unless c a
 
 safeLast :: [a] -> Maybe a
 safeLast [] = Nothing

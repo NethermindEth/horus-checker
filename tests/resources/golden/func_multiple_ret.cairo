@@ -1,4 +1,4 @@
-# @post ((res == m + 1) && (m == 0)) || ((res == m - 1) && (m > 0))
+# @post (($Return.res == m + 1) && (m == 0)) || (($Return.res == m - 1) && (m > 0))
 func succpred(m) -> (res):
     jmp add if [fp - 3] != 0
     [ap] = [fp - 3] + 1; ap++

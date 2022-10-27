@@ -53,11 +53,13 @@ library
     exposed-modules:
       Horus.Arguments
       Horus.ContractDefinition
+      Horus.ContractInfo
       Horus.Global
       Horus.Global.Runner
       Horus.Instruction
       Horus.Label
       Horus.Program
+      Horus.SW.Std
       Horus.Util
     other-modules:
       Horus.CFGBuild
@@ -75,6 +77,7 @@ library
       Horus.Expr.Type.SMT
       Horus.Expr.Util
       Horus.Expr.Vars
+      Horus.JSON.Util
       Horus.Module
       Horus.Module.Runner
       Horus.Preprocessor
@@ -85,9 +88,10 @@ library
       Horus.SW.CairoType.JSON
       Horus.SW.CairoType.Lexer
       Horus.SW.CairoType.Parser
+      Horus.SW.FuncSpec
       Horus.SW.Identifier
       Horus.SW.ScopedName
-      Horus.SW.Std
+      Horus.SW.Storage
       Horus.Z3Util
     build-depends:
       aeson,

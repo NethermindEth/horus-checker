@@ -13,6 +13,7 @@ import Data.Aeson.Types (FromJSON (..), Parser)
 import Data.Functor ((<&>))
 import Data.Map (Map)
 import Data.Map qualified as Map (keys)
+import Data.Text (Text)
 import Numeric (readHex)
 
 import Horus.Label (Label (..))
@@ -32,7 +33,9 @@ data Program = Program
   }
 
 data DebugInfo = DebugInfo
-  {di_instructionLocations :: Map Label ILInfo}
+  { di_instructionLocations :: Map Label ILInfo
+  , di_fileContents :: Map Text Text
+  }
   deriving (Show)
 
 data ILInfo = ILInfo
@@ -63,7 +66,7 @@ instance FromJSON Program where
 
 instance FromJSON DebugInfo where
   parseJSON = withObject "debug_info" $ \v ->
-    DebugInfo <$> (v .: "instruction_locations")
+    DebugInfo <$> v .: "instruction_locations" <*> v .: "file_contents"
 
 instance FromJSON ILInfo where
   parseJSON = withObject "ILInfo" $ \v ->

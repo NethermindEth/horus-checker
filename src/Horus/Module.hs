@@ -1,16 +1,27 @@
-module Horus.Module (Module (..), ModuleL (..), ModuleF (..), traverseCFG, nameOfModule) where
+module Horus.Module
+  ( Module (..)
+  , ModuleL (..)
+  , ModuleF (..)
+  , Error (..)
+  , gatherModules
+  , nameOfModule
+  , ModuleSpec (..)
+  , PlainSpec (..)
+  , richToPlainSpec
+  )
+where
 
 import Control.Applicative ((<|>))
-import Control.Monad (unless, when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, cons, intercalate, length)
 import Lens.Micro (ix, (^.))
+import Text.Printf (printf)
 
 import Horus.CFGBuild (ArcCondition (..), Label (unLabel))
 import Horus.CFGBuild.Runner (CFG (..))
@@ -32,19 +43,27 @@ import Horus.Expr.Vars (ap, fp)
 import Horus.Instruction (LabeledInst)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
-import Horus.SW.Identifier (getFunctionPc, getLabelPc)
+import Horus.SW.FuncSpec (FuncSpec (..))
+import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..))
-import Horus.Util (tShow)
 
 data Module = Module
-  { m_pre :: Expr TBool
-  , m_post :: Expr TBool
+  { m_spec :: ModuleSpec
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
   , m_lastPc :: Label
   }
-  deriving (Show)
+  deriving stock (Show)
+
+data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
+  deriving stock (Show)
+
+data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
+  deriving stock (Show)
+
+richToPlainSpec :: FuncSpec -> PlainSpec
+richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
 
 beginOfModule :: [LabeledInst] -> Maybe Label
 beginOfModule [] = Nothing
@@ -90,6 +109,16 @@ nameOfModule idents (Module _ post prog oracle _ _) =
       let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
           noPrefix = Text.length prefix == 0
        in Text.concat [prefix, if noPrefix then "" else ".", labelsDigest, descrOfOracle oracle]
+ where
+  post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
+
+data Error
+  = ELoopNoInvariant Label
+  | ESpecNotPlainHasState
+
+instance Show Error where
+  show (ELoopNoInvariant at) = printf "There is a loop at PC %d with no invariant" (unLabel at)
+  show ESpecNotPlainHasState = "Some function contains a loop, but uses rich specfication (e.g. state assertions)."
 
 data ModuleF a
   = EmitModule Module a
@@ -102,7 +131,7 @@ deriving stock instance Functor ModuleF
 newtype ModuleL a = ModuleL {runModuleL :: F ModuleF a}
   deriving newtype (Functor, Applicative, Monad)
 
-instance MonadError Text ModuleL where
+instance MonadError Error ModuleL where
   throwError = throw
   catchError = catch
 
@@ -122,12 +151,24 @@ visited before.
 visiting :: (NonEmpty Label, Label) -> (Bool -> ModuleL b) -> ModuleL b
 visiting l action = liftF' (Visiting l action id)
 
-throw :: Text -> ModuleL a
+throw :: Error -> ModuleL a
 throw t = liftF' (Throw t)
 
-catch :: ModuleL a -> (Text -> ModuleL a) -> ModuleL a
+catch :: ModuleL a -> (Error -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
+data SpecBuilder = SBRich | SBPlain (Expr TBool)
+
+extractPlainBuilder :: FuncSpec -> ModuleL SpecBuilder
+extractPlainBuilder fs@(FuncSpec _pre _post state)
+  | not (null state) = throwError ESpecNotPlainHasState
+  | PlainSpec{..} <- richToPlainSpec fs = pure (SBPlain ps_pre)
+
+gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL ()
+gatherModules cfg = traverse_ (uncurry (gatherFromSource cfg))
+
+gatherFromSource :: CFG -> Function -> FuncSpec -> ModuleL ()
+gatherFromSource cfg function fSpec = visit Map.empty [] SBRich (fu_pc function) ACNone
 traverseCFG :: [(Label, ScopedTSExpr Bool)] -> CFG -> ModuleL ()
 traverseCFG sources cfg = for_ sources $ \(fLabel, fpre) ->
   visit Map.empty (initialWithFunc fLabel) [] (over stsexprExpr (.&& ap .== fp) fpre) fLabel ACNone Nothing
@@ -151,7 +192,25 @@ traverseCFG sources cfg = for_ sources $ \(fLabel, fpre) ->
                 then visitArcs oracle' callstack' acc pre l
                 else visitArcs Map.empty callstack' [] conjSTS l
    where
+    visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
+    visitLoop (SBPlain pre)
+      | null assertions = throwError (ELoopNoInvariant l)
+      | otherwise = emitPlain pre (Expr.and assertions)
+
+    visitLinear SBRich
+      | onFinalNode = emitRich
+      | null assertions = visitArcs oracle' acc builder l
+      | otherwise = extractPlainBuilder fSpec >>= visitLinear
+    visitLinear (SBPlain pre)
+      | null assertions = visitArcs oracle' acc builder l
+      | otherwise = do
+          emitPlain pre (Expr.and assertions)
+          visitArcs Map.empty [] (SBPlain (Expr.and assertions)) l
+
     assertions = cfg_assertions cfg ^. ix l
+    onFinalNode = null (cfg_arcs cfg ^. ix l)
+    emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle')
+    emitRich = emitModule (Module (MSRich fSpec) acc oracle')
     conjSTS = conjunctSTS assertions
   visitArcs oracle' callstack' acc pre l = do
     let outArcs = cfg_arcs cfg ^. ix l
