@@ -15,9 +15,9 @@ module Horus.Expr.Vars
   , builtinAligned
   , builtinInSegment
   , builtinConstraint
-  , caller_address
-  , contract_address
-  , block_timestamp
+  , callerAddress
+  , contractAddress
+  , blockTimestamp
   )
 where
 
@@ -66,15 +66,16 @@ pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: ad
     Memory = memory
 
 -- Syscalls
-block_timestamp :: Expr TFelt
-block_timestamp = Expr.const "block_timestamp"
+blockTimestamp :: Expr TFelt
+blockTimestamp = Expr.const "block_timestamp"
 
-caller_address :: Expr TFelt
-caller_address = Expr.const "caller_address"
+callerAddress :: Expr TFelt
+callerAddress = Expr.const "caller_address"
 
-contract_address :: Expr TFelt
-contract_address = Expr.const "contract_address"
--- 
+contractAddress :: Expr TFelt
+contractAddress = Expr.const "contract_address"
+
+--
 
 parseStorageVar :: forall ty. Expr ty -> Maybe (ty :~: TFelt, Text, [Expr TFelt])
 parseStorageVar e = do

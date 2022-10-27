@@ -214,5 +214,5 @@ solveContract = do
   modules <- makeModules cfg
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers
-      removeTrusted ms = filter (\m -> not $ (moduleName m) `elem` trustedStdFuncs) ms
+      removeTrusted = filter (\m -> moduleName m `notElem` trustedStdFuncs)
   for (removeTrusted modules) solveModule

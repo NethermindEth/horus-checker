@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedLists #-}
+
 module Horus.SW.Std (FuncSpec (..), stdSpecs, trustedStdFuncs, mkReadSpec, mkWriteSpec) where
 
 import Data.Map (Map)
@@ -7,7 +8,7 @@ import Data.Text (Text)
 
 import Horus.Expr (Expr (ExitField), (.&&), (.<), (.<=), (.==))
 import Horus.Expr qualified as Expr
-import Horus.Expr.Vars (ap, fp, memory, prime, rcBound, block_timestamp, caller_address, contract_address)
+import Horus.Expr.Vars (ap, blockTimestamp, callerAddress, contractAddress, fp, memory, prime, rcBound)
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
@@ -33,10 +34,10 @@ These functions will not be checked against their specifications.
 -}
 trustedStdFuncs :: [Text]
 trustedStdFuncs =
-    [ "starknet.common.syscalls.get_block_timestamp"
-    , "starknet.common.syscalls.get_caller_address"
-    , "starknet.common.syscalls.get_contract_address"
-    ]
+  [ "starknet.common.syscalls.get_block_timestamp"
+  , "starknet.common.syscalls.get_caller_address"
+  , "starknet.common.syscalls.get_contract_address"
+  ]
 
 {- | A lexicographically sorted by fs_name list of specifications of
  standard library functions.
@@ -125,22 +126,22 @@ stdSpecsList =
         { fs_post = memory (ap - 2) .== memory (fp - 2) .&& memory (ap - 1) .== memory (fp - 1)
         }
     )
-  , 
+  ,
     ( "starkware.starknet.common.syscalls.get_block_timestamp"
     , emptyFuncSpec
-        { fs_post = memory (ap - 1) .== block_timestamp
+        { fs_post = memory (ap - 1) .== blockTimestamp
         }
     )
-  , 
+  ,
     ( "starkware.starknet.common.syscalls.get_caller_address"
     , emptyFuncSpec
-        { fs_post = memory (ap - 1) .== caller_address
+        { fs_post = memory (ap - 1) .== callerAddress
         }
     )
-  , 
+  ,
     ( "starkware.starknet.common.syscalls.get_contract_address"
     , emptyFuncSpec
-        { fs_post = memory (ap - 1) .== contract_address
+        { fs_post = memory (ap - 1) .== contractAddress
         }
     )
   ]
