@@ -67,13 +67,13 @@ pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: ad
 
 -- Syscalls
 blockTimestamp :: Expr TFelt
-blockTimestamp = Expr.const "block_timestamp"
+blockTimestamp = Expr.const "%block_timestamp"
 
 callerAddress :: Expr TFelt
-callerAddress = Expr.const "caller_address"
+callerAddress = Expr.const "%caller_address"
 
 contractAddress :: Expr TFelt
-contractAddress = Expr.const "contract_address"
+contractAddress = Expr.const "%contract_address"
 
 --
 
