@@ -5,7 +5,7 @@ func main():
     ret
 end
 
-# @post res == x * x
+# @post $Return.res == x * x
 func square(x) -> (res):
     [ap] = [fp - 3]; ap++
     [ap] = [ap - 1] * [ap - 1]; ap++

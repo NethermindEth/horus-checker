@@ -3,8 +3,11 @@ module Horus.Expr.Vars
   , ap
   , fp
   , regToVar
+  , RegKind (..)
+  , parseRegKind
   , memory
   , pattern Memory
+  , pattern StorageVar
   , rcBound
   , builtinStart
   , builtinEnd
@@ -15,10 +18,17 @@ module Horus.Expr.Vars
   )
 where
 
-import Data.Text (Text)
+import Control.Applicative ((<|>))
+import Control.Monad (guard)
+import Data.Maybe (isJust)
+import Data.Text (Text, unpack)
+import Data.Text qualified as Text
+import Data.Typeable ((:~:) (Refl))
+import Text.Read (readMaybe)
 
 import Horus.Expr (Cast (..), Expr (..), Ty (..), cast, (.&&), (.<), (.<=), (.==), (.=>))
 import Horus.Expr qualified as Expr
+import Horus.Expr.Std (stdNames)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
 import Horus.SW.Builtin qualified as Builtin (name, size)
@@ -37,10 +47,35 @@ regToVar FramePointer = fp
 memory :: Expr TFelt -> Expr TFelt
 memory = Expr.function "memory"
 
+data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
+  deriving stock (Eq, Ord)
+
+parseRegKind :: Text -> Maybe RegKind
+parseRegKind "fp!" = Just MainFp
+parseRegKind "ap!" = Just SingleAp
+parseRegKind t =
+  fmap CallFp (Text.stripPrefix "fp@" t >>= readMaybe . unpack)
+    <|> fmap ApGroup (Text.stripPrefix "ap!" t >>= readMaybe . unpack)
+
 pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
 pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
+
+parseStorageVar :: forall ty. Expr ty -> Maybe (ty :~: TFelt, Text, [Expr TFelt])
+parseStorageVar e = do
+  res@(_, name, _) <- Expr.unfoldVariadic @TFelt e
+  guard (not (isStd name))
+  guard (not (isReg name))
+  guard (not (isLVar name))
+  pure res
+ where
+  isStd n = n `elem` stdNames || n == "memory"
+  isReg n = isJust (parseRegKind n) || n == "ap" || n == "fp"
+  isLVar n = "$" `Text.isPrefixOf` n
+
+pattern StorageVar :: () => (a ~ TFelt) => Text -> [Expr TFelt] -> Expr a
+pattern StorageVar name args <- (parseStorageVar -> Just (Refl, name, args))
 
 rcBound :: Expr TFelt
 rcBound = Expr.const "range-check-bound"

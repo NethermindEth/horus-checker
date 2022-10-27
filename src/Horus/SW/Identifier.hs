@@ -26,6 +26,7 @@ data Struct = Struct
   }
   deriving stock (Show)
 data Function = Function {fu_pc :: Label, fu_decorators :: [Text]}
+  deriving stock (Show)
 
 data Identifier
   = IAlias ScopedName
