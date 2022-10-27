@@ -3,6 +3,7 @@ module Horus.Util
   , toSignedFelt
   , whenJust
   , whenJustM
+  , unlessM
   , safeLast
   , topmostStepFT
   , appendList
@@ -14,6 +15,7 @@ module Horus.Util
   )
 where
 
+import Control.Monad (unless)
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
@@ -39,6 +41,11 @@ whenJust (Just a) f = f a
 
 whenJustM :: Monad m => m (Maybe a) -> (a -> m ()) -> m ()
 whenJustM a f = a >>= flip whenJust f
+
+unlessM :: Monad m => m Bool -> m () -> m ()
+unlessM mC a = do
+  c <- mC
+  unless c a
 
 safeLast :: [a] -> Maybe a
 safeLast [] = Nothing

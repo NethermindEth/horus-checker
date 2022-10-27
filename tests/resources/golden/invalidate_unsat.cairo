@@ -1,6 +1,6 @@
 # @declare $x : felt
 # @pre $x == x && $x > 0 && $x < 10
-# @post res > 1
+# @post $Return.res > 1
 func test1(x : felt) -> (res : felt):
      ap += [ap] + 1
      let (y) = id(x)
@@ -16,7 +16,7 @@ end
 
 # @declare $x : felt
 # @pre x == $x
-# @post res == $x
+# @post $Return.res == $x
 func id(x : felt) -> (res : felt):
      return (res=x)
 end

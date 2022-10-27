@@ -1,4 +1,4 @@
-# @post res == 3
+# @post $Return.res == 3
 func test() -> (res : felt):
     [ap] = 3; ap++
     [ap] = [ap - 1] - 1; ap++
