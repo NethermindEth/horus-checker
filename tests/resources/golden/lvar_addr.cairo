@@ -35,7 +35,7 @@ end
 
 # @declare $x : felt*
 # @pre a == $x && [$x] == 0
-# @post res == 1
+# @post $Return.res == 1
 func f3(a : felt*) -> (res : felt):
      let c = [a]
      if c == 0:
@@ -45,7 +45,7 @@ func f3(a : felt*) -> (res : felt):
      end
 end
 
-# @post res == 1
+# @post $Return.res == 1
 func f4() -> (res : felt):
      let (ptr) = alloc()
      assert [ptr] = 0
