@@ -5,7 +5,7 @@ func main():
     ret
 end
 
-# @post res == 3 * [fp - 3]
+# @post $Return.res == 3 * [fp - 3]
 func succ(x) -> (res):
     [ap] = x; ap++
     [ap] = [ap - 1] * 3; ap++

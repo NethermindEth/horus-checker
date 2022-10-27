@@ -1,15 +1,15 @@
 module Horus.CFGBuild.Runner
   ( CFG (..)
   , interpret
-  , runImplT
+  , runImpl
   , cfgArcs
   )
 where
 
-import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
-import Control.Monad.State (MonadState, StateT, runStateT)
-import Control.Monad.Trans (MonadTrans (..))
-import Control.Monad.Trans.Free.Church (iterTM)
+import Control.Monad.Except (ExceptT, catchError, runExceptT, throwError)
+import Control.Monad.Free.Church (iterM)
+import Control.Monad.Reader (ReaderT, ask, asks, runReaderT)
+import Control.Monad.State (State, runState)
 import Data.List (union)
 import Data.Map (Map)
 import Data.Map qualified as Map (empty)
@@ -18,14 +18,11 @@ import Lens.Micro (Lens', at, (&), (^.), _Just)
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl ((%=))
 
-import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildT (..), Label, LabeledInst)
+import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst)
+import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr, Ty (..))
 
-newtype ImplT m a = ImplT (ExceptT Text (StateT CFG m) a)
-  deriving newtype (Functor, Applicative, Monad, MonadState CFG, MonadError Text)
-
-instance MonadTrans ImplT where
-  lift = ImplT . lift . lift
+type Impl = ReaderT ContractInfo (ExceptT Text (State CFG))
 
 data CFG = CFG
   { cfg_vertices :: [Label]
@@ -46,8 +43,8 @@ cfgArcs lMod g = fmap (\x -> g{cfg_arcs = x}) (lMod (cfg_arcs g))
 cfgAssertions :: Lens' CFG (Map Label [Expr TBool])
 cfgAssertions lMod g = fmap (\x -> g{cfg_assertions = x}) (lMod (cfg_assertions g))
 
-interpret :: Monad m => CFGBuildT m a -> ImplT m a
-interpret = iterTM exec . runCFGBuildT
+interpret :: CFGBuildL a -> Impl a
+interpret = iterM exec . runCFGBuildL
  where
   exec (AddVertex l cont) = cfgVertices %= ([l] `union`) >> cont
   exec (AddArc lFrom lTo insts test cont) = cfgArcs . at lFrom %= doAdd >> cont
@@ -56,9 +53,21 @@ interpret = iterTM exec . runCFGBuildT
   exec (AddAssertion l assertion cont) = cfgAssertions . at l %= doAdd >> cont
    where
     doAdd mAssertions = Just (assertion : mAssertions ^. _Just)
+  exec (AskIdentifiers cont) = asks ci_identifiers >>= cont
+  exec (AskInstructions cont) = asks ci_instructions >>= cont
+  exec (GetFuncSpec name cont) = do
+    ci <- ask
+    ci_getFuncSpec ci name & cont
+  exec (GetInvariant name cont) = do
+    ci <- ask
+    ci_getInvariant ci name & cont
+  exec (GetRets name cont) = do
+    ci <- ask
+    ci_getRets ci name >>= cont
   exec (Throw t) = throwError t
+  exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
 
-runImplT :: Monad m => ImplT m a -> m (Either Text CFG)
-runImplT (ImplT m) = do
-  (r, cfg) <- runExceptT m & flip runStateT emptyCFG
-  pure (fmap (const cfg) r)
+runImpl :: ContractInfo -> Impl a -> Either Text CFG
+runImpl contractInfo m = do
+  let (r, cfg) = runReaderT m contractInfo & runExceptT & flip runState emptyCFG
+  fmap (const cfg) r

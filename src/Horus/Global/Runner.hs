@@ -1,60 +1,62 @@
-module Horus.Global.Runner (interpret, runImplT, runT) where
+module Horus.Global.Runner (interpret, run, Env (..)) where
 
-import Control.Monad.Except (MonadError (..), liftEither, throwError)
-import Control.Monad.IO.Class (MonadIO, liftIO)
-import Control.Monad.State (MonadState, StateT, evalStateT, get, put)
+import Control.Monad.Except (ExceptT, MonadError (..), liftEither, runExceptT, throwError)
+import Control.Monad.Free.Church (iterM)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Reader (ReaderT, asks, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
-import Control.Monad.Trans.Free.Church (iterTM)
+import Data.IORef (IORef, readIORef, writeIORef)
 import Data.Text (Text, unpack)
 import Data.Text.IO qualified as Text (writeFile)
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath.Posix (takeDirectory)
 import Text.Pretty.Simple (pPrintString)
 
-import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImplT)
-import Horus.CairoSemantics.Runner qualified as CairoSemantics (runT)
-import Horus.Global (Config (..), GlobalF (..), GlobalT (..))
+import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImpl)
+import Horus.CairoSemantics.Runner qualified as CairoSemantics (run)
+import Horus.ContractInfo (ContractInfo (..))
+import Horus.Global (Config (..), GlobalF (..), GlobalL (..))
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
-newtype ImplT m a = ImplT (StateT Config m a)
-  deriving newtype
-    ( Functor
-    , Applicative
-    , Monad
-    , MonadState Config
-    , MonadIO
-    )
+data Env = Env {e_config :: IORef Config, e_contractInfo :: ContractInfo}
 
-deriving instance MonadError Text m => MonadError Text (ImplT m)
+type Impl = ReaderT Env (ExceptT Text IO) -- TODO replace ExceptT with exceptions
 
-instance MonadTrans ImplT where
-  lift = ImplT . lift
-
-interpret :: forall m a. (MonadError Text m, MonadIO m) => GlobalT m a -> ImplT m a
-interpret = iterTM exec . runGlobalT
+interpret :: GlobalL a -> Impl a
+interpret = iterM exec . runGlobalL
  where
-  exec :: GlobalF m (ImplT m a) -> ImplT m a
-  exec (RunCFGBuildT builder cont) = do
-    lift (CFGBuild.runImplT (CFGBuild.interpret builder)) >>= liftEither >>= cont
-  exec (RunCairoSemanticsT env builder cont) = do
-    lift (CairoSemantics.runT env builder) >>= liftEither >>= cont
+  exec :: GlobalF (Impl a) -> Impl a
+  exec (RunCFGBuildL builder cont) = do
+    ci <- asks e_contractInfo
+    liftEither (CFGBuild.runImpl ci (CFGBuild.interpret builder)) >>= cont
+  exec (RunCairoSemanticsL builder cont) = do
+    ci <- asks e_contractInfo
+    liftEither (CairoSemantics.run ci builder) >>= cont
   exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
-  exec (AskConfig cont) = get >>= cont
-  exec (SetConfig conf cont) = put conf >> cont
-  exec (RunPreprocessor penv preprocessor cont) = do
+  exec (RunPreprocessorL penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)
     liftEither mPreprocessed >>= cont
+  exec (GetCallee inst cont) = do
+    ci <- asks e_contractInfo
+    ci_getCallee ci inst >>= cont
+  exec (GetConfig cont) = asks e_config >>= liftIO . readIORef >>= cont
+  exec (GetFuncSpec name cont) = do
+    ci <- asks e_contractInfo
+    cont (ci_getFuncSpec ci name)
+  exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont
+  exec (GetSources cont) = asks (ci_sources . e_contractInfo) >>= cont
+  exec (SetConfig conf cont) = do
+    configRef <- asks e_config
+    liftIO (writeIORef configRef conf)
+    cont
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
+  exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
-  exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
 
-runImplT :: Monad m => Config -> ImplT m a -> m a
-runImplT config (ImplT m) = evalStateT m config
-
-runT :: (MonadIO m, MonadError Text m) => Config -> GlobalT m a -> m a
-runT config = runImplT config . interpret
+run :: Env -> GlobalL a -> IO (Either Text a)
+run env = runExceptT . flip runReaderT env . interpret
 
 createAndWriteFile :: FilePath -> Text -> IO ()
 createAndWriteFile file content = do

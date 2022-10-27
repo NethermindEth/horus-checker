@@ -9,7 +9,6 @@ module Horus.Preprocessor
   )
 where
 
-import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Class (MonadFree)
 import Control.Monad.Trans.Free.Church (F, liftF)
@@ -20,15 +19,14 @@ import Data.List (sort)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack, unpack)
-import Data.Text qualified as Text (stripPrefix)
 import Data.Traversable (for)
 import SimpleSMT qualified as SMT (Result (..))
 import Text.Printf (printf)
-import Text.Read (readMaybe)
 import Z3.Base (Goal, Tactic)
 import Z3.Monad (Z3)
 import Z3.Monad qualified as Z3
 
+import Horus.Expr.Vars (RegKind, parseRegKind)
 import Horus.Util (maybeToError, toSignedFelt)
 import Horus.Z3Util (goalToSExpr, sexprToGoal)
 
@@ -178,16 +176,6 @@ processModel goal tModel = do
   z3FullModel <- runZ3 $ Z3.convertModel goal z3Model
   model <- z3ModelToHorusModel z3FullModel
   pure $ Sat (Just model)
-
-data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
-  deriving stock (Eq, Ord)
-
-parseRegKind :: Text -> Maybe RegKind
-parseRegKind "fp!" = Just MainFp
-parseRegKind "ap!" = Just SingleAp
-parseRegKind t =
-  fmap CallFp (Text.stripPrefix "fp@" t >>= readMaybe . unpack)
-    <|> fmap ApGroup (Text.stripPrefix "ap!" t >>= readMaybe . unpack)
 
 z3ModelToHorusModel :: Z3.Model -> PreprocessorL Model
 z3ModelToHorusModel model =
