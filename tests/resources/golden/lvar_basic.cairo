@@ -1,6 +1,6 @@
 # @declare $x : felt
 # @pre x == $x
-# @post res == $x
+# @post $Return.res == $x
 func inc0(x : felt) -> (res : felt):
      alloc_locals
      local x = x + 1
@@ -9,7 +9,7 @@ end
 
 # @declare $x : felt
 # @pre x == $x
-# @post res == $x + 1
+# @post $Return.res == $x + 1
 func inc1(x : felt) -> (res : felt):
      alloc_locals
      local x = x + 1

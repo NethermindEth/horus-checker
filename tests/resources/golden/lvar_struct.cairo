@@ -5,14 +5,14 @@ end
 
 # @declare $s : MyStruct
 # @pre s == $s
-# @post res == $s.x + $s.y
+# @post $Return.res == $s.x + $s.y
 func elemSum0(s : MyStruct) -> (res):
      return (res=s.x+s.y)
 end
 
 # @declare $s : MyStruct
 # @pre s == $s
-# @post res == $s.x + $s.y + 1
+# @post $Return.res == $s.x + $s.y + 1
 func elemSum1(s : MyStruct) -> (res):
      return (res=s.x+s.y)
 end
