@@ -7,21 +7,16 @@ module Horus.Global
   )
 where
 
-import Control.Monad (forM, guard, when)
+import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
-import Data.Function ((&))
-import Data.List ((\\))
-import Data.Map qualified as Map (keys, toList)
-import Data.Maybe (mapMaybe)
-import Data.Set (fromList)
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildT (), Label, LabeledInst, buildCFG)
+import Horus.CFGBuild (Label, LabeledInst, buildCFG, CFGBuildL ())
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
@@ -32,23 +27,17 @@ import Horus.CairoSemantics.Runner
   , makeModel
   )
 import Horus.CallStack (CallStack, initialWithFunc)
-import Horus.ContractDefinition (ContractDefinition (..), cPreConds, cdChecks)
-import Horus.ContractInfo (ContractInfo (ci_getFunPc, ci_getPreByCall, ci_identifiers), mkContractInfo)
-import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
-import Horus.Expr qualified as Expr (Expr (True))
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.Instruction (LabeledInst)
-import Horus.Module (Module (m_calledF, ..), ModuleL, gatherModules, nameOfModule)
+import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program (Program (..))
-import Horus.SW.Identifier (getFunctionPc)
-import Horus.Program (Identifiers)
+import Horus.Program ( Identifiers )
+import Horus.SW.Identifier ( Function(..) )
 import Horus.SW.FuncSpec (FuncSpec, fs_pre)
-import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow, whenJust)
+import Horus.SW.Std (trustedStdFuncs)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -58,12 +47,9 @@ data Config = Config
   , cfg_solverSettings :: SolverSettings
   }
 
-data GlobalF m a
-  = forall b. RunCFGBuildT (CFGBuildT m b) (CFG -> a)
-  | forall b. RunCairoSemanticsT CallStack ContractInfo (CairoSemanticsT m b) (ExecutionState -> a)
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
-  | forall b. RunCairoSemanticsL (CairoSemanticsL b) (ConstraintsState -> a)
+  | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ExecutionState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
   | GetCallee LabeledInst (ScopedName -> a)
@@ -92,10 +78,8 @@ liftF' = GlobalL . liftF
 runCFGBuildL :: CFGBuildL a -> GlobalL CFG
 runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 
-runCairoSemanticsT :: CallStack -> ContractInfo -> CairoSemanticsT m a -> GlobalT m ExecutionState
-runCairoSemanticsT initStack env smt2Builder = liftF' (RunCairoSemanticsT initStack env smt2Builder id)
-runCairoSemanticsL :: CairoSemanticsL a -> GlobalL ConstraintsState
-runCairoSemanticsL smt2Builder = liftF' (RunCairoSemanticsL smt2Builder id)
+runCairoSemanticsL :: CallStack -> CairoSemanticsL a -> GlobalL ExecutionState
+runCairoSemanticsL initStack smt2Builder = liftF' (RunCairoSemanticsL initStack smt2Builder id)
 
 runModuleL :: ModuleL a -> GlobalL [Module]
 runModuleL builder = liftF' (RunModuleL builder id)
@@ -142,24 +126,15 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalL ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeCFG :: [Label] -> ContractDefinition -> (Label -> CFGBuildT m Label) -> [LabeledInst] -> GlobalT m CFG
-makeCFG inlinable cd labelToFun labeledInsts =
-  runCFGBuildT (buildCFG (fromList inlinable) cd labelToFun labeledInsts)
+-- makeCFG :: GlobalL CFG
+-- makeCFG = runCFGBuildL buildCFG
 
-makeModules :: (Label -> Bool) -> ContractDefinition -> CFG -> GlobalT m [Module]
-makeModules allow cd cfg = runModuleL (traverseCFG sources cfg)
- where
-  sources = cd_program cd & p_identifiers & Map.toList & mapMaybe takeSourceAndPre
-  preConds = cd ^. cdChecks . cPreConds
-  takeSourceAndPre (name, idef) = do
-    pc <- getFunctionPc idef
-    guard (allow pc)
-    let pre = preConds ^. at name . non emptyScopedTSExpr
-    pure (pc, pre)
+makeModules :: (Label -> Bool) -> CFG -> GlobalL [Module]
+makeModules allow cfg =
+  (runModuleL . gatherModules cfg) . filter (\(Function fpc _, _) -> allow fpc) =<< getSources
 
-extractConstraints :: ContractInfo -> Module -> GlobalT m ExecutionState
-extractConstraints env mdl =
-  runCairoSemanticsT (initialWithFunc $ m_calledF mdl) env $ encodeSemantics mdl
+extractConstraints :: Module -> GlobalL ExecutionState
+extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (encodeModule mdl)
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
@@ -175,20 +150,20 @@ solveModule m = do
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult moduleName = printingErrors $ do
-    constraints <- runCairoSemanticsL (encodeModule m)
+    constraints <- extractConstraints m
     outputSmtQueries moduleName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
     solveSMT constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
 
-outputSmtQueries :: Text -> Text -> ExecutionState -> GlobalT m ()
-outputSmtQueries smtPrefix moduleName es@(_, constraints) = do
-  Config{..} <- askConfig
+outputSmtQueries :: Text -> ExecutionState -> GlobalL ()
+outputSmtQueries moduleName es@(_, constraints) = do
+  Config{..} <- getConfig
   whenJust cfg_outputQueries writeSmtFile
   whenJust cfg_outputOptimizedQueries writeSmtFileOptimized
  where
-  query = makeModel smtPrefix es
+  query = makeModel es
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
   writeSmtFile dir = do
@@ -230,42 +205,52 @@ checkMathsat m = do
 
   falseIfError a = a `catchError` const (pure False)
 
-solveSMT :: Text -> ExecutionState -> GlobalT m SolverResult
-solveSMT smtPrefix es@(_, cs) = do
-  Config{..} <- askConfig
-  runPreprocessor (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
+solveSMT :: ExecutionState -> GlobalL SolverResult
+solveSMT es@(_, cs) = do
+  Config{..} <- getConfig
+  runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
-  query = makeModel smtPrefix es
+  query = makeModel es
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-additionalResults :: Monad m => [Label] -> ContractDefinition -> [LabeledInst] -> GlobalT m [SolvingInfo]
-additionalResults inlinable cd labeledInsts =
-  concat
-    <$> forM
-      inlinable
-      ( \f ->
-          let inlineSet = inlinable \\ [f]
-              inlineEnv = mkContractInfo cd $ fromList inlineSet
-           in do
-                cfg <- makeCFG inlineSet cd (ci_getFunPc inlineEnv) labeledInsts
-                modules <- makeModules (== f) cd cfg
-                for modules . solveModule inlineEnv $ cd_rawSmt cd
-      )
+-- additionalResults :: Monad m => [Label] -> ContractDefinition -> [LabeledInst] -> GlobalL [SolvingInfo]
+-- additionalResults inlinable cd labeledInsts =
+--   concat
+--     <$> forM
+--       inlinable
+--       ( \f ->
+--           let inlineSet = inlinable \\ [f]
+--               inlineEnv = mkContractInfo cd $ fromList inlineSet
+--            in do
+--                 cfg <- makeCFG
+--                 modules <- makeModules (== f) cfg
+--                 for modules solveModule
+--       )
 
-solveContract :: Monad m => ContractDefinition -> GlobalT m [SolvingInfo]
-solveContract cd = do
-  insts <- readAllInstructions (p_code program)
-  let labeledInsts = labelInsructions insts
-      inlinable = Map.keys $ inlinableFuns labeledInsts program (cd_checks cd)
-      contractInfo = mkContractInfo cd $ fromList inlinable
-      getFunPc = ci_getFunPc contractInfo
-  verbosePrint labeledInsts
-  cfg <- makeCFG inlinable cd getFunPc labeledInsts
+-- solveContract :: Monad m => ContractDefinition -> GlobalL [SolvingInfo]
+-- solveContract cd = do
+--   insts <- readAllInstructions (p_code program)
+--   let labeledInsts = labelInsructions insts
+--       inlinable = Map.keys $ inlinableFuns labeledInsts program (cd_checks cd)
+--       contractInfo = mkContractInfo cd $ fromList inlinable
+--       getFunPc = ci_getFunPc contractInfo
+--   verbosePrint labeledInsts
+--   cfg <- makeCFG inlinable cd getFunPc labeledInsts
+--   verbosePrint cfg
+--   modules <- makeModules (isStandardSource inlinable (p_identifiers program)) cd cfg
+--   results <- for modules (solveModule contractInfo (cd_rawSmt cd))
+--   inlinedResults <- additionalResults inlinable cd labeledInsts
+--   pure (results ++ inlinedResults)
+--  where
+--   isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)
+--   program = cd_program cd
+
+solveContract :: GlobalL [SolvingInfo]
+solveContract = do
+  cfg <- runCFGBuildL buildCFG
   verbosePrint cfg
-  modules <- makeModules (isStandardSource inlinable (p_identifiers program)) cd cfg
-  results <- for modules (solveModule contractInfo (cd_rawSmt cd))
-  inlinedResults <- additionalResults inlinable cd labeledInsts
-  pure (results ++ inlinedResults)
- where
-  isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)
-  program = cd_program cd
+  modules <- makeModules (const True) cfg
+  identifiers <- getIdentifiers
+  let moduleName = nameOfModule identifiers
+      removeTrusted = filter (\m -> moduleName m `notElem` trustedStdFuncs)
+  for (removeTrusted modules) solveModule

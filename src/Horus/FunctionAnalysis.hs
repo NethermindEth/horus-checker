@@ -19,7 +19,7 @@ module Horus.FunctionAnalysis
 where
 
 import Control.Applicative ((<|>))
-import Control.Monad (liftM2, liftM3)
+import Control.Monad (liftM2)
 import Data.Array (assocs)
 import Data.Coerce (coerce)
 import Data.Function ((&))
@@ -45,7 +45,7 @@ import Data.Map qualified as Map
 import Data.Maybe (fromJust, fromMaybe, isNothing, mapMaybe)
 
 import Data.Text (Text)
-import Horus.ContractDefinition (Checks (c_invariants, c_postConds, c_preConds))
+-- import Horus.ContractDefinition (Checks (c_invariants, c_postConds, c_preConds))
 import Horus.Instruction
   ( LabeledInst
   , callDestination
@@ -63,8 +63,10 @@ import Horus.Program
   )
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
-import Horus.SW.Std (FuncSpec (fs_name), stdFuncs)
+-- import Horus.SW.Std (FuncSpec (fs_name), stdFuncs)
 import Horus.Util (invert, safeHead, safeLast)
+import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_specs))
+import Horus.SW.Std (stdSpecsList)
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -193,14 +195,16 @@ labelNamesOfPc idents lblpc =
   , pc == lblpc
   ]
 
-isAnnotated :: Identifiers -> Checks -> Label -> Bool
+isAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
 isAnnotated idents checks =
   any
-    ( liftM3
-        (\inv pre post -> inv || pre || post)
-        (`Map.member` c_invariants checks)
-        (`Map.member` c_preConds checks)
-        (`Map.member` c_postConds checks)
+    ( liftM2
+        (\inv spec -> inv || spec)
+        -- (\inv pre post -> inv || pre || post)
+        (`Map.member` cd_invariants checks)
+        (`Map.member` cd_specs checks)
+        -- (`Map.member` fs_pre (c_preConds checks))
+        -- (`Map.member` fs_post (c_postConds checks))
     )
     . labelNamesOfPc idents
 
@@ -216,7 +220,7 @@ isWrapper f idents = outerScope (uncheckedFNameOfPc idents f) == wrapperScope
 sizeOfCall :: Int
 sizeOfCall = 2
 
-inlinableFuns :: [LabeledInst] -> Program -> Checks -> Map.Map Label [LabeledInst]
+inlinableFuns :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map Label [LabeledInst]
 inlinableFuns rows prog checks =
   Map.filterWithKey
     ( \f _ ->
@@ -230,7 +234,7 @@ inlinableFuns rows prog checks =
   idents = p_identifiers prog
   functions = functionsOf rows prog
   notIsAnnotated = not . isAnnotated idents checks
-  notIsAnnotatedLater f = maybe True (`notElem` map fs_name stdFuncs) (fNameOfPc idents f)
+  notIsAnnotatedLater f = maybe True (`notElem` map fst stdSpecsList) (fNameOfPc idents f)
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls
   inlinable =
@@ -240,7 +244,7 @@ inlinableFuns rows prog checks =
 allFuns :: [LabeledInst] -> Program -> Map.Map Label [LabeledInst]
 allFuns = functionsOf
 
-uninlinableFuns :: [LabeledInst] -> Program -> Checks -> Map.Map Label [LabeledInst]
+uninlinableFuns :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map Label [LabeledInst]
 uninlinableFuns rows prog checks =
   Map.difference (allFuns rows prog) (inlinableFuns rows prog checks)
 
