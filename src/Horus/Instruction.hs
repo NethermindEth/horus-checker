@@ -18,7 +18,6 @@ module Horus.Instruction
   , callDestination
   , jumpDestination
   , toSemiAsm
-  , isRet
   , isCall
   , toSemiAsmUnsafe
   )
@@ -90,10 +89,6 @@ instructionSize _ = 1
 
 getNextPc :: LabeledInst -> Label
 getNextPc (pc, i) = moveLabel pc (instructionSize i)
-
-isRet :: Instruction -> Bool
-isRet Instruction{i_opCode = Ret} = True
-isRet _ = False
 
 uncheckedCallDestination :: LabeledInst -> Label
 uncheckedCallDestination (pc, i)

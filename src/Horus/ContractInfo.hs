@@ -5,8 +5,8 @@ import Data.Foldable (asum)
 import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Map (Map)
-import Data.Map qualified as Map (fromList, toList, (!), (!?))
-import Data.Maybe (fromMaybe)
+import Data.Map qualified as Map (fromList, toList, (!), (!?), keys, findWithDefault, union, foldrWithKey, insert, empty, lookup, fromListWith, insertWith)
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import Data.Text (Text)
 
@@ -22,10 +22,15 @@ import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct 
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
+import Horus.FunctionAnalysis (inlinableFuns)
+import Data.Set (fromList)
 
 data ContractInfo = ContractInfo
-  { ci_instructions :: [LabeledInst]
+  { ci_inlinableFs :: Set Label
+  , ci_instructions :: [LabeledInst]
   , ci_identifiers :: Identifiers
+  , ci_functionNames :: Map Label ScopedName
+  , ci_program :: Program
   , ci_sources :: [(Function, FuncSpec)]
   , ci_storageVars :: [ScopedName]
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
@@ -35,20 +40,21 @@ data ContractInfo = ContractInfo
   , ci_getInvariant :: ScopedName -> Maybe (Expr TBool)
   , ci_getCallee :: forall m. MonadError Text m => LabeledInst -> m ScopedName
   , ci_getRets :: forall m. MonadError Text m => ScopedName -> m [Label]
-  , ci_inlinableFs :: Set Label
-  , ci_functionNames :: Map Label ScopedName
   }
 
-mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> Set Label -> m' ContractInfo
-mkContractInfo cd inlinable = do
+mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' ContractInfo
+mkContractInfo cd = do
   insts <- mkInstructions
   retsByFun <- mkRetsByFun insts
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
   pure
     ContractInfo
-      { ci_instructions = insts
+      { ci_inlinableFs = fromList $ Map.keys $ inlinableFuns insts (cd_program cd) cd
+      , ci_instructions = insts
       , ci_identifiers = identifiers
+      , ci_functionNames = pcToFun
+      , ci_program = cd_program cd
       , ci_sources = sources
       , ci_storageVars = storageVarsNames
       , ci_getApTracking = getApTracking
@@ -58,8 +64,6 @@ mkContractInfo cd inlinable = do
       , ci_getInvariant = getInvariant
       , ci_getCallee = getCallee
       , ci_getRets = mkGetRets retsByFun
-    , ci_inlinableFs = inlinable
-    , ci_functionNames = pcToFun
       }
  where
   ---- plain data

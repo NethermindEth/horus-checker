@@ -10,8 +10,6 @@ module Horus.CairoSemantics
 where
 
 import Control.Monad (forM_, unless, when)
-import Control.Monad.Reader (ReaderT (..), ask, local)
-import Control.Monad.Trans (lift)
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor ((<&>))
@@ -38,7 +36,6 @@ import Horus.Expr.Vars
   , pattern Memory
   , pattern StorageVar
   )
-import Horus.Expr.Vars qualified as Vars (ap, fp)
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -63,6 +60,8 @@ import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
+import Horus.Expr.Vars qualified as Util
+import Horus.Expr qualified as TSMT
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -155,25 +154,25 @@ memoryRemoval = Expr.transform step
   step (Memory x) = declareMem x
   step e = pure e
 
-isInlinable :: Label -> CairoSemanticsT m Bool
+isInlinable :: Label -> CairoSemanticsL Bool
 isInlinable l = liftF (IsInlinable l id)
 
-getStackTraceDescr :: CairoSemanticsT m Text
+getStackTraceDescr :: CairoSemanticsL Text
 getStackTraceDescr = liftF (GetStackTraceDescr id)
 
-getOracle :: CairoSemanticsT m (NonEmpty Label)
+getOracle :: CairoSemanticsL (NonEmpty Label)
 getOracle = liftF (GetOracle id)
 
-push :: CallEntry -> CairoSemanticsT m ()
+push :: CallEntry -> CairoSemanticsL ()
 push l = liftF (Push l ())
 
-pop :: CairoSemanticsT m ()
+pop :: CairoSemanticsL ()
 pop = liftF (Pop ())
 
-top :: CairoSemanticsT m CallEntry
+top :: CairoSemanticsL CallEntry
 top = liftF (Top id)
 
-isCtxRoot :: CairoSemanticsT m Bool
+isCtxRoot :: CairoSemanticsL Bool
 isCtxRoot = (callerOfRoot ==) . fst <$> top
 
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
@@ -207,60 +206,53 @@ prepareCheckPoint pc fp expr = do
   ap <- getAp pc
   exMemoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
-encodeApTracking :: Text -> ApTracking -> CairoSemanticsT m (TSExpr Integer)
+encodeApTracking :: Text -> ApTracking -> Expr TFelt
 encodeApTracking traceDescr ApTracking{..} =
-  fmap (+ fromIntegral at_offset) (declareFelt ("ap!" <> traceDescr <> "@" <> tShow at_group))
+  Expr.const ("ap!" <> traceDescr <> "@" <> tShow at_group) + fromIntegral at_offset
 
-getAp :: Label -> CairoSemanticsT m (TSExpr Integer)
-getAp pc = getStackTraceDescr >>= \trace -> getApTracking pc >>= encodeApTracking trace
+getAp :: Label -> CairoSemanticsL (Expr TFelt)
+getAp pc = getStackTraceDescr >>= \trace -> getApTracking pc <&> encodeApTracking trace
 
-getFp :: CairoSemanticsL (TSExpr Integer)
-getFp = getStackTraceDescr >>= declareFelt . ("fp!" <>)
+getFp :: CairoSemanticsL (Expr TFelt)
+getFp = getStackTraceDescr <&> Expr.const . ("fp!" <>)
 
-moduleStartAp :: [LabeledInst] -> CairoSemanticsL (TSExpr Integer)
+moduleStartAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
 moduleStartAp [] = pure (Expr.const "ap!")
 moduleStartAp ((pc0, _) : _) = getAp pc0
 
-moduleEndAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
-moduleEndAp [] = do
-  trace <- getStackTraceDescr
-  declareFelt $ "ap!" <> trace
-moduleEndAp insts = getAp (getNextPc (last insts))
+moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
+moduleEndAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
+moduleEndAp m@Module{m_prog = _} = getAp (m_lastPc m)
 
 encodeModule :: Module -> CairoSemanticsL ()
-encodeModule Module{..} = case m_spec of
-  MSRich spec -> encodeRichSpec m_prog m_jnzOracle spec
-  MSPlain spec -> encodePlainSpec m_prog m_jnzOracle spec
+encodeModule m@Module{..} = case m_spec of
+  MSRich spec -> encodeRichSpec m spec
+  MSPlain spec -> encodePlainSpec m spec
 
-moduleEndAp :: Module -> CairoSemanticsT m (TSExpr Integer)
-moduleEndAp Module{m_prog = []} = do
-  trace <- getStackTraceDescr
-  declareFelt $ "ap!" <> trace
-moduleEndAp m@Module{m_prog = _} = getAp (m_lastPc m)
-encodeRichSpec :: [LabeledInst] -> Map Label Bool -> FuncSpec -> CairoSemanticsL ()
-encodeRichSpec insts oracle funcSpec@(FuncSpec _pre _post storage) = do
+encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
+encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   enableStorage
   let fp = Expr.const @TFelt "fp!"
-  apEnd <- moduleEndAp insts
+  apEnd <- moduleEndAp mdl
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
-  encodePlainSpec insts oracle plainSpec
+  encodePlainSpec mdl plainSpec
   accumulatedStorage <- getStorage
   expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec
 
-encodePlainSpec :: [LabeledInst] -> Map Label Bool -> PlainSpec -> CairoSemanticsL ()
-encodePlainSpec insts jnzOracle PlainSpec{..} = do
-  apStart <- moduleStartAp insts
-  apEnd <- moduleEndAp insts
+encodePlainSpec :: Module -> PlainSpec -> CairoSemanticsL ()
+encodePlainSpec mdl PlainSpec{..} = do
+  apStart <- moduleStartAp (m_prog mdl)
+  apEnd <- moduleEndAp mdl
   fp <- getFp
   assert (fp .<= apStart)
   pre <- prepare' apStart fp ps_pre
   post <- prepare' apEnd fp ps_post
   assert pre
-  for_ insts $ mkInstructionConstraints jnzOracle
+  for_ (m_prog mdl) $ mkInstructionConstraints (m_jnzOracle mdl)
   expect post
-  whenJust (nonEmpty insts) $ \neInsts -> do
+  whenJust (nonEmpty (m_prog mdl)) $ \neInsts -> do
     mkApConstraints apEnd neInsts
     mkBuiltinConstraints apEnd neInsts
 
@@ -317,7 +309,7 @@ exMemoryRemoval expr = do
     (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
     pure (Expr.ExitField e', localMemVars, referencesLocals)
 
-withExecutionCtx :: CallEntry -> FT CairoSemanticsF m b -> FT CairoSemanticsF m b
+withExecutionCtx :: CallEntry -> CairoSemanticsL b -> CairoSemanticsL b
 withExecutionCtx ctx action = do
   push ctx
   res <- action
@@ -327,37 +319,9 @@ withExecutionCtx ctx action = do
 mkInstructionConstraints :: Map (NonEmpty Label, Label) Bool -> LabeledInst -> CairoSemanticsL ()
 mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
   fp <- getFp
-  dst <- prepare pc fp (memory (regToSTSExpr i_dstRegister + fromInteger i_dstOffset))
+  dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
-    Call ->
-      let calleePc = uncheckedCallDestination lInst
-          nextPc = getNextPc lInst
-          stackFrame = (pc, calleePc)
-       in do
-            calleeFp <- withExecutionCtx stackFrame getFp
-            nextAp <- prepare pc calleeFp (withEmptyScope $ Util.fp .== Util.ap + 2)
-            saveOldFp <- prepare pc fp (withEmptyScope $ memory Util.ap .== Util.fp)
-            setNextPc <-
-              prepare
-                pc
-                fp
-                ( withEmptyScope $ memory (Util.ap + 1) .== fromIntegral (unLabel nextPc)
-                )
-            assert (TSMT.and [nextAp, saveOldFp, setNextPc])
-            push stackFrame
-            canInline <- isInlinable $ uncheckedCallDestination lInst
-            unless canInline $ do
-              pre <- getPreByCall lInst
-              post <- getPostByCall lInst
-              preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp pre
-              let lvar_suff = "+" <> tShowLabel pc
-                  pre' = addLVarSuffix lvar_suff pre
-                  post' = addLVarSuffix lvar_suff post
-              preparedPre <- prepare calleePc calleeFp pre'
-              pop
-              preparedPost <- prepare nextPc calleeFp post'
-              checkPoint preparedPreCheckPoint
-              assert (preparedPre .&& preparedPost)
+    Call -> mkCallConstraints pc fp lInst
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
     Nop -> do
       trace <- getOracle
@@ -368,26 +332,30 @@ mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
     Ret -> pop
 
 mkCallConstraints :: Label -> Expr TFelt -> LabeledInst -> CairoSemanticsL ()
-mkCallConstraints pc fp inst = do
-  calleeFpAsAp <- (2 +) <$> getAp pc
-  setNewFp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
-  saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
-  setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
-  (FuncSpec pre post storage) <- getCallee inst >>= getFuncSpec
-  let pre' = suffixLogicalVariables lvarSuffix pre
-  let post' = suffixLogicalVariables lvarSuffix post
-  preparedPre <- prepare calleePc calleeFpAsAp =<< storageRemoval pre'
-  preparedCheckPoint <- prepareCheckPoint calleePc calleeFpAsAp =<< storageRemoval pre'
-  updateStorage =<< traverseStorage (prepare nextPc calleeFpAsAp) storage
-  preparedPost <- prepare nextPc calleeFpAsAp =<< storageRemoval =<< storageRemoval post'
-  assert (Expr.and [setNewFp, saveOldFp, setNextPc])
-  checkPoint preparedCheckPoint
-  assert (preparedPre .&& preparedPost)
- where
-  calleeFp = Expr.const ("fp@" <> tShow (unLabel pc))
-  calleePc = uncheckedCallDestination inst
-  nextPc = getNextPc inst
-  lvarSuffix = "+" <> tShowLabel pc
+mkCallConstraints pc fp inst =
+  let calleePc = uncheckedCallDestination inst
+      nextPc = getNextPc inst
+      stackFrame = (pc, calleePc)
+   in do
+        calleeFp <- withExecutionCtx stackFrame getFp
+        nextAp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
+        saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
+        setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
+        assert (TSMT.and [nextAp, saveOldFp, setNextPc])
+        push stackFrame
+        canInline <- isInlinable $ uncheckedCallDestination inst
+        unless canInline $ do
+          (FuncSpec pre post storage) <- getCallee inst >>= getFuncSpec
+          preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp pre
+          let pre' = suffixLogicalVariables lvarSuffix pre
+              post' = suffixLogicalVariables lvarSuffix post
+          preparedPre <- prepare calleePc calleeFp =<< storageRemoval pre'
+          updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
+          pop
+          preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
+          checkPoint preparedPreCheckPoint
+          assert (preparedPre .&& preparedPost)
+  where lvarSuffix = "+" <> tShowLabel pc
 
 traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
@@ -396,7 +364,7 @@ traverseStorage preparer = traverse prepareWrites
   prepareWrite (args, value) = (,) <$> traverse prepareExpr args <*> prepareExpr value
   prepareExpr e = storageRemoval e >>= preparer
 
-mkApConstraints :: TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsL ()
+mkApConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkApConstraints apEnd insts = do
   forM_ (zip (toList insts) (NonEmpty.tail insts)) $ \(lInst@(pc, inst), (pcNext, _)) -> do
     at1 <- getApTracking pc
@@ -422,7 +390,7 @@ mkApConstraints apEnd insts = do
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
-mkBuiltinConstraints :: TSExpr Integer -> NonEmpty LabeledInst -> CairoSemanticsL ()
+mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkBuiltinConstraints apEnd insts = do
   fp <- getFp
   funPc <- getFunPc (fst (NonEmpty.head insts))
@@ -444,7 +412,7 @@ getBuiltinContract fp apEnd b bo = (pre, post)
   initialPtr = memory (fp - fromIntegral (bo_input bo))
   finalPtr = memory (apEnd - fromIntegral (bo_output bo))
 
-mkBuiltinConstraintsForInst :: TSExpr Integel-> Bool  -> Builtin -> LabeledInst -> CairoSemanticsL ()
+mkBuiltinConstraintsForInst :: Expr TFelt -> Bool -> Builtin -> LabeledInst -> CairoSemanticsL ()
 mkBuiltinConstraintsForInst apEnd isLast b inst@(pc, Instruction{..}) =
   getFp >>= \fp -> do
     case i_opCode of
@@ -459,9 +427,9 @@ mkBuiltinConstraintsForInst apEnd isLast b inst@(pc, Instruction{..}) =
         res <- getRes fp inst
         case res of
           Memory resAddr -> assert (builtinConstraint resAddr b)
-          Mod (op0 :+ op1) p -> do
+          op0 :+ op1 -> do
             let isBuiltin = builtinStart b .<= op0 .|| builtinStart b .<= op1
-            assert (isBuiltin .-> (op0 + op1 .== (op0 + op1) `TSMT.mod` p))
+            assert (isBuiltin .=> Expr.ExitField (op0 + op1 .== (op0 + op1) `Expr.mod` prime))
           _ -> pure ()
       -- 'ret's are not in the bytecote for functions that are not inlinable
       Ret -> mkBuiltinConstraintsForFunc apEnd True

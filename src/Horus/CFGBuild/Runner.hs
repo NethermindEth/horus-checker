@@ -21,14 +21,14 @@ import Lens.Micro.Mtl ((%=))
 import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst)
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.FunctionAnalysis (FInfo)
-import Horus.ScopedTSExpr (ScopedTSExpr)
+import Horus.Expr (Expr, Ty (..))
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State CFG))
 
 data CFG = CFG
   { cfg_vertices :: [Label]
   , cfg_arcs :: Map Label [(Label, [LabeledInst], ArcCondition, FInfo)]
-  , cfg_assertions :: Map Label [ScopedTSExpr Bool]
+  , cfg_assertions :: Map Label [Expr TBool]
   }
   deriving (Show)
 
@@ -55,7 +55,9 @@ interpret = iterM exec . runCFGBuildL
    where
     doAdd mAssertions = Just (assertion : mAssertions ^. _Just)
   exec (AskIdentifiers cont) = asks ci_identifiers >>= cont
+  exec (AskInlinable cont) = asks ci_inlinableFs >>= cont
   exec (AskInstructions cont) = asks ci_instructions >>= cont
+  exec (AskProgram cont) = asks ci_program >>= cont
   exec (GetFuncSpec name cont) = do
     ci <- ask
     ci_getFuncSpec ci name & cont
