@@ -8,26 +8,25 @@ module Horus.CairoSemantics.Runner
   )
 where
 
-import Control.Arrow qualified as Bifunc
-import Control.Monad.Except (ExceptT, MonadError, runExceptT, throwError)
-import Control.Monad.Reader (MonadReader, ReaderT, asks, runReaderT)
-import Control.Monad.State (MonadState (get), StateT (runStateT), modify)
-import Control.Monad.Trans (MonadTrans (..))
-import Control.Monad.Trans.Free.Church (iterTM)
-import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
+import Control.Monad.Reader
+    ( ReaderT,
+      asks,
+      runReaderT,
+      ReaderT,
+      ask,
+      runReaderT )
+import Control.Monad.State ( MonadState(get), State, runState )
+import Control.Monad (unless)
 import Control.Monad.Free.Church (iterM)
-import Control.Monad.Reader (ReaderT, ask, runReaderT)
-import Control.Monad.State (State, runState)
 import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails)
 import Data.Map qualified as Map (null, unionWith)
-import Data.Maybe (mapMaybe)
+import Data.Maybe ( mapMaybe, fromMaybe )
 import Data.Singletons (sing)
 import Data.Some (foldSome)
-import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
 import Lens.Micro (Lens', (%~), (<&>))
@@ -38,7 +37,7 @@ import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, MemoryVariab
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
-import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>))
+import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>), unAnd, (.||))
 import Horus.Expr qualified as Expr
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Std (Function (..))
@@ -48,9 +47,7 @@ import Horus.Expr.Vars (prime, rcBound)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
-import Horus.Util (enumerate, fieldPrime, tShow, unlessM)
-import SimpleSMT.Typed (TSExpr, showTSStmt, unAnd, (.->), (.<), (.<=), (.==), (.||))
-import SimpleSMT.Typed qualified as SMT
+import Horus.Util (fieldPrime, tShow, unlessM)
 
 data AssertionBuilder
   = QFAss (Expr TBool)
@@ -75,14 +72,14 @@ csMemoryVariables lMod (st, g) = fmap (\x -> (st, g{cs_memoryVariables = x})) (l
 csAsserts :: Lens' ExecutionState [AssertionBuilder]
 csAsserts lMod (st, g) = fmap (\x -> (st, g{cs_asserts = x})) (lMod (cs_asserts g))
 
-csExpects :: Lens' ExecutionState [TSExpr Bool]
+csExpects :: Lens' ExecutionState [Expr TBool]
 csExpects lMod (st, g) = fmap (\x -> (st, g{cs_expects = x})) (lMod (cs_expects g))
-
-csDecls :: Lens' ExecutionState [Text]
-csDecls lMod (st, g) = fmap (\x -> (st, g{cs_decls = x})) (lMod (cs_decls g))
 
 csNameCounter :: Lens' ExecutionState Int
 csNameCounter lMod (st, g) = fmap (\x -> (st, g{cs_nameCounter = x})) (lMod (cs_nameCounter g))
+
+csCallStack :: Lens' ExecutionState CallStack
+csCallStack lMod (st, g) = fmap (, g) (lMod st)
 
 emptyConstraintsState :: ConstraintsState
 emptyConstraintsState =
@@ -97,7 +94,7 @@ emptyExecutionState :: CallStack -> ExecutionState
 emptyExecutionState initStack = (initStack, emptyConstraintsState)
 
 data Env = Env
-  { e_constraints :: ConstraintsState
+  { e_constraints :: ExecutionState
   , e_storageEnabled :: Bool
   , e_storage :: Storage
   }
@@ -111,15 +108,17 @@ eStorageEnabled lMod g = fmap (\x -> g{e_storageEnabled = x}) (lMod (e_storageEn
 eStorage :: Lens' Env Storage
 eStorage lMod g = fmap (\x -> g{e_storage = x}) (lMod (e_storage g))
 
-emptyEnv :: Env
-emptyEnv =
+emptyEnv :: CallStack -> Env
+emptyEnv initStack =
   Env
-    { e_constraints = emptyExecutionState
+    { e_constraints = emptyExecutionState initStack
     , e_storageEnabled = False
     , e_storage = mempty
     }
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State Env))
+
+
 
 interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
@@ -140,8 +139,8 @@ interpret = iterM exec
             ( \mv ->
                 let rest = map (builderToAss mv) restAss
                     asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) rest
-                 in (a mv .|| SMT.not (SMT.and (filter (/= a mv) asAtoms)))
-                      .-> SMT.and (rest ++ [SMT.not (SMT.and restExp) | not (null restExp)])
+                 in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
+                    .=> Expr.and (rest ++ [Expr.not (Expr.and restExp) | not (null restExp)])
             )
             : initAss
          )
@@ -180,15 +179,16 @@ interpret = iterM exec
     cont (label `elem` inlinableFs)
   exec (GetStackTraceDescr cont) = do
     fNames <- asks ci_functionNames
-    get >>= cont . digestOfCallStack fNames . fst
+    get >>= cont . digestOfCallStack fNames . fst . e_constraints
   exec (GetOracle cont) = do
-    get >>= cont . stackTrace . fst
-  exec (Push entry cont) = do
-    modify (Bifunc.first (push entry)) >> cont
-  exec (Pop cont) = do
-    modify (Bifunc.first (snd . pop)) >> cont
+    get >>= cont . stackTrace . fst . e_constraints
+  exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
+    -- modify ( \ env@(Env (stack, cs) _ _) -> env { e_constraints = (push entry stack, cs) }) >> cont
+    -- Bifunc.first (push entry)
+  exec (Pop cont) = eConstraints . csCallStack %= (snd . pop) >> cont
+    -- modify (Bifunc.first (snd . pop)) >> cont
   exec (Top cont) = do
-    get >>= cont . top . fst
+    get >>= cont . top . fst . e_constraints
   exec (GetFunPc label cont) = do
     ci <- ask
     ci_getFunPc ci label >>= cont
@@ -234,43 +234,11 @@ debugFriendlyModel (_, ConstraintsState{..}) =
     | MemoryVariable{..} <- cs_memoryVariables
     ]
 
-makeModel :: Text -> ExecutionState -> Text
-makeModel rawSmt (_, ConstraintsState{..}) =
-  let names =
-        concat
-          [ map SMT.showTSExpr [prime, rcBound]
-          , cs_decls
-          , map mv_varName cs_memoryVariables
-          , map mv_addrName cs_memoryVariables
-          , map (SMT.showTSExpr . builtinStart) enumerate
-          , map (SMT.showTSExpr . builtinEnd) enumerate
-          ]
-      decls = map SMT.declareInt names
-      feltRestrictions = concat [[0 .<= SMT.const x, SMT.const x .< prime] | x <- tail names]
-      memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-      addrDefinitions =
-        [ SMT.const mv_addrName .== mv_addrExpr
-        | MemoryVariable{..} <- cs_memoryVariables
-        ]
-      restrictions =
-        concat
-          [ [prime .== fromInteger fieldPrime]
-          , [rcBound .== fromInteger Builtin.rcBound]
-          , feltRestrictions
-          , memRestrictions
-          , addrDefinitions
-          , map (builderToAss cs_memoryVariables) cs_asserts
-          , [SMT.not (SMT.and cs_expects) | not (null cs_expects)]
-          ]
-   in (decls <> map SMT.assert restrictions)
-        & map showTSStmt
-        & (rawSmt :)
-        & Text.intercalate "\n"
 constants :: [(Text, Integer)]
 constants = [(pprExpr prime, fieldPrime), (pprExpr rcBound, Builtin.rcBound)]
 
-makeModel :: ConstraintsState -> Text
-makeModel ConstraintsState{..} =
+makeModel :: ExecutionState -> Text
+makeModel (_, ConstraintsState{..}) =
   Text.intercalate "\n" (decls <> map Command.assert restrictions)
  where
   functions =
@@ -313,8 +281,7 @@ runImpl initStack contractInfo m = v $> e_constraints env
   (v, env) =
     runReaderT m contractInfo
       & runExceptT
-      & flip runStateT (emptyExecutionState initStack)
-  pure (v $> cs)
+      & flip runState (emptyEnv initStack)
 
 run :: CallStack -> ContractInfo -> CairoSemanticsL a -> Either Text ExecutionState
 run initStack contractInfo a =

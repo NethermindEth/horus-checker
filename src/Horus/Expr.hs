@@ -35,6 +35,7 @@ module Horus.Expr
   , (./=)
   , leq
   , ite
+  , unAnd
   )
 where
 
@@ -243,6 +244,10 @@ pattern And cs <- (unfoldVariadic @TBool @TBool -> Just (Refl, "and", cs))
     And = apply1' (Fun "and") True
 
 -- smart constructors for basic operations
+
+unAnd :: Expr 'TBool -> Maybe [Expr 'TBool]
+unAnd (And xs) = Just xs
+unAnd _ = Nothing
 
 instance Num (Expr TFelt) where
   a + 0 = a
