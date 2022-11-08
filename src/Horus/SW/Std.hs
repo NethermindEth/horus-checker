@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedLists #-}
 
-module Horus.SW.Std (stdSpecs, FuncSpec (..), mkReadSpec, mkWriteSpec) where
+module Horus.SW.Std (stdSpecs, FuncSpec (..), mkReadSpec, mkWriteSpec, stdSpecsList, trustedStdFuncs) where
 
 import Data.Map (Map)
 import Data.Map qualified as Map (fromList)
@@ -11,6 +11,7 @@ import Horus.Expr.Vars (ap, fp, memory, prime, rcBound)
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
+import Data.Text (Text)
 
 stdSpecs :: Map ScopedName FuncSpec
 stdSpecs = Map.fromList stdSpecsList
@@ -27,6 +28,16 @@ mkWriteSpec name arity = emptyFuncSpec{fs_storage = [(name, [(args, memory (fp -
  where
   offsets = [-4 - arity + 1 .. -4]
   args = [memory (fp + fromIntegral offset) | offset <- offsets]
+
+{- | A list of names of trusted standard library functions.
+These functions will not be checked against their specifications.
+-}
+trustedStdFuncs :: [Text]
+trustedStdFuncs =
+  [ "starknet.common.syscalls.get_block_timestamp"
+  , "starknet.common.syscalls.get_caller_address"
+  , "starknet.common.syscalls.get_contract_address"
+  ]
 
 {- | A lexicographically sorted by fs_name list of specifications of
  standard library functions.
