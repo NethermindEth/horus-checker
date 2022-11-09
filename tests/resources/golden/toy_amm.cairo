@@ -30,7 +30,7 @@ end
 # Assert before setting that the balance does not exceed the upper bound.
 
 # @pre account_balance(account_id, token_type) >= 0
-# @state account_balance(account_id, token_type) = account_balance(account_id, token_type) + amount
+# @storage_update account_balance(account_id, token_type) := account_balance(account_id, token_type) + amount
 func modify_account_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_type : felt, amount : felt
 ):
@@ -72,9 +72,9 @@ end
 
 # Swaps tokens between the given account and the pool.
 # @post $Return.amount_to <= pool_balance(token_to)
-# @state pool_balance(token_from) = pool_balance(token_from) + amount_from  
-# @state account_balance(account_id, token_from) = account_balance(account_id, token_from) - amount_from
-# @state account_balance(account_id, token_to) = account_balance(account_id, token_to) + $Return.amount_to
+# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from  
+# @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
+# @storage_update account_balance(account_id, token_to) := account_balance(account_id, token_to) + $Return.amount_to
 func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, token_to : felt, amount_from : felt
 ) -> (amount_to : felt):
@@ -132,8 +132,8 @@ func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 end
 
 # Adds demo tokens to the given account.
-# @state account_balance(account_id, 1) = token_a_amount
-# @state account_balance(account_id, 2) = token_b_amount
+# @storage_update account_balance(account_id, 1) := token_a_amount
+# @storage_update account_balance(account_id, 2) := token_b_amount
 func add_demo_token{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_a_amount : felt, token_b_amount : felt
 ):
@@ -147,8 +147,8 @@ func add_demo_token{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_chec
 end
 
 # Until we have LPs, for testing, we'll need to initialize the AMM somehow.
-# @state pool_balance(1) = token_a
-# @state pool_balance(2) = token_b
+# @storage_update pool_balance(1) := token_a
+# @storage_update pool_balance(2) := token_b
 func init_pool{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_a : felt, token_b : felt
 ):
