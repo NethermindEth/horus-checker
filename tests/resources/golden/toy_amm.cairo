@@ -52,7 +52,7 @@ end
 # Sets the pool's balance for the given token.
 # Asserts before setting that the balance does not exceed the upper bound.
 # @pre pool_balance(token_type) >= 0
-# @post pool_balance(token_type) == balance
+# @storage_update pool_balance(token_type) := balance
 func set_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt, balance : felt
 ):
@@ -99,7 +99,8 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     return (amount_to=amount_to)
 end
 
-# @post token_type * $Return.t == 2
+# @pre token_type == 1 || token_type == 2
+# @post token_type + $Return.t == 3
 func get_opposite_token(token_type : felt) -> (t : felt):
     if token_type == TOKEN_TYPE_A:
         return (TOKEN_TYPE_B)
@@ -132,8 +133,8 @@ func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 end
 
 # Adds demo tokens to the given account.
-# @storage_update account_balance(account_id, 1) := token_a_amount
-# @storage_update account_balance(account_id, 2) := token_b_amount
+# @storage_update account_balance(account_id, 1) := account_balance(account_id, 1) + token_a_amount
+# @storage_update account_balance(account_id, 2) := account_balance(account_id, 2) + token_b_amount
 func add_demo_token{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_a_amount : felt, token_b_amount : felt
 ):
