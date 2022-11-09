@@ -110,6 +110,8 @@ func get_opposite_token(token_type : felt) -> (t : felt):
 end
 
 # Swaps tokens between the given account and the pool.
+# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from  
+# @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
 func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, amount_from : felt
 ) -> (amount_to : felt):
