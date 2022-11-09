@@ -35,6 +35,7 @@ import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec, fs_pre)
 import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName)
+import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 
 data Config = Config
@@ -211,4 +212,7 @@ solveContract = do
   cfg <- runCFGBuildL buildCFG
   verbosePrint cfg
   modules <- makeModules cfg
-  for modules solveModule
+  identifiers <- getIdentifiers
+  let moduleName = nameOfModule identifiers
+      removeTrusted = filter (\m -> moduleName m `notElem` trustedStdFuncs)
+  for (removeTrusted modules) solveModule

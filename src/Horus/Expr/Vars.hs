@@ -15,6 +15,9 @@ module Horus.Expr.Vars
   , builtinAligned
   , builtinInSegment
   , builtinConstraint
+  , callerAddress
+  , contractAddress
+  , blockTimestamp
   )
 where
 
@@ -61,6 +64,18 @@ pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
 pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
+
+-- Syscalls
+blockTimestamp :: Expr TFelt
+blockTimestamp = Expr.const "%block_timestamp"
+
+callerAddress :: Expr TFelt
+callerAddress = Expr.const "%caller_address"
+
+contractAddress :: Expr TFelt
+contractAddress = Expr.const "%contract_address"
+
+--
 
 parseStorageVar :: forall ty. Expr ty -> Maybe (ty :~: TFelt, Text, [Expr TFelt])
 parseStorageVar e = do
