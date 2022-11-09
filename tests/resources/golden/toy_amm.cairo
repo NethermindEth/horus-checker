@@ -1,9 +1,9 @@
 %lang starknet
+%builtins pedersen
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.cairo.common.hash import hash2
 from starkware.cairo.common.math import assert_le, assert_nn_le, unsigned_div_rem
-from starkware.starknet.common.syscalls import storage_read, storage_write
 
 # The maximum amount of each token that belongs to the AMM.
 const BALANCE_UPPER_BOUND = 2 ** 64
@@ -43,7 +43,6 @@ end
 
 # Returns the account's balance for the given token.
 # @post $Return.balance == account_balance(account_id, token_type)
-@view
 func get_account_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_type : felt
 ) -> (balance : felt):
@@ -64,7 +63,6 @@ end
 
 # Returns the pool's balance.
 # @post $Return.balance == pool_balance(token_type)
-@view
 func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt
 ) -> (balance : felt):
@@ -111,7 +109,6 @@ func get_opposite_token(token_type : felt) -> (t : felt):
 end
 
 # Swaps tokens between the given account and the pool.
-@external
 func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, amount_from : felt
 ) -> (amount_to : felt):
@@ -137,7 +134,6 @@ end
 # Adds demo tokens to the given account.
 # @state account_balance(account_id, 1) = token_a_amount
 # @state account_balance(account_id, 2) = token_b_amount
-@external
 func add_demo_token{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_a_amount : felt, token_b_amount : felt
 ):
@@ -153,7 +149,6 @@ end
 # Until we have LPs, for testing, we'll need to initialize the AMM somehow.
 # @state pool_balance(1) = token_a
 # @state pool_balance(2) = token_b
-@external
 func init_pool{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_a : felt, token_b : felt
 ):
