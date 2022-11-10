@@ -62,6 +62,7 @@ func set_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ra
 end
 
 # Returns the pool's balance.
+# @pre token_type == 1 || token_type == 2
 # @post $Return.balance == pool_balance(token_type)
 func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt
@@ -69,10 +70,14 @@ func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ra
     return pool_balance.read(token_type)
 end
 
-
 # Swaps tokens between the given account and the pool.
-# @post $Return.amount_to <= pool_balance(token_to)
-# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from  
+# @pre token_from != token_to
+# @pre token_from == 1 || token_from == 2
+# @pre token_to == 1 || token_to == 2
+# @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
+# @pre pool_balance(token_to) > 0
+# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from
+# @storage_update pool_balance(token_to) := pool_balance(token_to) - $Return.amount_to
 # @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
 # @storage_update account_balance(account_id, token_to) := account_balance(account_id, token_to) + $Return.amount_to
 func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
@@ -100,7 +105,8 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 end
 
 # @pre token_type == 1 || token_type == 2
-# @post token_type + $Return.t == 3
+# @post token_type == 1 -> $Return.t == 2
+# @post token_type == 2 -> $Return.t == 1
 func get_opposite_token(token_type : felt) -> (t : felt):
     if token_type == TOKEN_TYPE_A:
         return (TOKEN_TYPE_B)
@@ -110,8 +116,13 @@ func get_opposite_token(token_type : felt) -> (t : felt):
 end
 
 # Swaps tokens between the given account and the pool.
-# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from  
+# @pre token_from == 1 || token_from == 2
+# @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
+# @pre pool_balance(3 - token_from) > 0
+# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from
+# @storage_update pool_balance(3 - token_from) := pool_balance(3 - token_from) - $Return.amount_to
 # @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
+# @storage_update account_balance(account_id, 3 - token_from) := account_balance(account_id, 3 - token_from) + $Return.amount_to
 func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, amount_from : felt
 ) -> (amount_to : felt):
