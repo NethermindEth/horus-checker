@@ -55,7 +55,6 @@ interpret = iterM exec . runCFGBuildL
    where
     doAdd mAssertions = Just (assertion : mAssertions ^. _Just)
   exec (AskIdentifiers cont) = asks ci_identifiers >>= cont
-  exec (AskInlinable cont) = asks ci_inlinableFs >>= cont
   exec (AskInstructions cont) = asks ci_instructions >>= cont
   exec (AskProgram cont) = asks ci_program >>= cont
   exec (GetFuncSpec name cont) = do

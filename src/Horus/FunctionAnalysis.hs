@@ -38,9 +38,8 @@ import Data.Map qualified as Map
   , keys
   , map
   , mapMaybe
-  , member
   , toList
-  , (!)
+  , (!), (!?)
   )
 import Data.Maybe (fromJust, fromMaybe, isNothing, mapMaybe)
 
@@ -67,6 +66,7 @@ import Horus.SW.ScopedName (ScopedName (ScopedName))
 import Horus.Util (invert, safeHead, safeLast)
 import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_specs))
 import Horus.SW.Std (stdSpecsList)
+import Horus.SW.FuncSpec (isFuncSpecTrivial, isExprTrivial)
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -195,16 +195,13 @@ labelNamesOfPc idents lblpc =
   , pc == lblpc
   ]
 
-isAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
-isAnnotated idents checks =
+isNontriviallyAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
+isNontriviallyAnnotated idents checks =
   any
     ( liftM2
         (\inv spec -> inv || spec)
-        -- (\inv pre post -> inv || pre || post)
-        (`Map.member` cd_invariants checks)
-        (`Map.member` cd_specs checks)
-        -- (`Map.member` fs_pre (c_preConds checks))
-        -- (`Map.member` fs_post (c_postConds checks))
+        (maybe False (not . isFuncSpecTrivial) . (cd_specs checks Map.!?))
+        (maybe False (not . isExprTrivial) . (cd_invariants checks Map.!?))
     )
     . labelNamesOfPc idents
 
@@ -233,7 +230,7 @@ inlinableFuns rows prog checks =
  where
   idents = p_identifiers prog
   functions = functionsOf rows prog
-  notIsAnnotated = not . isAnnotated idents checks
+  notIsAnnotated = not . isNontriviallyAnnotated idents checks
   notIsAnnotatedLater f = maybe True (`notElem` map fst stdSpecsList) (fNameOfPc idents f)
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls

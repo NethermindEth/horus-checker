@@ -41,10 +41,13 @@ interpret = iterM exec . runGlobalL
     ci <- asks e_contractInfo
     ci_getCallee ci inst >>= cont
   exec (GetConfig cont) = asks e_config >>= liftIO . readIORef >>= cont
+  exec (GetContractDef cont) = asks (ci_contractDef . e_contractInfo) >>= cont
   exec (GetFuncSpec name cont) = do
     ci <- asks e_contractInfo
     cont (ci_getFuncSpec ci name)
-  exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont
+  exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont  
+  exec (GetInstructions cont) = asks (ci_instructions . e_contractInfo) >>= cont
+  exec (GetProgram cont) = asks (ci_program . e_contractInfo) >>= cont
   exec (GetSources cont) = asks (ci_sources . e_contractInfo) >>= cont
   exec (SetConfig conf cont) = do
     configRef <- asks e_config

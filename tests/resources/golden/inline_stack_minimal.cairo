@@ -25,7 +25,7 @@ namespace _Stack:
     end
 end
 
-# @post res == 11
+# @post $Return.res == 11
 func main_() -> (res : felt):
     let (stack) = _Stack.empty()
     let (stack) = _Stack.lit(stack, 5)

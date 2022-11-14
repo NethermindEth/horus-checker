@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.Module
   ( Module (..)
   , ModuleL (..)
@@ -14,6 +15,7 @@ where
 import Control.Applicative ((<|>))
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
+import Control.Monad (unless)
 import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
@@ -36,8 +38,9 @@ import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.CallStack (CallStack, initialWithFunc, push, pop, stackTrace, callerPcOfCallEntry, top, calledFOfCallEntry)
 import Horus.FunctionAnalysis (FuncOp (ArcCall, ArcRet), FInfo, sizeOfCall, isRetArc)
-import Control.Monad (unless)
 import Horus.Label (moveLabel)
+
+import Debug.Trace
 
 data Module = Module
   { m_spec :: ModuleSpec
@@ -160,6 +163,10 @@ extractPlainBuilder fs@(FuncSpec _pre _post state)
 gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ (uncurry (gatherFromSource cfg))
 
+-- TODO(remove me)
+-- dbgShowOutArcs :: [(Label, [LabeledInst], ArcCondition, FInfo)] -> String
+-- dbgShowOutArcs xs = show (map (\(l, ys, arccon, finfo) -> (l, map (\(lbl, inst) -> (lbl, i_imm inst)) ys, arccon, finfo)) xs)
+
 gatherFromSource :: CFG -> Function -> FuncSpec -> ModuleL ()
 gatherFromSource cfg function fSpec =
   visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich (fu_pc function) ACNone Nothing
@@ -168,20 +175,26 @@ gatherFromSource cfg function fSpec =
            SpecBuilder -> Label -> ArcCondition -> FInfo -> ModuleL ()
   visit oracle callstack acc builder l arcCond f =
     visiting (stackTrace callstack', l) $ \alreadyVisited ->
+      -- trace ("visiting: " ++ show (stackTrace callstack', l) ++ " with instructions :" ++ show acc ++ " associated assertions: " ++ show (cfg_assertions cfg ^. ix l)) $
       if alreadyVisited then visitLoop builder else visitLinear builder
    where
     visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
     visitLoop (SBPlain pre)
       | null assertions = throwError (ELoopNoInvariant l)
-      | otherwise = emitPlain pre (Expr.and assertions)
+      | otherwise =
+        -- trace ("emitting plain LOOP - pre: " ++ show pre ++ " post: " ++ show (Expr.and assertions))
+                    emitPlain pre (Expr.and assertions)
 
     visitLinear SBRich
-      | onFinalNode = emitRich
+      | onFinalNode =
+        -- trace "emitting rich"
+          emitRich
       | null assertions = visitArcs oracle' acc builder l
       | otherwise = extractPlainBuilder fSpec >>= visitLinear
     visitLinear (SBPlain pre)
       | null assertions = visitArcs oracle' acc builder l
       | otherwise = do
+          -- traceM ("emitting plain LINEAR - pre: " ++ show pre ++ " post: " ++ show (Expr.and assertions))
           emitPlain pre (Expr.and assertions)
           visitArcs Map.empty [] (SBPlain (Expr.and assertions)) l
 
@@ -190,6 +203,11 @@ gatherFromSource cfg function fSpec =
       Just (ArcCall fCallerPc fCalledF) -> push (fCallerPc, fCalledF) callstack
       Just ArcRet -> snd $ pop callstack
     oracle' = updateOracle arcCond callstack' oracle
+
+    -- isSingletonTrue :: [Expr TBool] -> Bool
+    -- isSingletonTrue [Expr.True] = True
+    -- isSingletonTrue _ = False
+
     assertions = cfg_assertions cfg ^. ix l
     onFinalNode = null (cfg_arcs cfg ^. ix l)
     emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle' (calledFOfCallEntry $ top callstack') l)
@@ -197,11 +215,12 @@ gatherFromSource cfg function fSpec =
 
     visitArcs newOracle acc' pre l' = do
       let outArcs = cfg_arcs cfg ^. ix l'
+      -- traceM ("my out arcs: " ++ show outArcs)
       unless (null outArcs) $
         let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==)
             outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
         in for_ outArcs' $ \(lTo, insts, test, f') ->
-              visit newOracle callstack' (acc' <> insts) pre lTo test f'
+             visit newOracle callstack' (acc' <> insts) pre lTo test f'
 
 updateOracle ::
   ArcCondition ->

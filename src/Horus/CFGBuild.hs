@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.CFGBuild
   ( CFGBuildL (..)
   , ArcCondition (..)
@@ -12,6 +13,7 @@ where
 
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
+import Control.Monad (when)
 import Data.Coerce (coerce)
 import Data.Foldable (forM_, for_, toList)
 import Data.List.NonEmpty (NonEmpty (..))
@@ -21,6 +23,7 @@ import Data.Map qualified as Map (toList, toList)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Maybe (fromMaybe)
 import Lens.Micro.GHC ()
 
 import Horus.FunctionAnalysis
@@ -38,15 +41,18 @@ import Horus.Instruction
   , OpCode (..)
   , PcUpdate (..)
   , getNextPc
-  
+
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Program (..), Identifiers)
-import Horus.SW.FuncSpec (FuncSpec (..))
-import Horus.SW.Identifier (Identifier (IFunction, ILabel))
+import Horus.SW.FuncSpec (FuncSpec' (fs'_pre, fs'_post))
+import Horus.SW.Identifier (Identifier (IFunction, ILabel), Function (fu_pc))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (appendList, whenJustM)
+import Horus.Expr qualified as Expr
+
+import Debug.Trace (trace)
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -56,10 +62,9 @@ data CFGBuildF a
   | AddArc Label Label [LabeledInst] ArcCondition FInfo a
   | AddAssertion Label (Expr TBool) a
   | AskIdentifiers (Identifiers -> a)
-  | AskInlinable (Set Label -> a)
   | AskInstructions ([LabeledInst] -> a)
   | AskProgram (Program -> a)
-  | GetFuncSpec ScopedName (FuncSpec -> a)
+  | GetFuncSpec ScopedName (FuncSpec' -> a)
   | GetInvariant ScopedName (Maybe (Expr TBool) -> a)
   | GetRets ScopedName ([Label] -> a)
   | Throw Text
@@ -89,16 +94,13 @@ addAssertion l assertion = liftF' (AddAssertion l assertion ())
 askIdentifiers :: CFGBuildL Identifiers
 askIdentifiers = liftF' (AskIdentifiers id)
 
-askInlinable :: CFGBuildL (Set Label)
-askInlinable = liftF' (AskInlinable id)
-
 askInstructions :: CFGBuildL [LabeledInst]
 askInstructions = liftF' (AskInstructions id)
 
 askProgram :: CFGBuildL Program
 askProgram = liftF' (AskProgram id)
 
-getFuncSpec :: ScopedName -> CFGBuildL FuncSpec
+getFuncSpec :: ScopedName -> CFGBuildL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
 
 getInvariant :: ScopedName -> CFGBuildL (Maybe (Expr TBool))
@@ -113,14 +115,13 @@ throw t = liftF' (Throw t)
 catch :: CFGBuildL a -> (Text -> CFGBuildL a) -> CFGBuildL a
 catch m h = liftF' (Catch m h id)
 
-buildCFG :: CFGBuildL ()
-buildCFG = do
+buildCFG :: Set Label -> CFGBuildL ()
+buildCFG inlinable = do
   labeledInsts <- askInstructions
   identifiers <- askIdentifiers
-  inlinable <- askInlinable
   prog <- askProgram
   buildFrame inlinable labeledInsts prog
-  addAssertions identifiers
+  addAssertions inlinable identifiers
 
 newtype Segment = Segment (NonEmpty LabeledInst)
   deriving (Show)
@@ -166,7 +167,9 @@ addArcsFrom inlinable prog rows s
       let owner = pcToFunOfProg prog ! endPc
           callers = callersOf rows owner
           returnAddrs = map (`moveLabel` sizeOfCall) callers
-       in forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
+       in 
+        -- trace ("owner: " ++ show owner ++ " callers: " ++ show callers ++ " returnAddrs: " ++ show returnAddrs)
+          forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
   | JumpAbs <- i_pcUpdate endInst =
       let lTo = Label (fromInteger (i_imm endInst))
        in addArc' lFrom lTo (init insts)
@@ -187,13 +190,19 @@ addArcsFrom inlinable prog rows s
   lIinst@(endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
 
-addAssertions :: Identifiers -> CFGBuildL ()
-addAssertions identifiers = do
+-- TODO(the conditions are silly with the new model)
+addAssertions :: Set Label -> Identifiers -> CFGBuildL ()
+addAssertions inlinable identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> case def of
-    IFunction{} -> do
-      post <- fs_post <$> getFuncSpec idName
+    IFunction f -> do
+      pre <- fs'_pre <$> getFuncSpec idName
+      post <- fs'_post <$> getFuncSpec idName
       rets <- getRets idName
-      for_ rets (`addAssertion` post)
+      case (pre, post) of
+        (Nothing, Nothing) ->
+          when (fu_pc f  `Set.notMember` inlinable) $
+            for_ rets (`addAssertion` Expr.True)
+        _ -> for_ rets (`addAssertion` fromMaybe Expr.True post)
     ILabel pc -> do
       whenJustM (getInvariant idName) $ \inv ->
         pc `addAssertion` inv
