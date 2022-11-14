@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 module Horus.CairoSemantics
   ( encodeModule
@@ -54,7 +55,7 @@ import Horus.Module (Module (..), ModuleSpec (..), PlainSpec (..), richToPlainSp
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
-import Horus.SW.FuncSpec (FuncSpec (..))
+import Horus.SW.FuncSpec (FuncSpec (..), FuncSpec', toFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
@@ -62,6 +63,7 @@ import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 import Horus.Expr.Vars qualified as Util
 import Horus.Expr qualified as TSMT
+import Debug.Trace (trace)
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -77,7 +79,7 @@ data CairoSemanticsF a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
   | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
   | GetCallee LabeledInst (ScopedName -> a)
-  | GetFuncSpec ScopedName (FuncSpec -> a)
+  | GetFuncSpec ScopedName (FuncSpec' -> a)
   | GetApTracking Label (ApTracking -> a)
   | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
@@ -111,7 +113,7 @@ declareMem address = liftF (DeclareMem address id)
 getCallee :: LabeledInst -> CairoSemanticsL ScopedName
 getCallee call = liftF (GetCallee call id)
 
-getFuncSpec :: ScopedName -> CairoSemanticsL FuncSpec
+getFuncSpec :: ScopedName -> CairoSemanticsL FuncSpec'
 getFuncSpec name = liftF (GetFuncSpec name id)
 
 declareLocalMem :: Expr TFelt -> CairoSemanticsL MemoryVariable
@@ -211,14 +213,14 @@ encodeApTracking traceDescr ApTracking{..} =
   Expr.const ("ap!" <> traceDescr <> "@" <> tShow at_group) + fromIntegral at_offset
 
 getAp :: Label -> CairoSemanticsL (Expr TFelt)
-getAp pc = getStackTraceDescr >>= \trace -> getApTracking pc <&> encodeApTracking trace
+getAp pc = getStackTraceDescr >>= \stackTrace -> getApTracking pc <&> encodeApTracking stackTrace
 
 getFp :: CairoSemanticsL (Expr TFelt)
 getFp = getStackTraceDescr <&> Expr.const . ("fp!" <>)
 
-moduleStartAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
-moduleStartAp [] = pure (Expr.const "ap!")
-moduleStartAp ((pc0, _) : _) = getAp pc0
+moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
+moduleStartAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
+moduleStartAp Module{m_prog = (pc0, _) : _} = getAp pc0
 
 moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleEndAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
@@ -243,7 +245,7 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
 
 encodePlainSpec :: Module -> PlainSpec -> CairoSemanticsL ()
 encodePlainSpec mdl PlainSpec{..} = do
-  apStart <- moduleStartAp (m_prog mdl)
+  apStart <- moduleStartAp mdl
   apEnd <- moduleEndAp mdl
   fp <- getFp
   assert (fp .<= apStart)
@@ -324,12 +326,14 @@ mkInstructionConstraints jnzOracle lInst@(pc, Instruction{..}) = do
     Call -> mkCallConstraints pc fp lInst
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
     Nop -> do
-      trace <- getOracle
-      case jnzOracle Map.!? (trace, pc) of
+      stackTrace <- getOracle
+      case jnzOracle Map.!? (stackTrace, pc) of
         Just False -> assert (dst .== 0)
         Just True -> assert (dst ./= 0)
         Nothing -> pure ()
-    Ret -> pop
+    Ret ->
+      -- trace (show ("found ret at: " ++ show pc))
+      pop
 
 mkCallConstraints :: Label -> Expr TFelt -> LabeledInst -> CairoSemanticsL ()
 mkCallConstraints pc fp inst =
@@ -345,7 +349,7 @@ mkCallConstraints pc fp inst =
         push stackFrame
         canInline <- isInlinable $ uncheckedCallDestination inst
         unless canInline $ do
-          (FuncSpec pre post storage) <- getCallee inst >>= getFuncSpec
+          (FuncSpec pre post storage) <- (getCallee inst >>= getFuncSpec) <&> toFuncSpec
           preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp pre
           let pre' = suffixLogicalVariables lvarSuffix pre
               post' = suffixLogicalVariables lvarSuffix post

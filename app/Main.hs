@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Main (main) where
 
 import Control.Applicative ((<**>))
@@ -20,11 +21,14 @@ import Options.Applicative
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdSpecs)
-import Horus.ContractInfo (mkContractInfo)
+import Horus.ContractInfo (mkContractInfo, ContractInfo (ci_functionNames, ci_getFuncSpec))
 import Horus.Global (SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (Env (..), run)
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
+
+import Control.Monad (forM_)
+import Debug.Trace (traceM)
 
 type EIO = ExceptT Text IO
 
@@ -32,6 +36,8 @@ main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdSpecs %~ (<> stdSpecs)
   contractInfo <- mkContractInfo contract
+  -- let functions = ci_functionNames contractInfo
+  -- liftIO (forM_ functions (\f -> traceM ("f: " ++ show f ++ "fun: " ++ show (ci_getFuncSpec contractInfo f))))
   configRef <- liftIO (newIORef arg_config)
   let env = Global.Env{e_config = configRef, e_contractInfo = contractInfo}
   infos <- liftIO (Global.run env solveContract) >>= liftEither

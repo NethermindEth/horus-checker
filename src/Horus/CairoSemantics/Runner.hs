@@ -175,7 +175,7 @@ interpret = iterM exec
     ci <- ask
     ci_getApTracking ci label >>= cont
   exec (IsInlinable label cont) = do
-    inlinableFs <- asks ci_inlinableFs
+    inlinableFs <- asks ci_inlinable
     cont (label `elem` inlinableFs)
   exec (GetStackTraceDescr cont) = do
     fNames <- asks ci_functionNames
