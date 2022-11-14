@@ -1,0 +1,2073 @@
+CFG
+    { cfg_vertices =
+        [ Label 30
+        , Label 28
+        , Label 26
+        , Label 24
+        , Label 22
+        , Label 20
+        , Label 18
+        , Label 17
+        , Label 15
+        , Label 13
+        , Label 12
+        , Label 11
+        , Label 9
+        , Label 7
+        , Label 6
+        , Label 5
+        , Label 3
+        , Label 2
+        , Label 0
+        ]
+    , cfg_arcs = fromList
+        [
+            ( Label 0
+            ,
+                [
+                    ( Label 2
+                    ,
+                        [
+                            ( Label 0
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Add
+                                , i_pcUpdate = Regular
+                                , i_apUpdate = Add1
+                                , i_opCode = AssertEqual
+                                , i_op0Offset = - 3
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = KeepFp
+                                , i_imm = 1
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Nothing
+                    )
+                ]
+            )
+        ,
+            ( Label 2
+            ,
+                [
+                    ( Label 28
+                    ,
+                        [
+                            ( Label 2
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ,
+                    ( Label 17
+                    ,
+                        [
+                            ( Label 2
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ,
+                    ( Label 15
+                    ,
+                        [
+                            ( Label 2
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ,
+                    ( Label 9
+                    ,
+                        [
+                            ( Label 2
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ]
+            )
+        ,
+            ( Label 3
+            ,
+                [
+                    ( Label 5
+                    ,
+                        [
+                            ( Label 3
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Add
+                                , i_pcUpdate = Regular
+                                , i_apUpdate = Add1
+                                , i_opCode = AssertEqual
+                                , i_op0Offset = - 3
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = KeepFp
+                                , i_imm = - 1
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Nothing
+                    )
+                ]
+            )
+        ,
+            ( Label 5
+            ,
+                [
+                    ( Label 11
+                    ,
+                        [
+                            ( Label 5
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ]
+            )
+        ,
+            ( Label 6
+            ,
+                [
+                    ( Label 7
+                    ,
+                        [
+                            ( Label 6
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = Regular
+                                , i_apUpdate = Add1
+                                , i_opCode = AssertEqual
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 3
+                                , i_dstOffset = 0
+                                , i_fpUpdate = KeepFp
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Nothing
+                    )
+                ]
+            )
+        ,
+            ( Label 7
+            ,
+                [
+                    ( Label 0
+                    ,
+                        [
+                            ( Label 7
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 7
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 7 Label 0 )
+                    )
+                ]
+            )
+        ,
+            ( Label 9
+            ,
+                [
+                    ( Label 3
+                    ,
+                        [
+                            ( Label 9
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 6
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 9 Label 3 )
+                    )
+                ]
+            )
+        ,
+            ( Label 11
+            ,
+                [
+                    ( Label 26
+                    ,
+                        [
+                            ( Label 11
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ,
+                    ( Label 22
+                    ,
+                        [
+                            ( Label 11
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ]
+            )
+        ,
+            ( Label 12
+            ,
+                [
+                    ( Label 13
+                    ,
+                        [
+                            ( Label 12
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = Regular
+                                , i_apUpdate = Add1
+                                , i_opCode = AssertEqual
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 3
+                                , i_dstOffset = 0
+                                , i_fpUpdate = KeepFp
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Nothing
+                    )
+                ]
+            )
+        ,
+            ( Label 13
+            ,
+                [
+                    ( Label 0
+                    ,
+                        [
+                            ( Label 13
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 13
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 13 Label 0 )
+                    )
+                ]
+            )
+        ,
+            ( Label 15
+            ,
+                [
+                    ( Label 0
+                    ,
+                        [
+                            ( Label 15
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 15
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 15 Label 0 )
+                    )
+                ]
+            )
+        ,
+            ( Label 17
+            ,
+                [
+                    ( Label 30
+                    ,
+                        [
+                            ( Label 17
+                            , Instruction
+                                { i_dstRegister = FramePointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = RegisterSource FramePointer
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpAbs
+                                , i_apUpdate = NoUpdate
+                                , i_opCode = Ret
+                                , i_op0Offset = - 1
+                                , i_op1Offset = - 1
+                                , i_dstOffset = - 2
+                                , i_fpUpdate = Dst
+                                , i_imm = 0
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just ArcRet
+                    )
+                ]
+            )
+        ,
+            ( Label 18
+            ,
+                [
+                    ( Label 20
+                    ,
+                        [
+                            ( Label 18
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = FramePointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = Regular
+                                , i_apUpdate = Add1
+                                , i_opCode = AssertEqual
+                                , i_op0Offset = - 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = KeepFp
+                                , i_imm = 41
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Nothing
+                    )
+                ]
+            )
+        ,
+            ( Label 20
+            ,
+                [
+                    ( Label 6
+                    ,
+                        [
+                            ( Label 20
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 14
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 20 Label 6 )
+                    )
+                ]
+            )
+        ,
+            ( Label 22
+            ,
+                [
+                    ( Label 24
+                    ,
+                        [
+                            ( Label 22
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Add
+                                , i_pcUpdate = Regular
+                                , i_apUpdate = Add1
+                                , i_opCode = AssertEqual
+                                , i_op0Offset = - 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = KeepFp
+                                , i_imm = 1
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Nothing
+                    )
+                ]
+            )
+        ,
+            ( Label 24
+            ,
+                [
+                    ( Label 6
+                    ,
+                        [
+                            ( Label 24
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 18
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 24 Label 6 )
+                    )
+                ]
+            )
+        ,
+            ( Label 26
+            ,
+                [
+                    ( Label 0
+                    ,
+                        [
+                            ( Label 26
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 26
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 26 Label 0 )
+                    )
+                ]
+            )
+        ,
+            ( Label 28
+            ,
+                [
+                    ( Label 12
+                    ,
+                        [
+                            ( Label 28
+                            , Instruction
+                                { i_dstRegister = AllocationPointer
+                                , i_op0Register = AllocationPointer
+                                , i_op1Source = Imm
+                                , i_resLogic = Op1
+                                , i_pcUpdate = JumpRel
+                                , i_apUpdate = Add2
+                                , i_opCode = Call
+                                , i_op0Offset = 1
+                                , i_op1Offset = 1
+                                , i_dstOffset = 0
+                                , i_fpUpdate = ApPlus2
+                                , i_imm = - 16
+                                }
+                            )
+                        ]
+                    , ACNone
+                    , Just
+                        ( ArcCall Label 28 Label 12 )
+                    )
+                ]
+            )
+        ]
+    , cfg_assertions = fromList
+        [
+            ( Label 2
+            , [ True ]
+            )
+        ,
+            ( Label 5
+            , [ True ]
+            )
+        ,
+            ( Label 11
+            , [ True ]
+            )
+        ,
+            ( Label 17
+            , [ True ]
+            )
+        ,
+            ( Label 30
+            ,
+                [
+                    ( Fun "=" :*: Felt 46 ) :*:
+                    ( Fun "memory" :*:
+                        (
+                            ( Fun "+" :*: Fun "ap" ) :*: Felt
+                            ( - 1 )
+                        )
+                    )
+                ,
+                    ( Fun "=" :*: Felt 46 ) :*:
+                    ( Fun "memory" :*:
+                        (
+                            ( Fun "+" :*: Fun "ap" ) :*: Felt
+                            ( - 1 )
+                        )
+                    )
+                ]
+            )
+        ]
+    }
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre =
+                ( Fun "=" :*: Fun "ap" ) :*: Fun "fp"
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 12
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = - 3
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 13
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 13
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[ap!<root>@3]
+MEM!2=[(+ fp!<root> (- 3))]
+MEM!3=[(+ ap!<root>@3 1)]
+MEM!4=[(+ ap!<root>@3 2)]
+MEM!5=[ap!<13=succ/root>@0]
+MEM!6=[(+ fp!<13=succ/root> (- 3))]
+# Assert
+(<= fp!<root> ap!<root>@3)
+(= ap!<root>@3 fp!<root>)
+(= MEM!2 MEM!1)
+(and (= fp!<13=succ/root> (+ ap!<root>@3 3)) (= MEM!3 fp!<root>) (= MEM!4 15))
+(= (+ MEM!6 1) MEM!5)
+(= (+ ap!<13=succ/13=succ/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 15
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 15
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@3 4)]
+MEM!3=[(+ ap!<root>@3 5)]
+MEM!4=[ap!<15=succ/root>@0]
+MEM!5=[(+ fp!<15=succ/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(and (= fp!<15=succ/root> (+ ap!<root>@3 6)) (= MEM!2 fp!<root>) (= MEM!3 17))
+(= (+ MEM!5 1) MEM!4)
+(= (+ ap!<15=succ/root>@0 1) (+ ap!<root>@3 4))
+(= (+ ap!<15=succ/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 12
+    , m_lastPc = Label 17
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(= (+ ap!<root>@0 1) (+ ap!<root>@3 7))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre =
+                ( Fun "=" :*: Fun "ap" ) :*: Fun "fp"
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 6
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = - 3
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 7
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 7
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[ap!<root>@2]
+MEM!2=[(+ fp!<root> (- 3))]
+MEM!3=[(+ ap!<root>@2 1)]
+MEM!4=[(+ ap!<root>@2 2)]
+MEM!5=[ap!<7=succ/root>@0]
+MEM!6=[(+ fp!<7=succ/root> (- 3))]
+# Assert
+(<= fp!<root> ap!<root>@2)
+(= ap!<root>@2 fp!<root>)
+(= MEM!2 MEM!1)
+(and (= fp!<7=succ/root> (+ ap!<root>@2 3)) (= MEM!3 fp!<root>) (= MEM!4 9))
+(= (+ MEM!6 1) MEM!5)
+(= (+ ap!<7=succ/7=succ/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 9
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 6
+                }
+            )
+        ,
+            ( Label 3
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = - 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 3
+    , m_lastPc = Label 5
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@2 4)]
+MEM!3=[(+ ap!<root>@2 5)]
+MEM!4=[ap!<9=pred/root>@1]
+MEM!5=[(+ fp!<9=pred/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(and (= fp!<9=pred/root> (+ ap!<root>@2 6)) (= MEM!2 fp!<root>) (= MEM!3 11))
+(= (+ MEM!5 (- 1)) MEM!4)
+(= (+ ap!<9=pred/root>@0 1) (+ ap!<root>@2 4))
+(= (+ ap!<9=pred/root>@1 1) (+ ap!<root>@1 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 5
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 6
+    , m_lastPc = Label 11
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+# Assert
+(<= fp!<root> (+ ap!<root>@1 1))
+true
+(= (+ ap!<root>@1 1) (+ ap!<root>@2 7))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre =
+                ( Fun "=" :*: Fun "ap" ) :*: Fun "fp"
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 18
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 41
+                }
+            )
+        ,
+            ( Label 20
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 14
+                }
+            )
+        ,
+            ( Label 6
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = - 3
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 7
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 7
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[ap!<root>@4]
+MEM!2=[(+ ap!<root>@4 1)]
+MEM!3=[(+ ap!<root>@4 2)]
+MEM!4=[ap!<20=id/root>@2]
+MEM!5=[(+ fp!<20=id/root> (- 3))]
+MEM!6=[(+ ap!<20=id/root>@2 1)]
+MEM!7=[(+ ap!<20=id/root>@2 2)]
+MEM!8=[ap!<7=succ/20=id/root>@0]
+MEM!9=[(+ fp!<7=succ/20=id/root> (- 3))]
+# Assert
+(<= fp!<root> ap!<root>@4)
+(= ap!<root>@4 fp!<root>)
+(= 41 MEM!1)
+(and (= fp!<20=id/root> (+ ap!<root>@4 3)) (= MEM!2 fp!<root>) (= MEM!3 22))
+(= MEM!5 MEM!4)
+(and (= fp!<7=succ/20=id/root> (+ ap!<20=id/root>@2 3)) (= MEM!6 fp!<20=id/root>) (= MEM!7 9))
+(= (+ MEM!9 1) MEM!8)
+(= (+ ap!<7=succ/20=id/7=succ/20=id/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 9
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 6
+                }
+            )
+        ,
+            ( Label 3
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = - 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 3
+    , m_lastPc = Label 5
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@2 4)]
+MEM!3=[(+ ap!<root>@2 5)]
+MEM!4=[ap!<9=pred/root>@1]
+MEM!5=[(+ fp!<9=pred/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(and (= fp!<9=pred/root> (+ ap!<root>@2 6)) (= MEM!2 fp!<root>) (= MEM!3 11))
+(= (+ MEM!5 (- 1)) MEM!4)
+(= (+ ap!<9=pred/root>@0 1) (+ ap!<root>@2 4))
+(= (+ ap!<9=pred/root>@1 1) (+ ap!<root>@1 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 5
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 6
+    , m_lastPc = Label 11
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+# Assert
+(<= fp!<root> (+ ap!<root>@1 1))
+true
+(= (+ ap!<root>@1 1) (+ ap!<root>@2 7))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 11
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 22
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ,
+            ( Label 24
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 18
+                }
+            )
+        ,
+            ( Label 6
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = - 3
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 7
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 7
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@4 10)]
+MEM!3=[(+ ap!<root>@4 9)]
+MEM!4=[(+ ap!<root>@4 11)]
+MEM!5=[(+ ap!<root>@4 12)]
+MEM!6=[ap!<24=id/root>@2]
+MEM!7=[(+ fp!<24=id/root> (- 3))]
+MEM!8=[(+ ap!<24=id/root>@2 1)]
+MEM!9=[(+ ap!<24=id/root>@2 2)]
+MEM!10=[ap!<7=succ/24=id/root>@0]
+MEM!11=[(+ fp!<7=succ/24=id/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@2 7))
+true
+(= (+ MEM!3 1) MEM!2)
+(and (= fp!<24=id/root> (+ ap!<root>@4 13)) (= MEM!4 fp!<root>) (= MEM!5 26))
+(= MEM!7 MEM!6)
+(and (= fp!<7=succ/24=id/root> (+ ap!<24=id/root>@2 3)) (= MEM!8 fp!<24=id/root>) (= MEM!9 9))
+(= (+ MEM!11 1) MEM!10)
+(= (+ ap!<7=succ/24=id/root>@2 7) (+ ap!<24=id/root>@4 10))
+(= (+ ap!<7=succ/24=id/24=id/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 9
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 6
+                }
+            )
+        ,
+            ( Label 3
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = - 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 3
+    , m_lastPc = Label 5
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@2 4)]
+MEM!3=[(+ ap!<root>@2 5)]
+MEM!4=[ap!<9=pred/root>@1]
+MEM!5=[(+ fp!<9=pred/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(and (= fp!<9=pred/root> (+ ap!<root>@2 6)) (= MEM!2 fp!<root>) (= MEM!3 11))
+(= (+ MEM!5 (- 1)) MEM!4)
+(= (+ ap!<9=pred/root>@0 1) (+ ap!<root>@2 4))
+(= (+ ap!<9=pred/root>@1 1) (+ ap!<root>@1 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 5
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 6
+    , m_lastPc = Label 11
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+# Assert
+(<= fp!<root> (+ ap!<root>@1 1))
+true
+(= (+ ap!<root>@1 1) (+ ap!<root>@2 7))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 11
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 26
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 26
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@4 20)]
+MEM!3=[(+ ap!<root>@4 21)]
+MEM!4=[ap!<26=succ/root>@0]
+MEM!5=[(+ fp!<26=succ/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@2 7))
+true
+(and (= fp!<26=succ/root> (+ ap!<root>@4 22)) (= MEM!2 fp!<root>) (= MEM!3 28))
+(= (+ MEM!5 1) MEM!4)
+(= (+ ap!<26=succ/root>@2 7) (+ ap!<root>@4 20))
+(= (+ ap!<26=succ/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 28
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 16
+                }
+            )
+        ,
+            ( Label 12
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 1
+                , i_op1Offset = - 3
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 13
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 13
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@4 23)]
+MEM!3=[(+ ap!<root>@4 24)]
+MEM!4=[ap!<28=addtwo/root>@3]
+MEM!5=[(+ fp!<28=addtwo/root> (- 3))]
+MEM!6=[(+ ap!<28=addtwo/root>@3 1)]
+MEM!7=[(+ ap!<28=addtwo/root>@3 2)]
+MEM!8=[ap!<13=succ/28=addtwo/root>@0]
+MEM!9=[(+ fp!<13=succ/28=addtwo/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(and (= fp!<28=addtwo/root> (+ ap!<root>@4 25)) (= MEM!2 fp!<root>) (= MEM!3 30))
+(= MEM!5 MEM!4)
+(and (= fp!<13=succ/28=addtwo/root> (+ ap!<28=addtwo/root>@3 3)) (= MEM!6 fp!<28=addtwo/root>) (= MEM!7 15))
+(= (+ MEM!9 1) MEM!8)
+(= (+ ap!<13=succ/28=addtwo/root>@0 1) (+ ap!<28=addtwo/root>@4 23))
+(= (+ ap!<13=succ/28=addtwo/28=addtwo/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ,
+            ( Label 15
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = AllocationPointer
+                , i_op1Source = Imm
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpRel
+                , i_apUpdate = Add2
+                , i_opCode = Call
+                , i_op0Offset = 1
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = ApPlus2
+                , i_imm = - 15
+                }
+            )
+        ,
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+MEM!2=[(+ ap!<root>@3 4)]
+MEM!3=[(+ ap!<root>@3 5)]
+MEM!4=[ap!<15=succ/root>@0]
+MEM!5=[(+ fp!<15=succ/root> (- 3))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(and (= fp!<15=succ/root> (+ ap!<root>@3 6)) (= MEM!2 fp!<root>) (= MEM!3 17))
+(= (+ MEM!5 1) MEM!4)
+(= (+ ap!<15=succ/root>@0 1) (+ ap!<root>@3 4))
+(= (+ ap!<15=succ/root>@0 1) (+ ap!<root>@0 1))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 2
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 12
+    , m_lastPc = Label 17
+    }
+"# Memory
+MEM!1=[(+ fp!<root> (- 2))]
+# Assert
+(<= fp!<root> (+ ap!<root>@0 1))
+true
+(= (+ ap!<root>@0 1) (+ ap!<root>@3 7))
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre = True
+            , ps_post =
+                ( Fun "and" :*:
+                    (
+                        ( Fun "=" :*: Felt 46 ) :*:
+                        ( Fun "memory" :*:
+                            (
+                                ( Fun "+" :*: Fun "ap" ) :*: Felt
+                                ( - 1 )
+                            )
+                        )
+                    )
+                ) :*:
+                (
+                    ( Fun "=" :*: Felt 46 ) :*:
+                    ( Fun "memory" :*:
+                        (
+                            ( Fun "+" :*: Fun "ap" ) :*: Felt
+                            ( - 1 )
+                        )
+                    )
+                )
+            }
+        )
+    , m_prog =
+        [
+            ( Label 17
+            , Instruction
+                { i_dstRegister = FramePointer
+                , i_op0Register = FramePointer
+                , i_op1Source = RegisterSource FramePointer
+                , i_resLogic = Op1
+                , i_pcUpdate = JumpAbs
+                , i_apUpdate = NoUpdate
+                , i_opCode = Ret
+                , i_op0Offset = - 1
+                , i_op1Offset = - 1
+                , i_dstOffset = - 2
+                , i_fpUpdate = Dst
+                , i_imm = 0
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 18
+    , m_lastPc = Label 30
+    }
+"# Memory
+MEM!1=[(+ ap!<root>@4 31)]
+MEM!2=[(+ fp!<root> (- 2))]
+# Assert
+(<= fp!<root> (+ ap!<root>@3 7))
+true
+(= (+ ap!<root>@3 7) (+ ap!<root>@4 32))
+# Expect
+(and (= 46 MEM!1) (= 46 MEM!1))"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre =
+                ( Fun "=" :*: Fun "ap" ) :*: Fun "fp"
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 3
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = - 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 3
+    , m_lastPc = Label 5
+    }
+"# Memory
+MEM!1=[ap!<root>@1]
+MEM!2=[(+ fp!<root> (- 3))]
+# Assert
+(<= fp!<root> ap!<root>@1)
+(= ap!<root>@1 fp!<root>)
+(= (+ MEM!2 (- 1)) MEM!1)
+true
+# Expect
+true"
+Module
+    { m_spec = MSPlain
+        ( PlainSpec
+            { ps_pre =
+                ( Fun "=" :*: Fun "ap" ) :*: Fun "fp"
+            , ps_post = True
+            }
+        )
+    , m_prog =
+        [
+            ( Label 0
+            , Instruction
+                { i_dstRegister = AllocationPointer
+                , i_op0Register = FramePointer
+                , i_op1Source = Imm
+                , i_resLogic = Add
+                , i_pcUpdate = Regular
+                , i_apUpdate = Add1
+                , i_opCode = AssertEqual
+                , i_op0Offset = - 3
+                , i_op1Offset = 1
+                , i_dstOffset = 0
+                , i_fpUpdate = KeepFp
+                , i_imm = 1
+                }
+            )
+        ]
+    , m_jnzOracle = fromList []
+    , m_calledF = Label 0
+    , m_lastPc = Label 2
+    }
+"# Memory
+MEM!1=[ap!<root>@0]
+MEM!2=[(+ fp!<root> (- 3))]
+# Assert
+(<= fp!<root> ap!<root>@0)
+(= ap!<root>@0 fp!<root>)
+(= (+ MEM!2 1) MEM!1)
+true
+# Expect
+true"
+addtwo
+Unsat
+{}
+Unsat
+{}
+Unsat
+id
+Unsat
+{}
+Unsat
+{}
+Unsat
+main
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Unsat
+{}
+Sat
+pred
+Unsat
+succ
+Unsat

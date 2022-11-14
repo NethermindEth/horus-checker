@@ -5,9 +5,9 @@ import Data.Foldable (asum)
 import Data.Function ((&))
 import Data.Functor ((<&>))
 import Data.Map (Map)
-import Data.Map qualified as Map (fromList, toList, (!), (!?), keys, findWithDefault, union, foldrWithKey, insert, empty, lookup, fromListWith, insertWith)
+import Data.Map qualified as Map (fromList, toList, (!), (!?), keys, union, foldrWithKey, insert, empty, lookup, fromListWith, insertWith)
 import Data.Maybe (mapMaybe)
-import Data.Set (Set)
+import Data.Set ( Set, fromList )
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (..))
@@ -17,16 +17,20 @@ import Horus.Label (Label)
 import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
-import Horus.SW.FuncSpec (FuncSpec, emptyFuncSpec)
+import Horus.SW.FuncSpec
+    ( FuncSpec,
+      FuncSpec'(..),
+      emptyFuncSpec',
+      FuncSpec(..), toFuncSpec )
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
 import Horus.FunctionAnalysis (inlinableFuns)
-import Data.Set (fromList)
 
 data ContractInfo = ContractInfo
-  { ci_inlinableFs :: Set Label
+  { ci_contractDef :: ContractDefinition
+  , ci_inlinable :: Set Label
   , ci_instructions :: [LabeledInst]
   , ci_identifiers :: Identifiers
   , ci_functionNames :: Map Label ScopedName
@@ -36,7 +40,7 @@ data ContractInfo = ContractInfo
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
   , ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
-  , ci_getFuncSpec :: ScopedName -> FuncSpec
+  , ci_getFuncSpec :: ScopedName -> FuncSpec'
   , ci_getInvariant :: ScopedName -> Maybe (Expr TBool)
   , ci_getCallee :: forall m. MonadError Text m => LabeledInst -> m ScopedName
   , ci_getRets :: forall m. MonadError Text m => ScopedName -> m [Label]
@@ -48,13 +52,15 @@ mkContractInfo cd = do
   retsByFun <- mkRetsByFun insts
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
+  let inlinable = fromList $ Map.keys $ inlinableFuns insts program cd
   pure
     ContractInfo
-      { ci_inlinableFs = fromList $ Map.keys $ inlinableFuns insts (cd_program cd) cd
+      { ci_contractDef = cd
+      , ci_inlinable = inlinable
       , ci_instructions = insts
       , ci_identifiers = identifiers
       , ci_functionNames = pcToFun
-      , ci_program = cd_program cd
+      , ci_program = program
       , ci_sources = sources
       , ci_storageVars = storageVarsNames
       , ci_getApTracking = getApTracking
@@ -74,6 +80,7 @@ mkContractInfo cd = do
     Map.fromList
       [ (pc, fun) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
       ]
+  program = cd_program cd
   storageVarsNames = Map.keys (cd_storageVars cd)
 
   functions :: [(ScopedName, Label)]
@@ -140,8 +147,16 @@ mkContractInfo cd = do
 
   -- TODO: getFuncSpec and getInvariant should check that the name is
   -- indeed a function or a label.
-  getFuncSpec :: ScopedName -> FuncSpec
-  getFuncSpec name = Map.findWithDefault emptyFuncSpec name allSpecs
+  -- getFuncSpec :: ScopedName -> FuncSpec'
+  -- getFuncSpec name = Map.findWithDefault emptyFuncSpec' name allSpecs
+
+  getFuncSpec :: ScopedName -> FuncSpec'
+  getFuncSpec name = maybe emptyFuncSpec'
+                       (\ FuncSpec{..} -> FuncSpec'{
+                            fs'_pre = Just fs_pre,
+                            fs'_post = Just fs_post,
+                            fs'_storage = fs_storage
+                       }) $ allSpecs Map.!? name
 
   allSpecs :: Map ScopedName FuncSpec
   allSpecs = Map.union (cd_specs cd) storageVarsSpecs
@@ -186,7 +201,7 @@ mkContractInfo cd = do
 
   mkSources :: [ScopedName] -> [(Function, FuncSpec)]
   mkSources generatedNames =
-    [ (f, getFuncSpec name)
+    [ (f, toFuncSpec (getFuncSpec name))
     | (name, IFunction f) <- Map.toList identifiers
     , name `notElem` generatedNames
     ]

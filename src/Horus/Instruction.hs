@@ -74,7 +74,10 @@ data Instruction = Instruction
   , i_fpUpdate :: FpUpdate
   , i_imm :: Integer
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Instruction where
+  show instr = "{instr imm: " ++ show (i_imm instr) ++ "}"
 
 type LabeledInst = (Label, Instruction)
 

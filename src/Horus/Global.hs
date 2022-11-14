@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.Global
   ( GlobalL (..)
   , GlobalF (..)
@@ -7,16 +8,17 @@ module Horus.Global
   )
 where
 
-import Control.Monad (when)
+import Control.Monad ( when, forM, forM_ )
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 import Data.Traversable (for)
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (Label, LabeledInst, buildCFG, CFGBuildL ())
+import Horus.CFGBuild (Label, LabeledInst, buildCFG, CFGBuildL)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
@@ -32,12 +34,21 @@ import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program ( Identifiers )
+import Horus.Program ( Identifiers, Program (Program) )
 import Horus.SW.Identifier ( Function(..) )
-import Horus.SW.FuncSpec (FuncSpec, fs_pre)
+import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow, whenJust)
 import Horus.SW.Std (trustedStdFuncs)
+import Horus.Expr qualified as Expr
+import Data.Set (Set, elems, fromList)
+import Data.Map qualified as Map
+import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
+import Horus.ContractDefinition (ContractDefinition)
+import Horus.Expr (Expr)
+import Horus.Expr.Type ( Ty(TBool) )
+import Data.List ((\\))
+import Data.Functor ((<&>))
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -54,8 +65,11 @@ data GlobalF a
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
   | GetCallee LabeledInst (ScopedName -> a)
   | GetConfig (Config -> a)
-  | GetFuncSpec ScopedName (FuncSpec -> a)
+  | GetContractDef (ContractDefinition -> a)
+  | GetFuncSpec ScopedName (FuncSpec' -> a)
   | GetIdentifiers (Identifiers -> a)
+  | GetInstructions ([LabeledInst] -> a)
+  | GetProgram (Program -> a)
   | GetSources ([(Function, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
@@ -94,8 +108,17 @@ getCallee inst = liftF' (GetCallee inst id)
 getConfig :: GlobalL Config
 getConfig = liftF' (GetConfig id)
 
-getFuncSpec :: ScopedName -> GlobalL FuncSpec
+getContractDef :: GlobalL ContractDefinition
+getContractDef = liftF' (GetContractDef id)
+
+getFuncSpec :: ScopedName -> GlobalL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
+
+getInstructions :: GlobalL [LabeledInst]
+getInstructions = liftF' (GetInstructions id)
+
+getProgram :: GlobalL Program
+getProgram = liftF' (GetProgram id)
 
 getSources :: GlobalL [(Function, FuncSpec)]
 getSources = liftF' (GetSources id)
@@ -200,7 +223,7 @@ checkMathsat m = do
   instUsesLvars i = falseIfError $ do
     callee <- getCallee i
     spec <- getFuncSpec callee
-    let lvars = gatherLogicalVariables (fs_pre spec)
+    let lvars = gatherLogicalVariables (fromMaybe Expr.True (fs'_pre spec))
     pure (not (null lvars))
 
   falseIfError a = a `catchError` const (pure False)
@@ -247,10 +270,19 @@ solveSMT es@(_, cs) = do
 
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
-  cfg <- runCFGBuildL buildCFG
-  verbosePrint cfg
-  modules <- makeModules (const True) cfg
+  instructions <- getInstructions
+  program <- getProgram
+  cd <- getContractDef
+  idents <- getIdentifiers
+  let inlinable = Map.keys $ inlinableFuns instructions program cd
+  cfg <- runCFGBuildL $ buildCFG $ fromList inlinable
+  cfgs <- for inlinable $ \f -> (runCFGBuildL . buildCFG . fromList $ inlinable \\ [f]) <&> (, (==f))
+  for_ cfgs $ verbosePrint . fst
+  modules <- concat <$>
+               for ((cfg, isStandardSource inlinable idents) : cfgs) (uncurry $ flip makeModules)
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers
       removeTrusted = filter (\m -> moduleName m `notElem` trustedStdFuncs)
   for (removeTrusted modules) solveModule
+ where
+  isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)
