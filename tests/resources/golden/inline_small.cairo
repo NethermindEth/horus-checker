@@ -3,7 +3,7 @@ func succ(x):
   ret
 end
 
-# @post res == x - 1
+# @post $Return.res == x - 1
 func pred(x) -> (res):
   [ap] = [fp - 3] - 1; ap++
   ret
@@ -16,7 +16,7 @@ func id(x):
   ret
 end
 
-# @post res == 43
+# @post $Return.res == 43
 func main() -> (res):
   [ap] = 41; ap++
   call id

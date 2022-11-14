@@ -1,0 +1,17 @@
+stupid_is_zero+TT
+Unknown
+Error: Storage access isn't allowed in a plain spec. 'range-check-bound'.
+stupid_is_zero+TF
+Unknown
+Error: Storage access isn't allowed in a plain spec. 'range-check-bound'.
+stupid_is_zero+F
+Unknown
+Error: Storage access isn't allowed in a plain spec. 'range-check-bound'.
+cairo.common.math.assert_le
+Unknown
+Error: Storage access isn't allowed in a plain spec. 'range-check-bound'.
+cairo.common.math.assert_nn
+Unsat
+cairo.common.math.unsigned_div_rem
+Unknown
+Error: Storage access isn't allowed in a plain spec. 'range-check-bound'.
