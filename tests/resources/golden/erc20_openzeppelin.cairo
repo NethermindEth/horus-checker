@@ -18,6 +18,11 @@ namespace SafeUint256:
 
     # Adds two integers.
     # Reverts if the sum overflows.
+    #
+    # @declare $a : Uint256
+    # @declare $b : Uint256
+    # @pre a == $a && b == $b
+    # @post a + b == c
     func add{
             syscall_ptr: felt*,
             pedersen_ptr: HashBuiltin*,
@@ -265,7 +270,7 @@ namespace ERC20:
         ) -> ():
         let (caller) = get_caller_address()
         # subtract allowance
-        _spend_allowance(sender, caller,  amount)
+        _spend_allowance(sender, caller, amount)
         # execute transfer
         _transfer(sender, recipient, amount)
         return ()
