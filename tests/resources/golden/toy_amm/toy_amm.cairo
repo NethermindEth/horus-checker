@@ -71,15 +71,36 @@ func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ra
 end
 
 # Swaps tokens between the given account and the pool.
-# @pre token_from != token_to
-# @pre token_from == 1 || token_from == 2
-# @pre token_to == 1 || token_to == 2
+#
+# @declare $old_pool_balance_from: felt
+# @declare $old_pool_balance_to: felt
+# @pre pool_balance(token_from) == $old_pool_balance_from
+# @pre pool_balance(token_to) == $old_pool_balance_to
+#
+# Tokens should be different
+# @pre (token_to == 1 && token_to == 2) || (token_to == 2 && token_to == 1)
+#
+# The account has enough balance
 # @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
-# @pre pool_balance(token_to) > 0
+#
+# The pool balances are positive
+# @pre pool_balance(token_to) >= 0
+# @pre pool_balance(token_from) >= 0
+#
+# Assumptions needed for unsigned_div_rem to not overflow
+# @pre pool_balance(token_from) + amount_from <= 10633823966279326983230456482242756608
+# @pre pool_balance(token_to) * amount_from < 2**128 * (pool_balance(token_from) + amount_from)
+#
+# Pool balance is updated
 # @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from
 # @storage_update pool_balance(token_to) := pool_balance(token_to) - $Return.amount_to
+#
+# Account balance is updated
 # @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
 # @storage_update account_balance(account_id, token_to) := account_balance(account_id, token_to) + $Return.amount_to
+#
+# The returned amount_to is correct (we can't predicate over the reminder)
+# @post $Return.amount_to == ($old_pool_balance_to * amount_from) / ($old_pool_balance_from + amount_from)
 func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, token_to : felt, amount_from : felt
 ) -> (amount_to : felt):
