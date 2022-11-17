@@ -78,7 +78,7 @@ end
 # @pre pool_balance(token_to) == $old_pool_balance_to
 #
 # Tokens should be different
-# @pre (token_to == 1 && token_from == 2) || (token_to == 2 && token_from == 1)
+# @pre (token_to == TOKEN_TYPE_A && token_from == TOKEN_TYPE_B) || (token_to == TOKEN_TYPE_B && token_from == TOKEN_TYPE_A)
 #
 # The account has enough balance
 # @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
@@ -100,7 +100,7 @@ end
 # @storage_update account_balance(account_id, token_to) := account_balance(account_id, token_to) + $Return.amount_to
 #
 # The returned amount_to is correct.
-# @post $Return.amount_to == ($old_pool_balance_to * amount_from) / ($old_pool_balance_from + amount_from)
+# post $Return.amount_to == ($old_pool_balance_to * amount_from) / ($old_pool_balance_from + amount_from)
 func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, token_to : felt, amount_from : felt
 ) -> (amount_to : felt):
