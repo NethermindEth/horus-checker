@@ -80,7 +80,7 @@ end
 # Tokens should be different
 # @pre (token_to == TOKEN_TYPE_A || token_to == TOKEN_TYPE_B)
 # @pre (token_from == TOKEN_TYPE_A || token_from == TOKEN_TYPE_B)
-# @pre (token_from != token_from)
+# @pre (token_to != token_from)
 #
 # The account has enough balance
 # @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
