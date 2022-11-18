@@ -1,0 +1,27 @@
+Toy AMM (Automated Market Maker)
+================================
+This subdirectory contains a cairo implementation of a simple automated market
+maker (`toy_amm.cairo`). There is an 'expected output' file called
+`toy_amm.gold` that contains the SMT judgements we expect for each module in
+this program.
+
+The `check.sh` script is for running `horus-compile` and `horus-check` together
+on a cairo program. You can use it like this:
+
+./check.sh toy_amm.cairo 5000
+
+The first argument is the input cairo program, the second argument is the
+`--timeout` flag for the SMT solvers. It runs using `z3` and `mathsat`.
+
+There are several other cairo programs, all of which are efforts to isolate a
+bug having to do with the call to `unsigned_div_rem()` in `do_swap()`, and the
+form in which we express certain preconditions.
+
+The millisecond suffixes indicate a rough estimate of how long the programs
+that ought to result in `Unsat` should take. Your mileage may vary, but since
+the SMTs run on a single core, it shouldn't vary *a ton*. This is just to give
+the user an idea of the order-of-magnitude so they don't set massive timeouts
+and sit there waiting for no reason.
+
+The script also dumps the time it took for `horus-check` to complete, and by
+default truncates output to five lines.
