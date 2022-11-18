@@ -29,13 +29,13 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
 
     # Calculate swap amount.
-    let (local amount_to, _) = unsigned_div_rem(
-        amount_from, amm_from_balance + amount_from
+    let (local amount_to) = unsigned_div_rem(
+        amm_from_balance + amount_from
     )
     return (amount_to=amount_to)
 end
 
 # @pre div <= 50
-func unsigned_div_rem{range_check_ptr}(value, div) -> (q, r):
-    return (1, 2)
+func unsigned_div_rem{range_check_ptr}(div) -> (r):
+    return (2)
 end
