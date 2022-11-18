@@ -3,6 +3,6 @@
 set -eu
 
 version="4.10.2"
-arch="arm64-osx-11.0"
 
+brew extract --version=$version z3 homebrew/cask
 brew install z3@$version

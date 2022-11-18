@@ -1,0 +1,7 @@
+horus-checker build command
+---------------------------
+C_INCLUDE_PATH="`xcrun --show-sdk-path`/usr/include/ffi" stack --extra-include-dirs=/opt/homebrew/opt/z3@4.10.2/include --extra-lib-dirs=/opt/homebrew/opt/z3@4.10.2/lib install
+
+horus-compile build command
+---------------------------
+CFLAGS=-I`brew --prefix gmp`/include LDFLAGS=-L`brew --prefix gmp`/lib poetry install
