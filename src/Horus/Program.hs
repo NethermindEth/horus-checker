@@ -5,20 +5,27 @@ module Horus.Program
   , FlowTrackingData (..)
   , ApTracking (..)
   , Identifiers
+  , sizeOfType
   )
 where
 
+import Control.Monad.Except (MonadError (..))
 import Data.Aeson (withObject, (.:))
 import Data.Aeson.Types (FromJSON (..), Parser)
+import Data.Foldable (fold)
 import Data.Functor ((<&>))
 import Data.Map (Map)
-import Data.Map qualified as Map (keys)
+import Data.Map qualified as Map (keys, (!?))
+import Data.Monoid (Sum (..))
 import Data.Text (Text)
+import Data.Traversable (for)
 import Numeric (readHex)
 
 import Horus.Label (Label (..))
-import Horus.SW.Identifier (Identifier)
+import Horus.SW.CairoType (CairoType (..))
+import Horus.SW.Identifier (Identifier (..), Struct (..))
 import Horus.SW.ScopedName (ScopedName)
+import Horus.Util (tShow)
 
 type Identifiers = Map ScopedName Identifier
 
@@ -88,3 +95,22 @@ parseHexInteger :: String -> Parser Integer
 parseHexInteger ('0' : 'x' : rest)
   | [(res, "")] <- readHex rest = pure res
 parseHexInteger arg = fail ("Can't parse '" <> arg <> "' as hex")
+
+sizeOfType :: MonadError Text m => CairoType -> Identifiers -> m Int
+sizeOfType TypeFelt _ = pure 1
+sizeOfType TypeCodeoffset _ = pure 1
+sizeOfType (TypePointer _) _ = pure 1
+sizeOfType (TypeTuple mems) identifiers =
+  getSum . fold
+    <$> for
+      mems
+      ( \(_, mbType) ->
+          case mbType of
+            Just t -> Sum <$> sizeOfType t identifiers
+            Nothing -> pure (Sum 1)
+      )
+sizeOfType (TypeStruct name) identifiers =
+  case identifiers Map.!? name of
+    Just (IStruct struct) -> pure $ st_size struct
+    Just _ -> throwError $ tShow name <> " is expected to be a struct type."
+    Nothing -> throwError $ "Unknown identifier: " <> tShow name <> "."
