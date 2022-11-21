@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.FunctionAnalysis
   ( pcToFunOfProg
   , callersOf
@@ -15,6 +16,10 @@ module Horus.FunctionAnalysis
   , isNormalArc
   , uninlinableFuns
   , sizeOfCall
+  , mkGeneratedNames
+  , storageVarsOfCD
+  , isAuxFunc
+  , hasStorage
   )
 where
 
@@ -39,7 +44,7 @@ import Data.Map qualified as Map
   , map
   , mapMaybe
   , toList
-  , (!), (!?)
+  , (!), (!?), member, lookup
   )
 import Data.Maybe (fromJust, fromMaybe, isNothing, mapMaybe)
 
@@ -64,9 +69,10 @@ import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
 -- import Horus.SW.Std (FuncSpec (fs_name), stdFuncs)
 import Horus.Util (invert, safeHead, safeLast)
-import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_specs))
+import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_specs, cd_storageVars, cd_program))
 import Horus.SW.Std (stdSpecsList)
 import Horus.SW.FuncSpec (isFuncSpecTrivial, isExprTrivial)
+import Data.Map ((!))
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -195,15 +201,28 @@ labelNamesOfPc idents lblpc =
   , pc == lblpc
   ]
 
-isNontriviallyAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
-isNontriviallyAnnotated idents checks =
+-- isNontriviallyAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
+-- isNontriviallyAnnotated idents checks =
+--   any
+--     ( liftM2
+--         (\inv spec -> inv || spec)
+--         (maybe False (not . isFuncSpecTrivial) . (cd_specs checks Map.!?))
+--         (maybe False (not . isExprTrivial) . (cd_invariants checks Map.!?))
+--     )
+--     . labelNamesOfPc idents
+
+isAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
+isAnnotated idents checks =
   any
     ( liftM2
         (\inv spec -> inv || spec)
-        (maybe False (not . isFuncSpecTrivial) . (cd_specs checks Map.!?))
-        (maybe False (not . isExprTrivial) . (cd_invariants checks Map.!?))
+        (`Map.member` cd_specs checks)
+        (`Map.member` cd_invariants checks)
     )
     . labelNamesOfPc idents
+
+hasStorage :: ScopedName -> ContractDefinition -> Bool
+hasStorage name cd = Just 0 == Map.lookup name (cd_storageVars cd)
 
 fMain :: ScopedName
 fMain = ScopedName ["__main__", "main"]
@@ -214,23 +233,59 @@ wrapperScope = "__wrappers__"
 isWrapper :: Label -> Identifiers -> Bool
 isWrapper f idents = outerScope (uncheckedFNameOfPc idents f) == wrapperScope
 
+fStorageRead :: ScopedName
+fStorageRead = ScopedName ["starkware", "starknet", "common", "syscalls", "storage_read"]
+
+fStorageWrite :: ScopedName
+fStorageWrite = ScopedName ["starkware", "starknet", "common", "syscalls", "storage_write"]
+
+mkGeneratedNames :: [ScopedName] -> [ScopedName]
+mkGeneratedNames = concatMap svNames
+  where
+   svNames sv = [sv <> "addr", sv <> "read", sv <> "write"]
+
+storageVarsOfCD :: ContractDefinition -> [ScopedName]
+storageVarsOfCD = Map.keys . cd_storageVars
+
+isGeneratedName :: ScopedName -> ContractDefinition -> Bool
+isGeneratedName fname cd = fname `elem` generatedNames
+  where generatedNames = mkGeneratedNames $ storageVarsOfCD cd
+
+isSvarFunc :: ScopedName -> ContractDefinition -> Bool
+isSvarFunc fname cd = isGeneratedName fname cd || fname `elem` [fStorageRead, fStorageWrite]
+
+fHash2 :: ScopedName
+fHash2 = ScopedName ["starkware", "cairo", "common", "hash", "hash2"]
+
+fAssert250bit :: ScopedName
+fAssert250bit = ScopedName ["starkware", "cairo", "common", "math", "assert_250_bit"]
+
+fNormalizeAddress :: ScopedName
+fNormalizeAddress = ScopedName ["starkware", "starknet", "common", "storage", "normalize_address"]
+
+isAuxFunc :: ScopedName -> ContractDefinition -> Bool
+isAuxFunc fname cd = isSvarFunc fname cd || fname `elem` [fHash2, fAssert250bit, fNormalizeAddress]
+
 sizeOfCall :: Int
 sizeOfCall = 2
 
 inlinableFuns :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map Label [LabeledInst]
-inlinableFuns rows prog checks =
+inlinableFuns rows prog cd =
   Map.filterWithKey
     ( \f _ ->
         f `elem` inlinable
           && notIsAnnotated f
           && notIsAnnotatedLater f
           && not (isWrapper f idents)
+          && not (isAuxFunc (fname f) cd)
+          && not (hasStorage (fname f) cd)
     )
     functions
  where
+  fname = uncheckedFNameOfPc (p_identifiers $ cd_program cd)
   idents = p_identifiers prog
   functions = functionsOf rows prog
-  notIsAnnotated = not . isNontriviallyAnnotated idents checks
+  notIsAnnotated = not . isAnnotated idents cd
   notIsAnnotatedLater f = maybe True (`notElem` map fst stdSpecsList) (fNameOfPc idents f)
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls

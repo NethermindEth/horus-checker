@@ -46,7 +46,7 @@ import Horus.Instruction
   )
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Program (..), Identifiers)
-import Horus.SW.FuncSpec (FuncSpec' (fs'_pre, fs'_post))
+import Horus.SW.FuncSpec (FuncSpec' (fs'_pre, fs'_post, fs'_storage))
 import Horus.SW.Identifier (Identifier (IFunction, ILabel), Function (fu_pc))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (appendList, whenJustM)
@@ -164,7 +164,10 @@ addArcsFrom inlinable prog rows s
             then addArc lFrom calleePc insts ACNone . Just $ ArcCall endPc calleePc
             else addArc' lFrom (nextSegmentLabel s) insts
   | Ret <- i_opCode endInst =
-      let owner = pcToFunOfProg prog ! endPc
+      let owner = pcToFunOfProg prog ! endPc in
+      if owner `Set.notMember` inlinable
+        then pure ()
+        else let
           callers = callersOf rows owner
           returnAddrs = map (`moveLabel` sizeOfCall) callers
        in 
@@ -197,6 +200,7 @@ addAssertions inlinable identifiers = do
     IFunction f -> do
       pre <- fs'_pre <$> getFuncSpec idName
       post <- fs'_post <$> getFuncSpec idName
+      -- storage <- fs'_storage <$> getFuncSpec idName
       rets <- getRets idName
       case (pre, post) of
         (Nothing, Nothing) ->

@@ -63,7 +63,8 @@ import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 import Horus.Expr.Vars qualified as Util
 import Horus.Expr qualified as TSMT
-import Debug.Trace (trace)
+import Debug.Trace (trace, traceM)
+import Horus.Expr.Vars qualified as Vars
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -178,10 +179,12 @@ isCtxRoot :: CairoSemanticsL Bool
 isCtxRoot = (callerOfRoot ==) . fst <$> top
 
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
-storageRemoval = Expr.transform step
+storageRemoval =
+  -- trace ("called storageRemovel on: " ++ show mexp) $
+                    Expr.transform step
  where
   step :: Expr b -> CairoSemanticsL (Expr b)
-  step (StorageVar name args) = readStorage (ScopedName.fromText name) args
+  step (StorageVar name args) =readStorage (ScopedName.fromText name) args
   step e = pure e
 
 substitute :: Text -> Expr TFelt -> Expr a -> Expr a
@@ -234,7 +237,7 @@ encodeModule m@Module{..} = case m_spec of
 encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
 encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   enableStorage
-  let fp = Expr.const @TFelt "fp!"
+  fp <- getFp
   apEnd <- moduleEndAp mdl
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec mdl plainSpec
@@ -341,21 +344,32 @@ mkCallConstraints pc fp inst =
       nextPc = getNextPc inst
       stackFrame = (pc, calleePc)
    in do
+        -- traceM ("In call:" ++ show calleePc)
         calleeFp <- withExecutionCtx stackFrame getFp
-        nextAp <- prepare pc calleeFp (Util.fp .== Util.ap + 2)
-        saveOldFp <- prepare pc fp (memory Util.ap .== Util.fp)
-        setNextPc <- prepare pc fp (memory (Util.ap + 1) .== fromIntegral (unLabel nextPc))
+        nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
+        saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
+        setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
         assert (TSMT.and [nextAp, saveOldFp, setNextPc])
         push stackFrame
         canInline <- isInlinable $ uncheckedCallDestination inst
         unless canInline $ do
           (FuncSpec pre post storage) <- (getCallee inst >>= getFuncSpec) <&> toFuncSpec
-          preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp pre
+          -- preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp pre #0
+          -- traceM ("my storage:" ++ show storage)
+          -- preparedPre <- prepare calleePc calleeFp =<< storageRemoval pre #0
           let pre' = suffixLogicalVariables lvarSuffix pre
               post' = suffixLogicalVariables lvarSuffix post
-          preparedPre <- prepare calleePc calleeFp =<< storageRemoval pre'
+          -- traceM ("pre: " ++ show pre ++ " and pre': " ++ show pre')
+          -- preparedPre <- prepare calleePc calleeFp =<< storageRemoval pre #1
+          -- traceM "calling storageRemoval - PRE"
+          removedStorage <- storageRemoval pre'
+          -- traceM ("removedStorage: " ++ show removedStorage)
+          preparedPre <- prepare calleePc calleeFp removedStorage
+          -- traceM ("calling storageRemoval - CHECK on pre': " ++ show pre')
+          preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp =<< storageRemoval pre'
           updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
           pop
+          -- traceM "calling storageRemoval - POST"
           preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
           checkPoint preparedPreCheckPoint
           assert (preparedPre .&& preparedPost)

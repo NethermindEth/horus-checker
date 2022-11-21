@@ -85,5 +85,6 @@ invert m = fromListWith (++) [(v, [k]) | (k, v) <- Data.Map.toList m]
 
 onSnd :: (b -> c) -> (a, b) -> (a, c)
 onSnd f (a, b) = (a, f b)
+
 eqT' :: forall k (a :: k) (b :: k). (Typeable a, Typeable b) => Bool
 eqT' = isJust (eqT @a @b)
