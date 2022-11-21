@@ -34,7 +34,7 @@ func alloc() -> (ptr : felt*):
 end
 
 # @declare $x : felt*
-# @pre a == $x && [$x] == 0
+# @pre a == $x and [$x] == 0
 # @post $Return.res == 1
 func f3(a : felt*) -> (res : felt):
      let c = [a]
