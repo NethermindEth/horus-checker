@@ -21,7 +21,7 @@ from starkware.cairo.common.hash import hash2
 func pool_balance(token_type : felt) -> (balance : felt):
 end
 
-# @pre token_type == 1 || token_type == 2
+# @pre (token_type == 1) || (token_type == 2)
 # @post $Return.balance == pool_balance(token_type)
 func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt
@@ -32,8 +32,8 @@ end
 # @declare $old_pool_balance_from: felt
 # @pre $old_pool_balance_from == pool_balance(token_from)
 #
-# @pre (token_to == 1 || token_to == 2)
-# @pre (token_from == 1 || token_from == 2)
+# @pre (token_to == 1) || (token_to == 2)
+# @pre (token_from == 1) || (token_from == 2)
 # @pre token_from != token_to
 #
 # The pool balances are positive
@@ -47,8 +47,9 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 ) -> (amount_to : felt):
     alloc_locals
 
-    # Get pool balance.
+    # Get pool balances.
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
+    # let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
 
     # Calculate swap amount.
     let (local amount_to, _) = unsigned_div_rem(
