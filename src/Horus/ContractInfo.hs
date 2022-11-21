@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.ContractInfo (ContractInfo (..), mkContractInfo) where
 
 import Control.Monad.Except (MonadError (..))
@@ -26,7 +27,8 @@ import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct 
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
-import Horus.FunctionAnalysis (inlinableFuns)
+import Horus.FunctionAnalysis (inlinableFuns, mkGeneratedNames, storageVarsOfCD)
+import Debug.Trace (traceM)
 
 data ContractInfo = ContractInfo
   { ci_contractDef :: ContractDefinition
@@ -52,7 +54,9 @@ mkContractInfo cd = do
   retsByFun <- mkRetsByFun insts
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
+  -- traceM ("sources: " ++ show (map (fu_pc . fst) sources))
   let inlinable = fromList $ Map.keys $ inlinableFuns insts program cd
+  -- traceM ("Can inline: " ++ show inlinable)
   pure
     ContractInfo
       { ci_contractDef = cd
@@ -81,7 +85,7 @@ mkContractInfo cd = do
       [ (pc, fun) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
       ]
   program = cd_program cd
-  storageVarsNames = Map.keys (cd_storageVars cd)
+  storageVarsNames = storageVarsOfCD cd
 
   functions :: [(ScopedName, Label)]
   functions = mapMaybe (\(name, f) -> (name,) <$> getFunctionPc f) (Map.toList identifiers)
@@ -189,10 +193,10 @@ mkContractInfo cd = do
     pure (foldr (insertFunWithNoRets . fst) preliminaryRes functions)
 
   --- data producers that depend on non-plain data, expressed as parameters
-  mkGeneratedNames :: [ScopedName] -> [ScopedName]
-  mkGeneratedNames = concatMap svNames
-   where
-    svNames sv = [sv <> "addr", sv <> "read", sv <> "write"]
+  -- mkGeneratedNames :: [ScopedName] -> [ScopedName]
+  -- mkGeneratedNames = concatMap svNames
+  --  where
+  --   svNames sv = [sv <> "addr", sv <> "read", sv <> "write"]
 
   mkGetRets :: MonadError Text m => Map ScopedName [Label] -> ScopedName -> m [Label]
   mkGetRets retsByFun name = maybeToError msg (retsByFun Map.!? name)

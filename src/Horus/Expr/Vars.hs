@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.Expr.Vars
   ( prime
   , ap
@@ -32,6 +33,7 @@ import Horus.Expr.Std (stdNames)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
 import Horus.SW.Builtin qualified as Builtin (name, size)
+import Debug.Trace (traceM)
 
 prime :: Expr TFelt
 prime = Expr.const "prime"
@@ -50,6 +52,7 @@ memory = Expr.function "memory"
 data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
   deriving stock (Eq, Ord)
 
+-- TODO: Fix this!
 parseRegKind :: Text -> Maybe RegKind
 parseRegKind "fp!" = Just MainFp
 parseRegKind "ap!" = Just SingleAp
@@ -65,13 +68,15 @@ pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: ad
 parseStorageVar :: forall ty. Expr ty -> Maybe (ty :~: TFelt, Text, [Expr TFelt])
 parseStorageVar e = do
   res@(_, name, _) <- Expr.unfoldVariadic @TFelt e
+  -- traceM ("Parsing svar name: " ++ show name ++ " isStd: " ++ show (isStd name) ++ " isReg: " ++ show (isReg name) ++ " isLVar: " ++ show (isLVar name))
   guard (not (isStd name))
   guard (not (isReg name))
   guard (not (isLVar name))
+  -- traceM ("svar: " ++ show e ++ " IS STORAGE VAR")
   pure res
  where
   isStd n = n `elem` stdNames || n == "memory"
-  isReg n = isJust (parseRegKind n) || n == "ap" || n == "fp"
+  isReg n = isJust (parseRegKind n) || n == "ap" || n == "fp" || n == "range-check-bound" || n == "prime"
   isLVar n = "$" `Text.isPrefixOf` n
 
 pattern StorageVar :: () => (a ~ TFelt) => Text -> [Expr TFelt] -> Expr a
