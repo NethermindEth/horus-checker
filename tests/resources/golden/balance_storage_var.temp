@@ -1,1 +1,0 @@
-horus-check: user error (Some function contains a loop, but uses rich specfication (e.g. state assertions).)

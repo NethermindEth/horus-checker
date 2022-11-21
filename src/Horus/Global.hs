@@ -49,6 +49,7 @@ import Horus.Expr (Expr)
 import Horus.Expr.Type ( Ty(TBool) )
 import Data.List ((\\))
 import Data.Functor ((<&>))
+import Debug.Trace
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -236,38 +237,6 @@ solveSMT es@(_, cs) = do
   query = makeModel es
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
--- additionalResults :: Monad m => [Label] -> ContractDefinition -> [LabeledInst] -> GlobalL [SolvingInfo]
--- additionalResults inlinable cd labeledInsts =
---   concat
---     <$> forM
---       inlinable
---       ( \f ->
---           let inlineSet = inlinable \\ [f]
---               inlineEnv = mkContractInfo cd $ fromList inlineSet
---            in do
---                 cfg <- makeCFG
---                 modules <- makeModules (== f) cfg
---                 for modules solveModule
---       )
-
--- solveContract :: Monad m => ContractDefinition -> GlobalL [SolvingInfo]
--- solveContract cd = do
---   insts <- readAllInstructions (p_code program)
---   let labeledInsts = labelInsructions insts
---       inlinable = Map.keys $ inlinableFuns labeledInsts program (cd_checks cd)
---       contractInfo = mkContractInfo cd $ fromList inlinable
---       getFunPc = ci_getFunPc contractInfo
---   verbosePrint labeledInsts
---   cfg <- makeCFG inlinable cd getFunPc labeledInsts
---   verbosePrint cfg
---   modules <- makeModules (isStandardSource inlinable (p_identifiers program)) cd cfg
---   results <- for modules (solveModule contractInfo (cd_rawSmt cd))
---   inlinedResults <- additionalResults inlinable cd labeledInsts
---   pure (results ++ inlinedResults)
---  where
---   isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)
---   program = cd_program cd
-
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   instructions <- getInstructions
@@ -275,6 +244,7 @@ solveContract = do
   cd <- getContractDef
   idents <- getIdentifiers
   let inlinable = Map.keys $ inlinableFuns instructions program cd
+  -- traceM ("inlinable: " ++ show inlinable)
   cfg <- runCFGBuildL $ buildCFG $ fromList inlinable
   cfgs <- for inlinable $ \f -> (runCFGBuildL . buildCFG . fromList $ inlinable \\ [f]) <&> (, (==f))
   for_ cfgs $ verbosePrint . fst

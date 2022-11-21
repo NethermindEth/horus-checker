@@ -176,19 +176,18 @@ gatherFromSource cfg function fSpec =
   visit oracle callstack acc builder l arcCond f =
     visiting (stackTrace callstack', l) $ \alreadyVisited ->
       -- trace ("visiting: " ++ show (stackTrace callstack', l) ++ " with instructions :" ++ show acc ++ " associated assertions: " ++ show (cfg_assertions cfg ^. ix l)) $
+      -- trace ("visitng: " ++ show l) $
       if alreadyVisited then visitLoop builder else visitLinear builder
    where
     visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
     visitLoop (SBPlain pre)
       | null assertions = throwError (ELoopNoInvariant l)
-      | otherwise =
+      | otherwise = 
         -- trace ("emitting plain LOOP - pre: " ++ show pre ++ " post: " ++ show (Expr.and assertions))
                     emitPlain pre (Expr.and assertions)
 
     visitLinear SBRich
-      | onFinalNode =
-        -- trace "emitting rich"
-          emitRich
+      | onFinalNode = emitRich
       | null assertions = visitArcs oracle' acc builder l
       | otherwise = extractPlainBuilder fSpec >>= visitLinear
     visitLinear (SBPlain pre)
