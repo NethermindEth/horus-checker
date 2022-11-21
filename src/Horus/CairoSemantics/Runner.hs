@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.CairoSemantics.Runner
   ( run
   , MemoryVariable (..)
@@ -48,6 +49,7 @@ import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
 import Horus.Util (fieldPrime, tShow, unlessM)
+import Debug.Trace
 
 data AssertionBuilder
   = QFAss (Expr TBool)
@@ -197,6 +199,7 @@ interpret = iterM exec
     ci_getBuiltinOffsets ci label builtin >>= cont
   exec (EnableStorage cont) = eStorageEnabled .= True >> cont
   exec (ReadStorage name args cont) = do
+    -- traceM ("called readStorage on name: " ++ show name)
     unlessM (use eStorageEnabled) $
       throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
     storage <- use eStorage
