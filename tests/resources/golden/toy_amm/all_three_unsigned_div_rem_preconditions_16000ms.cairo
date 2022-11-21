@@ -49,6 +49,12 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 
     # Get pool balances.
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
+
+    # Strange behavior: uncommenting the line below causes an `Unknown` timeout
+    # after at least a minute. Note that the function is not used, and the
+    # preconditions `token_to` is subject to are identical to those for
+    # `token_from`.
+    #
     # let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
 
     # Calculate swap amount.
