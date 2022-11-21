@@ -23,5 +23,4 @@ the SMTs run on a single core, it shouldn't vary *a ton*. This is just to give
 the user an idea of the order-of-magnitude so they don't set massive timeouts
 and sit there waiting for no reason.
 
-The script also dumps the time it took for `horus-check` to complete, and by
-default truncates output to five lines.
+The script also dumps the time it took for `horus-check` to complete.
