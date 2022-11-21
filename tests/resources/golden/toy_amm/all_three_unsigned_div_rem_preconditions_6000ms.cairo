@@ -41,8 +41,7 @@ end
 #
 # @pre 0 < amount_from
 # @pre $old_pool_balance_from + amount_from <= 10633823966279326983230456482242756608
-# @pre amount_from < 2 * ($old_pool_balance_from + amount_from)
-# post False
+# @pre account_id < 2 * ($old_pool_balance_from + amount_from)
 func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, token_to : felt, amount_from : felt
 ) -> (amount_to : felt):
@@ -53,7 +52,7 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 
     # Calculate swap amount.
     let (local amount_to, _) = unsigned_div_rem(
-        amount_from, amm_from_balance + amount_from
+        account_id, amm_from_balance + amount_from
     )
     return (amount_to=amount_to)
 end
@@ -61,7 +60,6 @@ end
 # @pre 0 < div
 # @pre div <= 10633823966279326983230456482242756608
 # @pre value < 2 * div
-# post False
 func unsigned_div_rem{range_check_ptr}(value, div) -> (q, r):
     return (1, 2)
 end
