@@ -103,7 +103,8 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 
     # Get pool balance.
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
-    let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
+    #let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
+    let amm_to_balance = 1
 
     # Calculate swap amount.
     let (local amount_to, _) = unsigned_div_rem(
@@ -122,36 +123,6 @@ func get_opposite_token(token_type : felt) -> (t : felt):
     else:
         return (TOKEN_TYPE_A)
     end
-end
-
-# Swaps tokens between the given account and the pool.
-# @pre token_from == 1 || token_from == 2
-# @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
-# @pre pool_balance(3 - token_from) > 0
-# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from
-# @storage_update pool_balance(3 - token_from) := pool_balance(3 - token_from) - $Return.amount_to
-# @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
-# @storage_update account_balance(account_id, 3 - token_from) := account_balance(account_id, 3 - token_from) + $Return.amount_to
-func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
-    account_id : felt, token_from : felt, amount_from : felt
-) -> (amount_to : felt):
-    # Verify that token_from is either TOKEN_TYPE_A or TOKEN_TYPE_B.
-    assert (token_from - TOKEN_TYPE_A) * (token_from - TOKEN_TYPE_B) = 0
-
-    # Check requested amount_from is valid.
-    assert_nn_le(amount_from, BALANCE_UPPER_BOUND - 1)
-    # Check user has enough funds.
-    let (account_from_balance) = get_account_token_balance(
-        account_id=account_id, token_type=token_from
-    )
-    assert_le(amount_from, account_from_balance)
-
-    let (token_to) = get_opposite_token(token_type=token_from)
-    let (amount_to) = do_swap(
-        account_id=account_id, token_from=token_from, token_to=token_to, amount_from=amount_from
-    )
-
-    return (amount_to=amount_to)
 end
 
 # Adds demo tokens to the given account.
