@@ -42,9 +42,9 @@ end
 # q * div + r < (q + 1) * div <= rc_bound * (PRIME / rc_bound) = PRIME.
 # 
 # @pre 0 < div
-# @pre div <= 10633823966279326983230456482242756608
-# @pre value < 2**128 * div
-# @post 0 <= $Return.q && $Return.q <  2**128
+# @pre div <= 4
+# @pre value < 2**7 * div
+# @post 0 <= $Return.q && $Return.q <  2**7
 # @post 0 <= $Return.r && $Return.r < div
 # @post value == $Return.q * div + $Return.r
 func unsigned_div_rem{range_check_ptr}(value, div) -> (q, r):

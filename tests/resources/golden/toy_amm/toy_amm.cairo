@@ -77,10 +77,11 @@ end
 # @pre pool_balance(token_from) == $old_pool_balance_from
 # @pre pool_balance(token_to) == $old_pool_balance_to
 #
-# Tokens should be different
-# @pre (token_to == TOKEN_TYPE_A || token_to == TOKEN_TYPE_B)
-# @pre (token_from == TOKEN_TYPE_A || token_from == TOKEN_TYPE_B)
-# @pre (token_to != token_from)
+# @pre account_id == 0
+# @pre token_to == 1
+# @pre token_from == 2
+# @pre 0 < amount_from
+# @pre amount_from < 4
 #
 # The account has enough balance
 # @pre 0 < amount_from && amount_from < account_balance(account_id, token_from)
@@ -92,14 +93,6 @@ end
 # Assumptions needed for unsigned_div_rem to not overflow
 # @pre pool_balance(token_from) + amount_from <= 10633823966279326983230456482242756608
 # @pre pool_balance(token_to) * amount_from < 2**128 * (pool_balance(token_from) + amount_from)
-#
-# Pool balance is updated
-# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from
-# @storage_update pool_balance(token_to) := pool_balance(token_to) - $Return.amount_to
-#
-# Account balance is updated
-# @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
-# @storage_update account_balance(account_id, token_to) := account_balance(account_id, token_to) + $Return.amount_to
 #
 # The returned amount_to is correct.
 # post $Return.amount_to == ($old_pool_balance_to * amount_from) / ($old_pool_balance_from + amount_from)
@@ -117,13 +110,6 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
         amm_to_balance * amount_from, amm_from_balance + amount_from
     )
 
-    # Update token_from balances.
-    modify_account_balance(account_id=account_id, token_type=token_from, amount=-amount_from)
-    set_pool_token_balance(token_type=token_from, balance=amm_from_balance + amount_from)
-
-    # Update token_to balances.
-    modify_account_balance(account_id=account_id, token_type=token_to, amount=amount_to)
-    set_pool_token_balance(token_type=token_to, balance=amm_to_balance - amount_to)
     return (amount_to=amount_to)
 end
 

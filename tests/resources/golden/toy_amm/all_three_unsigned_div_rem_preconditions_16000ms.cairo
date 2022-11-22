@@ -42,13 +42,31 @@ end
 # @pre 0 < amount_from
 # @pre $old_pool_balance_from + amount_from <= 10633823966279326983230456482242756608
 # @pre account_id < 2 * ($old_pool_balance_from + amount_from)
-func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
+# @post $Return.amm_from_balance == $old_pool_balance_from
+func do_swap_1{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_from : felt, token_to : felt, amount_from : felt
-) -> (amount_to : felt):
+) -> (account_id, token_to, amount_from, amm_from_balance):
     alloc_locals
 
     # Get pool balances.
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
+
+    return (account_id, token_to, amount_from, amm_from_balance)
+end
+
+
+# @pre (token_to == 1) || (token_to == 2)
+#
+# The pool balances are positive
+# @pre amm_from_balance >= 0
+#
+# @pre 0 < amount_from
+# @pre amm_from_balance + amount_from <= 10633823966279326983230456482242756608
+# @pre account_id < 2 * (amm_from_balance + amount_from)
+func do_swap_2{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
+    account_id : felt, token_to : felt, amount_from : felt, amm_from_balance : felt
+) -> (amount_to : felt):
+    alloc_locals
 
     # Strange behavior: uncommenting the line below causes an `Unknown` timeout
     # after at least a minute. Note that the function is not used, and the
