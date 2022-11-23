@@ -10,9 +10,9 @@ func main() {
     ret;
 }
 
-# @post $Return.res == x
-func id(x) -> (res):
-    [ap] = [fp - 3]; ap++
-    [ap] = [ap - 1]; ap++
-    ret
-end
+// @post $Return.res == x
+func id(x) -> (res: felt) {
+    [ap] = [fp - 3], ap++;
+    [ap] = [ap - 1], ap++;
+    ret;
+}
