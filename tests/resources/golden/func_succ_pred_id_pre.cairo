@@ -11,7 +11,7 @@ func succ(x) -> (res):
     [ap] = [ap - 1] + 1; ap++
     ret
 end
-# @pre x > 254 || x == 0
+# @pre x > 254 or x == 0
 # @post $Return.res == x - 1
 func pred(x) -> (res):
     [ap] = [fp - 3]; ap++

@@ -1,12 +1,12 @@
 # @declare $x : felt
-# @pre $x == x && $x > 0 && $x < 10
+# @pre $x == x and $x > 0 and $x < 10
 # @post $Return.res > 1
 func test1(x : felt) -> (res : felt):
      ap += [ap] + 1
      let (y) = id(x)
      [ap] = y
      ap += 2
-     # @invariant [ap - 2] == $x && $x > 0 && $x < 10
+     # @invariant [ap - 2] == $x and $x > 0 and $x < 10
      lab:
         [ap] = [ap - 2]; ap++
         [ap] = [ap - 2] - 1; ap++
