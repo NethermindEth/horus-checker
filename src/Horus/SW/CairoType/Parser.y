@@ -41,6 +41,7 @@ NonIdentifierType   : felt               { TypeFelt }
                     | codeoffset         { TypeCodeoffset }
                     | Type '*'           { TypePointer $1 }
                     | Type '**'          { TypePointer (TypePointer $1)}
+                    | '(' ')'            { TypeTuple [] }
                     | '(' CommaTypes ')' { TypeTuple $2 }
 
 Type : NonIdentifierType    { $1 }
