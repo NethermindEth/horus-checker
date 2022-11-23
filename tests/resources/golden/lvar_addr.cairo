@@ -44,22 +44,10 @@ func f3(a: felt*) -> (res: felt) {
     }
 }
 
-# @declare $x : felt*
-# @pre a == $x && [$x] == 0
-# @post $Return.res == 1
-func f3(a : felt*) -> (res : felt):
-     let c = [a]
-     if c == 0:
-        return (res=1)
-     else:
-        return (res=0)
-     end
-end
-
-# @post $Return.res == 1
-func f4() -> (res : felt):
-     let (ptr) = alloc()
-     assert [ptr] = 0
-     let (r) = f3(ptr)
-     return (res=r)
-end
+// @post $Return.res == 1
+func f4() -> (res: felt) {
+    let (ptr) = alloc();
+    assert [ptr] = 0;
+    let (r) = f3(ptr);
+    return (res=r);
+}
