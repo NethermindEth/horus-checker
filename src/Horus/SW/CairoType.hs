@@ -8,4 +8,4 @@ data CairoType
   | TypePointer CairoType
   | TypeTuple [(Maybe ScopedName, Maybe CairoType)]
   | TypeStruct ScopedName
-  deriving (Show)
+  deriving (Eq, Show)
