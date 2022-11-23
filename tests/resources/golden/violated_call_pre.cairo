@@ -5,9 +5,9 @@ func main() {
     return ();
 }
 
-# @pre balanceA >= howMuch
-# @post $Return.balanceA == balanceA - howMuch
-# @post $Return.balanceB == balanceB + howMuch
-func transfer(howMuch, balanceA, balanceB) -> (balanceA, balanceB):
-    return (balanceA - howMuch, balanceB + howMuch)
-end
+// @pre balanceA >= howMuch
+// @post $Return.balanceA == balanceA - howMuch
+// @post $Return.balanceB == balanceB + howMuch
+func transfer(howMuch, balanceA, balanceB) -> (balanceA: felt, balanceB: felt) {
+    return (balanceA - howMuch, balanceB + howMuch);
+}

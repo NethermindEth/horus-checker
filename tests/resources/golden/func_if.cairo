@@ -6,15 +6,15 @@ func main() {
     ret;
 }
 
-# @pre True
-# @post (x == 42 && $Return.res == 24601) || ((x > 42 || x < 42) && $Return.res == 1337)
-func f(x) -> (res):
-    [ap] = x; ap++
-    [ap] = [ap - 1] - 42; ap++
-    if [ap - 1] != 0:
-        [ap] = 1337; ap++
-    else:
-        [ap] = 24601; ap++
-    end
-    ret
-end
+// @pre True
+// @post (x == 42 and $Return.res == 24601) or ((x > 42 or x < 42) and $Return.res == 1337)
+func f(x) -> (res: felt) {
+    [ap] = x, ap++;
+    [ap] = [ap - 1] - 42, ap++;
+    if ([ap - 1] != 0) {
+        [ap] = 1337, ap++;
+    } else {
+        [ap] = 24601, ap++;
+    }
+    ret;
+}

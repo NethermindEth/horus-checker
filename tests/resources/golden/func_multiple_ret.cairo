@@ -1,9 +1,10 @@
-# @post (($Return.res == m + 1) && (m == 0)) || (($Return.res == m - 1) && (m > 0))
-func succpred(m) -> (res):
-    jmp add if [fp - 3] != 0
-    [ap] = [fp - 3] + 1; ap++
-    ret
-    # @invariant [fp - 3] > 0
+// @post (($Return.res == m + 1) and (m == 0)) or (($Return.res == m - 1) and (m > 0))
+func succpred(m) -> (res: felt) {
+    jmp add if [fp - 3] != 0;
+    [ap] = [fp - 3] + 1, ap++;
+    ret;
+
+    // @invariant [fp - 3] > 0
     add:
     [ap] = [fp - 3] - 1, ap++;
     ret;

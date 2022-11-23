@@ -5,9 +5,9 @@ func main() {
     ret;
 }
 
-# @post $Return.res == 3 * [fp - 3]
-func succ(x) -> (res):
-    [ap] = x; ap++
-    [ap] = [ap - 1] * 3; ap++
-    ret
-end
+// @post $Return.res == 3 * [fp - 3]
+func succ(x) -> (res: felt) {
+    [ap] = x, ap++;
+    [ap] = [ap - 1] * 3, ap++;
+    ret;
+}
