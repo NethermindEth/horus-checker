@@ -60,6 +60,7 @@ instance FromJSON Identifier where
       "function" -> IFunction <$> parseJSON (Object v)
       "namespace" -> pure INamespace
       "reference" -> pure IReference
+      "type_definition" -> IType <$> v .: "cairo_type"
       "scope" -> pure IScope
       _ -> fail ("Unknown type: '" <> unpack typ <> "'")
 
