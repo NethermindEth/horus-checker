@@ -3057,4 +3057,4 @@
     )
 )
 
-(check-sat)
+(apply (and-then simplify solve-eqs propagate-values simplify))
