@@ -47,7 +47,7 @@ Our documentation is organized as follows:
 
 # Installation
 
-Horus is supported on Linux and MacOS (including M1 and M2 silicon machines)!
+Horus is supported on Linux and MacOS (including AArch64 Macs)!
 
 ### Prerequisites
 
@@ -64,13 +64,49 @@ Horus is supported on Linux and MacOS (including M1 and M2 silicon machines)!
 
 <br>
 
+## Installing Python 3.7
+
+Check your python version:
+```bash
+python3 --version
+Python 3.7.15
+```
+
+If you see `3.7` as in above (any variant of 3.7 should be okay), you can skip
+this step.
+
+Otherwise, you may have a different version, or you may not have python
+installed at all. Follow the instructions below to install the needed version.
+
+
+1. Download and install
+   [`miniconda`](https://docs.conda.io/en/latest/miniconda.html) on your
+   system:
+  
+  * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
+  * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+  * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
+
+  In each case, run the downloaded script/executable, and follow the instructions.
+
+2. Create a conda environment with python 3.7:
+  
+  ```bash
+  conda create -n horus-py37 python=3.7
+  ```
+  In the above, `horus-py37` is just a name we've chosen for this environment.
+
+
+
 ## Setting up `horus-compile`
 
 Firstly, clone the `horus-compile` and `horus-checker` repositories to your machine.
 
-<br>
-
-The next step involved is setting up `horus-compile` to be used across all the Horus repositories. This requires setting up a Python virtual environment and installing the compiler dependencies, thereafter you should be able to access the `horus-compile` commandline utility from anywhere on your machine (specifically we will want to make use of this once we want to start running compiled code through the SMT checkers for formal verification assertions).
+```bash
+git clone git@github.com:NethermindEth/horus-compile.git
+git clone git@github.com:NethermindEth/horus-checker.git
+```
 
 <br>
 
@@ -83,9 +119,11 @@ python -m venv ~/path/to/env-dir/<venv-name>
 source ~/path/to/env-dir/<venv-name>/bin/activate
 ```
 
+> **Caution**: If you are not at this point running `python==3.7`, your virtual environment will not be setup correctly! You can check what version you're running with the command `python3 --version`.
+
 <br>
 
-While being at the root directory of the `horus-compile` , make sure you are in the virtual environment and install the Python dependencies using `poetry`:
+While being at the root directory of the `horus-compile`, make sure you are in the virtual environment and install the Python dependencies using `poetry`:
 
 ```bash
 poetry install
