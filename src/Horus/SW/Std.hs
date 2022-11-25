@@ -37,6 +37,7 @@ trustedStdFuncs =
   [ "starknet.common.syscalls.get_block_timestamp"
   , "starknet.common.syscalls.get_caller_address"
   , "starknet.common.syscalls.get_contract_address"
+  , "cairo.common.math.assert_le_felt"
   ]
 
 {- | A lexicographically sorted by fs_name list of specifications of
