@@ -67,123 +67,135 @@ Horus is supported on Linux and MacOS (including AArch64 Macs)!
 ## Installing Python 3.7
 
 Check your python version:
-```bash
+```console
 python3 --version
+```
+<sub>Expected output:</sub>
+```
 Python 3.7.15
 ```
 
 If you see `3.7` as in above (any variant of 3.7 should be okay), **you can
-skip head to [Installing stack](#installing-stack).**
+skip head to [installing stack](#installing-stack).**
 
 Otherwise, you may have a different version, or you may not have python
 installed at all. Follow the instructions below to install the needed version.
 
 
-1. Download and install
-   [`miniconda`](https://docs.conda.io/en/latest/miniconda.html) on your
-   system:
+1.  Download and install
+    [`miniconda`](https://docs.conda.io/en/latest/miniconda.html) on your
+    system:
+    
+    * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
+    * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+    * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+    * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
+
+    In each case, run the downloaded script/executable, and follow the instructions.
+
+2.  Create a conda environment with python 3.7:
   
-  * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
-  * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-  * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
+    ```console
+    conda create -n horus-py37 python=3.7
+    ```
+    In the above, `horus-py37` is just a name we've chosen for this environment.
 
-  In each case, run the downloaded script/executable, and follow the instructions.
+3.  Activate the created environmment:
 
-2. Create a conda environment with python 3.7:
-  
-  ```bash
-  conda create -n horus-py37 python=3.7
-  ```
-  In the above, `horus-py37` is just a name we've chosen for this environment.
+    ```console
+    conda activate horus-py37
+    ```
 
-3. Activate the created environmment:
-
-  ```bash
-  conda activate horus-py37
-  ```
-
-4. Verify that you're running 3.7:
-  ```bash
-  python3 --version
-  Python 3.7.15
-  ```
+4.  Verify that you're running 3.7:
+    ```console
+    python3 --version
+    ```
+    <sub>Expected output:</sub>
+    ```
+    Python 3.7.15
+    ```
 
 ## Installing the Haskell tool stack
 
 On Linux:
-  ```bash
+  ```console
   curl -sSL https://get.haskellstack.org/ | sh
   ```
   
 On macOS:
-  ```bash
+  ```console
   brew install stack
   ```
 
 ## Install poetry
 
-  ```bash
+  ```console
   pip3 install poetry
   ```
   
-## Install SMT solvers
+## Clone repositories
 
-On Linux:
-  ```bash
-  ```
+Clone the `horus-compile` and `horus-checker` repositories to your machine.
 
-
-
-## Setting up `horus-compile`
-
-Firstly, clone the `horus-compile` and `horus-checker` repositories to your machine.
-
-```bash
+```console
 git clone git@github.com:NethermindEth/horus-compile.git
 git clone git@github.com:NethermindEth/horus-checker.git
 ```
+  
+## Install SMT solvers
 
-<br>
+Navigate to the `horus-checker/` repository root.
 
-To get started with `horus-compile` setup, create a virtual environment and activate it:
+  ```console
+  cd horus-checker/
+  ```
 
-```bash
-# create virtual environment <venv-name>
-python -m venv ~/path/to/env-dir/<venv-name>
-# use virtual environment
-source ~/path/to/env-dir/<venv-name>/bin/activate
+On Linux:
+  ```console
+  # Inside the `horus-checker/` repository root.
+  sh ./scripts/ci/install-z3-linux.sh
+  sh ./scripts/ci/install-mathsat-linux.sh
+  ```
+
+On macOS:
+  ```console
+  # Inside the `horus-checker/` repository root.
+  sh ./scripts/ci/install-z3-macos.sh
+  sh ./scripts/ci/install-mathsat-macos.sh
+  ```
+
+## Create a python virtual environment
+
+If you're using `conda`, you can skip to [install `horus-compile`](#install-horus-compile).
+
+Otherwise, navigate to the `horus-compile/` repository root and run the following commands:
+
+```console
+python -m venv .venv/horus
+source .venv/horus/bin/activate
+```
+<sup>In the above, `horus` is just the name we chose for our virtual environment.</sup>
+
+## Install `horus-compile`
+
+Make sure you're inside the `horus-compile` repository root.
+
+On Linux:
+```console
+pip install .
+```
+On macOS:
+```console
+CFLAGS=-I`brew --prefix gmp`/include LDFLAGS=-L`brew --prefix gmp`/lib pip install .
 ```
 
-> **Caution**: If you are not at this point running `python==3.7`, your virtual environment will not be setup correctly! You can check what version you're running with the command `python3 --version`.
-
 <br>
 
-While being at the root directory of the `horus-compile`, make sure you are in the virtual environment and install the Python dependencies using `poetry`:
-
-```bash
-poetry install
-```
-
-You can use `poetry install` to install the required dependencies into your virtual environment.
-
-<br>
-
-At this point, the `horus-compile` command-line utility should be ready for use, to compile annotated Cairo code into files that the `horus-checker` will be able to use later.
-
-You can utilise `horus-compile` to compile your specified Cairo code which may include the additional annotation standard (specify `--output` flag followed by JSON destination to specify where to save the generated ABI):
-
-```bash
-horus-compile <path_to_cairo_file> --output  <path_to_json_file_to_create>
-```
-
-<br>
-
-## Setting up `horus-checker`
+## Install `horus-checker`
 
 Go to the `horus-checker` directory and make sure you are in the virtual environment with which you installed the dependencies for `horus-compile`. You can quickly check if horus-compile can be called from this directory by calling the same command from above pointing at an specific Cairo file you wish to comiple:
 
-```bash
+```console
 horus-compile <path_to_cairo_file> --output  <path_to_json_file_to_create>
 ```
 
@@ -191,7 +203,7 @@ horus-compile <path_to_cairo_file> --output  <path_to_json_file_to_create>
 
 If the above worked, you can proceed now with setting up `horus-checker` and installing required Haskell dependencies (you should have `stack` installed for Haskell use). Install the dependencies with the following command:
 
-```bash
+```console
 stack build
 ```
 
@@ -221,7 +233,7 @@ stack exec horus-check -- ./<path-to-file>/example.json -s z3
 
 > You can also call the Horus checker with multiple SMT solvers, below you can see the same example but with all the solver options added after the `-s` flag:
 
-```bash
+```console
 stack exec horus-check -- ./<path-to-file>/example.json -s z3 mathsat cvc5
 ```
 
@@ -256,7 +268,7 @@ This setup is going to require that you have [Homebrew](https://brew.sh/) instal
 
 What we need to do is install a specific version of z3 compatible with the Horus checker (specifically version `4.10.2`). Homebrew unfortunately makes this process a bit more difficult but if you follow the commands below, the setup of the z3 solver will be successful.
 
-```bash
+```console
 # created random tap
 brew tap-new horus/z3-horus
 
