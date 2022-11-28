@@ -1,3 +1,4 @@
+*.swp
 .stack-work/
 .vscode/
 dist-newstyle/
