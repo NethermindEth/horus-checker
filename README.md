@@ -109,7 +109,29 @@ installed at all. Follow the instructions below to install the needed version.
   Python 3.7.15
   ```
 
-## Installing the Haskell took stack
+## Installing the Haskell tool stack
+
+On Linux:
+  ```bash
+  curl -sSL https://get.haskellstack.org/ | sh
+  ```
+  
+On macOS:
+  ```bash
+  brew install stack
+  ```
+
+## Install poetry
+
+  ```bash
+  pip3 install poetry
+  ```
+  
+## Install SMT solvers
+
+On Linux:
+  ```bash
+  ```
 
 
 
