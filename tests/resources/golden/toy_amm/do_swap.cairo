@@ -98,6 +98,8 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
 ) -> (amount_to, r : felt):
     alloc_locals
 
+    [ap] = 42; ap++
+
     # Get pool balance.
     #let (local amm_from_balance) = pool_balance.read(token_type=token_from)
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)

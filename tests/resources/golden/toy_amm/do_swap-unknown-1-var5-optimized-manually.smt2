@@ -1,4 +1,3 @@
-
 (declare-fun $old_pool_balance_from () Int)
 (declare-fun $old_pool_balance_to () Int)
 (declare-fun ADDR!1 () Int)
@@ -14939,6 +14938,5 @@
     (or (not (and (not a!1) (not a!3))) a!77))))))
   )
 )
-
 
 (check-sat)
