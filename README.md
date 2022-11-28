@@ -72,8 +72,8 @@ python3 --version
 Python 3.7.15
 ```
 
-If you see `3.7` as in above (any variant of 3.7 should be okay), you can skip
-this step.
+If you see `3.7` as in above (any variant of 3.7 should be okay), **you can
+skip head to [Installing stack](#installing-stack).**
 
 Otherwise, you may have a different version, or you may not have python
 installed at all. Follow the instructions below to install the needed version.
@@ -96,6 +96,20 @@ installed at all. Follow the instructions below to install the needed version.
   conda create -n horus-py37 python=3.7
   ```
   In the above, `horus-py37` is just a name we've chosen for this environment.
+
+3. Activate the created environmment:
+
+  ```bash
+  conda activate horus-py37
+  ```
+
+4. Verify that you're running 3.7:
+  ```bash
+  python3 --version
+  Python 3.7.15
+  ```
+
+## Installing the Haskell took stack
 
 
 
