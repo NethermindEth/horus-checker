@@ -15,6 +15,7 @@ module Horus.Util
   , onSnd
   , invert
   , eqT'
+  , atMay
   )
 where
 
@@ -88,3 +89,10 @@ onSnd f (a, b) = (a, f b)
 
 eqT' :: forall k (a :: k) (b :: k). (Typeable a, Typeable b) => Bool
 eqT' = isJust (eqT @a @b)
+
+atMay :: [a] -> Int -> Maybe a
+atMay [] _ = Nothing
+atMay (x : xs) n
+  | n < 0 = Nothing
+  | n == 0 = Just x
+  | otherwise = atMay xs $ n - 1

@@ -1,0 +1,147 @@
+new moduleLabel 74
+making builtin constraints
+STACK TRACE: "<79=write_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+next last PC: Label 58
+callee AP end: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+STACK TRACE: "<79=write_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 58,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<79=write_svar/root>@8") :*: Felt 28
+next last PC: Label 81
+callee AP end: (Fun "+" :*: Fun "ap!<79=write_svar/root>@8") :*: Felt 28
+STACK TRACE: "<81=read_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+next last PC: Label 51
+callee AP end: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+STACK TRACE: "<81=read_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 51,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<81=read_svar/root>@8") :*: Felt 53
+next last PC: Label 83
+callee AP end: (Fun "+" :*: Fun "ap!<81=read_svar/root>@8") :*: Felt 53
+STACK TRACE: "<79=write_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+next last PC: Label 58
+callee AP end: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+STACK TRACE: "<79=write_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 58,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<79=write_svar/root>@8") :*: Felt 28
+next last PC: Label 81
+callee AP end: (Fun "+" :*: Fun "ap!<79=write_svar/root>@8") :*: Felt 28
+STACK TRACE: "<81=read_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+next last PC: Label 51
+callee AP end: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+STACK TRACE: "<81=read_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 51,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<81=read_svar/root>@8") :*: Felt 53
+next last PC: Label 83
+callee AP end: (Fun "+" :*: Fun "ap!<81=read_svar/root>@8") :*: Felt 53
+new moduleLabel 59
+STACK TRACE: "<64=write_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<64=write_svar/root>@6") :*: Felt 22
+next last PC: Label 58
+callee AP end: (Fun "+" :*: Fun "ap!<64=write_svar/root>@6") :*: Felt 22
+STACK TRACE: "<64=write_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 58,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<64=write_svar/root>@7") :*: Felt 28
+next last PC: Label 66
+callee AP end: (Fun "+" :*: Fun "ap!<64=write_svar/root>@7") :*: Felt 28
+STACK TRACE: "<66=read_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<66=read_svar/root>@5") :*: Felt 23
+next last PC: Label 51
+callee AP end: (Fun "+" :*: Fun "ap!<66=read_svar/root>@5") :*: Felt 23
+STACK TRACE: "<66=read_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 51,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<66=read_svar/root>@7") :*: Felt 53
+next last PC: Label 68
+callee AP end: (Fun "+" :*: Fun "ap!<66=read_svar/root>@7") :*: Felt 53
+STACK TRACE: "<64=write_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<64=write_svar/root>@6") :*: Felt 22
+next last PC: Label 58
+callee AP end: (Fun "+" :*: Fun "ap!<64=write_svar/root>@6") :*: Felt 22
+STACK TRACE: "<64=write_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 58,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<64=write_svar/root>@7") :*: Felt 28
+next last PC: Label 66
+callee AP end: (Fun "+" :*: Fun "ap!<64=write_svar/root>@7") :*: Felt 28
+STACK TRACE: "<66=read_svar/root>" is root: False
+isLast: False
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<66=read_svar/root>@5") :*: Felt 23
+next last PC: Label 51
+callee AP end: (Fun "+" :*: Fun "ap!<66=read_svar/root>@5") :*: Felt 23
+STACK TRACE: "<66=read_svar/root>" is root: False
+isLast: False
+canInline: True
+current instruction: (Label 51,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<66=read_svar/root>@7") :*: Felt 53
+next last PC: Label 68
+callee AP end: (Fun "+" :*: Fun "ap!<66=read_svar/root>@7") :*: Felt 53
+new moduleLabel 0
+new moduleLabel 8
+new moduleLabel 46
+STACK TRACE: "<root>" is root: True
+isLast: True
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<root>@5") :*: Felt 23
+next last PC: Label 51
+callee AP end: (Fun "+" :*: Fun "ap!<root>@5") :*: Felt 23
+STACK TRACE: "<root>" is root: True
+isLast: True
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<root>@5") :*: Felt 23
+next last PC: Label 51
+callee AP end: (Fun "+" :*: Fun "ap!<root>@5") :*: Felt 23
+new moduleLabel 52
+STACK TRACE: "<root>" is root: True
+isLast: True
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<root>@6") :*: Felt 22
+next last PC: Label 58
+callee AP end: (Fun "+" :*: Fun "ap!<root>@6") :*: Felt 22
+STACK TRACE: "<root>" is root: True
+isLast: True
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<root>@6") :*: Felt 22
+next last PC: Label 58
+callee AP end: (Fun "+" :*: Fun "ap!<root>@6") :*: Felt 22
