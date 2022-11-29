@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.SW.Storage (Storage, read, getWrites, parse, equivalenceExpr) where
 
 import Prelude hiding (read)
@@ -13,6 +14,7 @@ import Horus.Expr qualified as Expr
 import Horus.JSON.Util (HSExpr (..))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
+import Debug.Trace
 
 type Storage = Map ScopedName [([Expr TFelt], Expr TFelt)]
 
@@ -25,7 +27,9 @@ checkStorageIsSubset a b = Expr.and $ map equalReads (getWrites a)
   equalReads (name, args, _value) = read a name args .== read b name args
 
 read :: Storage -> ScopedName -> [Expr TFelt] -> Expr TFelt
-read storage name args = buildReadChain args baseCase writes
+read storage name args = let readchain = buildReadChain args baseCase writes in
+    -- trace ("reading storage: " ++ show storage ++ " name: " ++ show name ++ " args: " ++ show args ++ " writes: " ++ show writes ++ " baseCase: " ++ show baseCase ++ " readchain: " ++ show readchain) readchain
+    readchain
  where
   baseCase = Expr.apply (Expr.Fun (tShow name)) args
   writes = Map.findWithDefault [] name storage
@@ -40,7 +44,9 @@ buildReadChain readAt baseCase writes = go baseCase (reverse writes)
   arity = length readAt
 
 getWrites :: Storage -> [(ScopedName, [Expr TFelt], Expr TFelt)]
-getWrites storage = concatMap getWritesForName (Map.toList storage)
+getWrites storage = let writes = concatMap getWritesForName (Map.toList storage) in 
+    -- trace ("writes: " ++ show writes ++ " with storage: " ++ show storage) writes
+    writes
  where
   getWritesForName (name, writes) = [(name, args, value) | (args, value) <- writes]
 

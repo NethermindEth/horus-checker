@@ -47,7 +47,7 @@ data Module = Module
   , m_prog :: [LabeledInst]
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
-  , m_lastPc :: Label
+  , m_lastPc :: (CallStack, Label)
   }
   deriving (Show)
 
@@ -209,8 +209,8 @@ gatherFromSource cfg function fSpec =
 
     assertions = cfg_assertions cfg ^. ix l
     onFinalNode = null (cfg_arcs cfg ^. ix l)
-    emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle' (calledFOfCallEntry $ top callstack') l)
-    emitRich = emitModule (Module (MSRich fSpec) acc oracle' (calledFOfCallEntry $ top callstack') l)
+    emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
+    emitRich = emitModule (Module (MSRich fSpec) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
 
     visitArcs newOracle acc' pre l' = do
       let outArcs = cfg_arcs cfg ^. ix l'

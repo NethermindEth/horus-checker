@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.Instruction
   ( Instruction (..)
   , LabeledInst
@@ -20,6 +21,8 @@ module Horus.Instruction
   , toSemiAsm
   , isCall
   , toSemiAsmUnsafe
+  , getNextPcInlined
+  , getNextPcInlinedWithFallback
   )
 where
 
@@ -30,7 +33,9 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Text (Text, unpack)
 
 import Horus.Label (Label (..), moveLabel)
-import Horus.Util (tShow, toSignedFelt)
+import Horus.Util (tShow, toSignedFelt, atMay)
+import Data.Maybe (fromMaybe)
+import Debug.Trace (trace)
 
 dstRegBit, op0RegBit, op1ImmBit, op1FpBit, op1ApBit :: Int
 resAddBit, resMulBit, pcJumpAbsBit, pcJumpRelBit, pcJnzBit :: Int
@@ -92,6 +97,20 @@ instructionSize _ = 1
 
 getNextPc :: LabeledInst -> Label
 getNextPc (pc, i) = moveLabel pc (instructionSize i)
+
+getNextPcInlined :: [LabeledInst] -> Int -> Maybe Label
+getNextPcInlined instrs pos = fst <$> atMay instrs (pos + 1)
+
+-- getNextPcInlinedWithFallback :: [LabeledInst] -> Int -> Label
+-- getNextPcInlinedWithFallback instrs pos = fromMaybe (fst $ instrs !! pos) (getNextPcInlined instrs pos)
+
+getNextPcInlinedWithFallback :: [LabeledInst] -> Int -> Label
+getNextPcInlinedWithFallback instrs pos =
+  -- trace ("I will access pos: " ++ show pos ++ " within len: " ++ show (length instrs)) $ 
+  let nextPcInlined = getNextPcInlined instrs pos
+      def = getNextPc (instrs !! pos) in
+    -- trace ("def: " ++ show def ++ " nextPcInlined: " ++ show nextPcInlined) $ 
+      fromMaybe def nextPcInlined
 
 uncheckedCallDestination :: LabeledInst -> Label
 uncheckedCallDestination (pc, i)

@@ -202,6 +202,8 @@ addAssertions inlinable identifiers = do
       post <- fs'_post <$> getFuncSpec idName
       -- storage <- fs'_storage <$> getFuncSpec idName
       rets <- getRets idName
+      -- There are functions that will end up with True -> True even with inlining turned on,
+      -- namely the ones that are (transitively) loopy. The condition is here therefore.
       case (pre, post) of
         (Nothing, Nothing) ->
           when (fu_pc f  `Set.notMember` inlinable) $
