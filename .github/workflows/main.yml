@@ -22,6 +22,11 @@ jobs:
         run: |
           find app src -name *.hs -exec fourmolu --mode 'check' {} +
 
+      - name: Install libtinfo (HLint dependency)
+        run: |
+          sudo apt-get install libtinfo6
+          sudo apt-get install libtinfo5
+
       - name: 'Set up HLint'
         uses: rwe/actions-hlint-setup@v1
         with:
@@ -40,7 +45,7 @@ jobs:
       horus_compile_version: 0.0.6.2
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Install SMT solvers
         run: |
@@ -56,27 +61,24 @@ jobs:
 
       - uses: freckle/stack-cache-action@main
 
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         name: Cache python dependencies
         with:
           path: ${{ env.pythonLocation }}
           key: ${{ env.pythonLocation }}-${{ env.horus_compile_version }}
-          restore-keys:
-            ${{ env.pythonLocation }}-
-
-      - name: Build
-        run: |
-          jobs=$(getconf _NPROCESSORS_ONLN)
-          stack --jobs "$jobs" install
 
       - name: Install python dependencies
         env:
           USER: ${{ secrets.PYPI_USER }}
           PASS: ${{ secrets.PYPI_PASSWORD }}
-        run: >
-          pip install horus-compile=="$horus_compile_version"
-          --extra-index-url http://${USER}:${PASS}@139.162.29.35/
-          --trusted-host 139.162.29.35
+        run: |
+          pip install setuptools wheel
+          pip install horus-compile=="$horus_compile_version" --extra-index-url http://${USER}:${PASS}@139.162.29.35/ --trusted-host 139.162.29.35
+
+      - name: Build
+        run: |
+          jobs=$(getconf _NPROCESSORS_ONLN)
+          stack --jobs "$jobs" install
 
       - name: Test
         run: bash ./tests/entrypoint.sh
