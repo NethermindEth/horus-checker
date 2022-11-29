@@ -66,8 +66,6 @@ jobs:
         with:
           path: ${{ env.pythonLocation }}
           key: ${{ env.pythonLocation }}-${{ env.horus_compile_version }}
-          restore-keys:
-            ${{ env.pythonLocation }}-
 
       - name: Install python dependencies
         env:
