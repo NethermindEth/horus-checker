@@ -136,6 +136,7 @@ interpret = iterM exec
     r <- cont
     restAss <- use (eConstraints . csAsserts)
     restExp <- use (eConstraints . csExpects)
+    -- traceM ("checkpointing restExp: " ++ show restExp)
     eConstraints . csAsserts
       .= ( ExistentialAss
             ( \mv ->
@@ -179,9 +180,11 @@ interpret = iterM exec
   exec (IsInlinable label cont) = do
     inlinableFs <- asks ci_inlinable
     cont (label `elem` inlinableFs)
-  exec (GetStackTraceDescr cont) = do
+  exec (GetStackTraceDescr callstack cont) = do
     fNames <- asks ci_functionNames
-    get >>= cont . digestOfCallStack fNames . fst . e_constraints
+    case callstack of
+      Nothing -> get >>= cont . digestOfCallStack fNames . fst . e_constraints
+      Just stack -> cont $ digestOfCallStack fNames stack
   exec (GetOracle cont) = do
     get >>= cont . stackTrace . fst . e_constraints
   exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
@@ -203,6 +206,7 @@ interpret = iterM exec
     unlessM (use eStorageEnabled) $
       throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
     storage <- use eStorage
+    -- traceM ("reading: " ++ show name)
     cont (Storage.read storage name args)
   exec (UpdateStorage newStorage cont) = do
     storageEnabled <- use eStorageEnabled
