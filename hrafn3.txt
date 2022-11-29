@@ -1,0 +1,97 @@
+inlinable: [Label 0,Label 3,Label 6,Label 12]
+apEnd in rich: (Fun "+" :*: Fun "ap!<root>@4") :*: Felt 32
+Prepared storage for module: Label 18 is: fromList []
+apEnd in plain: (Fun "+" :*: Fun "ap!<root>@4") :*: Felt 32
+current instr pc: Label 18 with imm: 41
+current instr pc: Label 20 with imm: -14
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 6 nextPcInlined: Just Label 6
+IN CALL with current instr: (Label 20,{instr imm: -14}) nextPc': Label 22 nextPc: Label 6
+In call:__main__.id
+current instr pc: Label 6 with imm: 0
+current instr pc: Label 7 with imm: -7
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 0 nextPcInlined: Just Label 0
+IN CALL with current instr: (Label 7,{instr imm: -7}) nextPc': Label 9 nextPc: Label 0
+In call:__main__.succ
+current instr pc: Label 0 with imm: 1
+current instr pc: Label 2 with imm: 0
+current instr pc: Label 9 with imm: -6
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 3 nextPcInlined: Just Label 3
+IN CALL with current instr: (Label 9,{instr imm: -6}) nextPc': Label 11 nextPc: Label 3
+In call:__main__.pred
+current instr pc: Label 3 with imm: -1
+current instr pc: Label 5 with imm: 0
+current instr pc: Label 11 with imm: 0
+current instr pc: Label 22 with imm: 1
+current instr pc: Label 24 with imm: -18
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 6 nextPcInlined: Just Label 6
+IN CALL with current instr: (Label 24,{instr imm: -18}) nextPc': Label 26 nextPc: Label 6
+In call:__main__.id
+current instr pc: Label 6 with imm: 0
+current instr pc: Label 7 with imm: -7
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 0 nextPcInlined: Just Label 0
+IN CALL with current instr: (Label 7,{instr imm: -7}) nextPc': Label 9 nextPc: Label 0
+In call:__main__.succ
+current instr pc: Label 0 with imm: 1
+current instr pc: Label 2 with imm: 0
+current instr pc: Label 9 with imm: -6
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 3 nextPcInlined: Just Label 3
+IN CALL with current instr: (Label 9,{instr imm: -6}) nextPc': Label 11 nextPc: Label 3
+In call:__main__.pred
+current instr pc: Label 3 with imm: -1
+current instr pc: Label 5 with imm: 0
+current instr pc: Label 11 with imm: 0
+current instr pc: Label 26 with imm: -26
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 0 nextPcInlined: Just Label 0
+IN CALL with current instr: (Label 26,{instr imm: -26}) nextPc': Label 28 nextPc: Label 0
+In call:__main__.succ
+current instr pc: Label 0 with imm: 1
+current instr pc: Label 2 with imm: 0
+current instr pc: Label 28 with imm: -16
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 12 nextPcInlined: Just Label 12
+IN CALL with current instr: (Label 28,{instr imm: -16}) nextPc': Label 30 nextPc: Label 12
+In call:__main__.addtwo
+current instr pc: Label 12 with imm: 0
+current instr pc: Label 13 with imm: -13
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 0 nextPcInlined: Just Label 0
+IN CALL with current instr: (Label 13,{instr imm: -13}) nextPc': Label 15 nextPc: Label 0
+In call:__main__.succ
+current instr pc: Label 0 with imm: 1
+current instr pc: Label 2 with imm: 0
+current instr pc: Label 15 with imm: -15
+instrs are: [(Label 18,{instr imm: 41}),(Label 20,{instr imm: -14}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 22,{instr imm: 1}),(Label 24,{instr imm: -18}),(Label 6,{instr imm: 0}),(Label 7,{instr imm: -7}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 9,{instr imm: -6}),(Label 3,{instr imm: -1}),(Label 5,{instr imm: 0}),(Label 11,{instr imm: 0}),(Label 26,{instr imm: -26}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 28,{instr imm: -16}),(Label 12,{instr imm: 0}),(Label 13,{instr imm: -13}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 15,{instr imm: -15}),(Label 0,{instr imm: 1}),(Label 2,{instr imm: 0}),(Label 17,{instr imm: 0})]
+def: Label 0 nextPcInlined: Just Label 0
+IN CALL with current instr: (Label 15,{instr imm: -15}) nextPc': Label 17 nextPc: Label 0
+In call:__main__.succ
+current instr pc: Label 0 with imm: 1
+current instr pc: Label 2 with imm: 0
+current instr pc: Label 17 with imm: 0
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<7=succ/20=id/root>@0") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<20=id/root>@2") :*: Felt 4)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<9=pred/20=id/root>@1") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<20=id/root>@2") :*: Felt 7)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<20=id/root>@2") :*: Felt 7)) :*: ((Fun "+" :*: Fun "ap!<root>@4") :*: Felt 10)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<7=succ/24=id/root>@0") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<24=id/root>@2") :*: Felt 4)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<9=pred/24=id/root>@1") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<24=id/root>@2") :*: Felt 7)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<24=id/root>@2") :*: Felt 7)) :*: ((Fun "+" :*: Fun "ap!<root>@4") :*: Felt 20)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<26=succ/root>@0") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<root>@4") :*: Felt 23)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<13=succ/28=addtwo/root>@0") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<28=addtwo/root>@3") :*: Felt 4)
+en passant -- generating the eq : (Fun "=" :*: ((Fun "+" :*: Fun "ap!<15=succ/28=addtwo/root>@0") :*: Felt 1)) :*: ((Fun "+" :*: Fun "ap!<28=addtwo/root>@3") :*: Felt 7)
+last ap is: (Fun "+" :*: Fun "ap!<28=addtwo/root>@3") :*: Felt 7
+the last instruction is ret
+current FP: Fun "fp!<root>"
+last -- generating the eq: (Fun "=" :*: ((Fun "+" :*: Fun "ap!<28=addtwo/root>@3") :*: Felt 7)) :*: ((Fun "+" :*: Fun "ap!<root>@4") :*: Felt 32)
+making builtin constraints, apEnd: (Fun "+" :*: Fun "ap!<root>@4") :*: Felt 32 fp: Fun "fp!<root>"
+builtin: Pedersen
+builtin: RangeCheck
+builtin: Ecdsa
+builtin: Bitwise
+Accumulated storage for module: Label 18 is: fromList []
+writes: [] with storage: fromList []
+writes: [] with storage: fromList []

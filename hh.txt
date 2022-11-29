@@ -1,0 +1,99 @@
+new moduleLabel 74
+making builtins for: Pedersen
+PUSH!: (Label 79,Label 52)
+PUSH!: (Label 56,Label 34)
+STACK TRACE: "<79=write_svar/root>" is root: False
+getting builtin for b: Pedersen at pc: Label 34
+got builtins offsets: Just (BuiltinOffsets {bo_input = 5, bo_output = 2})
+isLast: False
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+next last PC: Label 58
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+getting contract for calleeFp: Fun "fp!<56=write/79=write_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+POP!: (Label 79,Label 52)
+STACK TRACE: "<root>" is root: True
+getting builtin for b: Pedersen at pc: Label 52
+got builtins offsets: Just (BuiltinOffsets {bo_input = 5, bo_output = 2})
+isLast: False
+canInline: True
+current instruction: (Label 58,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 28
+next last PC: Label 81
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 28
+getting contract for calleeFp: Fun "fp!<79=write_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 28
+POP!: (Label -1,Label 74)
+PUSH!: (Label 81,Label 46)
+PUSH!: (Label 49,Label 21)
+STACK TRACE: "<81=read_svar/root>" is root: False
+getting builtin for b: Pedersen at pc: Label 21
+got builtins offsets: Just (BuiltinOffsets {bo_input = 4, bo_output = 3})
+isLast: False
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+next last PC: Label 51
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+getting contract for calleeFp: Fun "fp!<49=read/81=read_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+POP!: (Label 81,Label 46)
+STACK TRACE: "<root>" is root: True
+getting builtin for b: Pedersen at pc: Label 46
+got builtins offsets: Just (BuiltinOffsets {bo_input = 4, bo_output = 3})
+isLast: False
+canInline: True
+current instruction: (Label 51,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 53
+next last PC: Label 83
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 53
+getting contract for calleeFp: Fun "fp!<81=read_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 53
+POP!: (Label -1,Label 74)
+making builtins for: RangeCheck
+PUSH!: (Label 79,Label 52)
+PUSH!: (Label 56,Label 34)
+STACK TRACE: "<79=write_svar/root>" is root: False
+getting builtin for b: RangeCheck at pc: Label 34
+got builtins offsets: Just (BuiltinOffsets {bo_input = 4, bo_output = 1})
+isLast: False
+canInline: False
+current instruction: (Label 56,{instr imm: -22})
+nextAp: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+next last PC: Label 58
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+getting contract for calleeFp: Fun "fp!<56=write/79=write_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<79=write_svar/root>@6") :*: Felt 22
+POP!: (Label 79,Label 52)
+STACK TRACE: "<root>" is root: True
+getting builtin for b: RangeCheck at pc: Label 52
+got builtins offsets: Just (BuiltinOffsets {bo_input = 4, bo_output = 1})
+isLast: False
+canInline: True
+current instruction: (Label 58,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 28
+next last PC: Label 81
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 28
+getting contract for calleeFp: Fun "fp!<79=write_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 28
+POP!: (Label -1,Label 74)
+PUSH!: (Label 81,Label 46)
+PUSH!: (Label 49,Label 21)
+STACK TRACE: "<81=read_svar/root>" is root: False
+getting builtin for b: RangeCheck at pc: Label 21
+got builtins offsets: Just (BuiltinOffsets {bo_input = 3, bo_output = 2})
+isLast: False
+canInline: False
+current instruction: (Label 49,{instr imm: -28})
+nextAp: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+next last PC: Label 51
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+getting contract for calleeFp: Fun "fp!<49=read/81=read_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<81=read_svar/root>@5") :*: Felt 23
+POP!: (Label 81,Label 46)
+STACK TRACE: "<root>" is root: True
+getting builtin for b: RangeCheck at pc: Label 46
+got builtins offsets: Just (BuiltinOffsets {bo_input = 3, bo_output = 2})
+isLast: False
+canInline: True
+current instruction: (Label 51,{instr imm: 0})
+nextAp: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 53
+next last PC: Label 83
+lastAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 57 getNextAP: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 53
+getting contract for calleeFp: Fun "fp!<81=read_svar/root>" calleeApEnd: (Fun "+" :*: Fun "ap!<root>@8") :*: Felt 53
+POP!: (Label -1,Label 74)
