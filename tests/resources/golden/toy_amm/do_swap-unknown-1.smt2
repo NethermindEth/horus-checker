@@ -3057,4 +3057,4 @@
     )
 )
 
-(apply (and-then simplify solve-eqs propagate-values simplify))
+(apply (and-then split-clause simplify solve-eqs propagate-values split-clause  simplify))

@@ -54,7 +54,7 @@ func set_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ra
 end
 
 # Returns the pool's balance.
-# @pre 1 <= token_type and token_type <= 2
+# @pre token_type == 1 or token_type == 2
 # @post $Return.balance == pool_balance(token_type)
 func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt
