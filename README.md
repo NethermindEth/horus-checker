@@ -161,14 +161,14 @@ Navigate to the `horus-checker/` repository root.
   cd horus-checker/
   ```
 
-On Linux:
+###### On Linux:
   ```console
   # Inside the `horus-checker/` repository root.
   sh ./scripts/ci/install-z3-linux.sh
   sh ./scripts/ci/install-mathsat-linux.sh
   ```
 
-On macOS:
+###### On macOS:
   ```console
   # Inside the `horus-checker/` repository root.
   sh ./scripts/ci/install-z3-macos.sh
@@ -338,7 +338,7 @@ The following annotations are supported.
 
 <br/>
 
-###### `@post`
+### `@post`
 Specifies conditions that must be true if the function returns.
 
 Example:
