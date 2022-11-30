@@ -120,7 +120,7 @@ mkContractInfo cd = do
               st_members implicits Map.!? n
                 <&> \m -> -me_offset m + returnSize + st_size implicits
           ]
-    getOutputOffset _ _ _ = throwError "The return type is supposed to be a tuple type."
+    getOutputOffset n returns implicits = getOutputOffset n (TypeTuple [(Nothing, Just returns)]) implicits
 
   getCallee :: MonadError Text m => LabeledInst -> m ScopedName
   getCallee inst = callDestination' inst >>= getFunName'
