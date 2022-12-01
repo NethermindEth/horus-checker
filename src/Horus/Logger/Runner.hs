@@ -1,16 +1,15 @@
 {-# LANGUAGE ConstraintKinds #-}
 
 module Horus.Logger.Runner
-  ( ImplT
+  ( ImplL
   , interpret
-  , runImplT
+  , runImpl
   )
 where
 
 import Colog.Core
-import Control.Monad.State (MonadState, StateT (..), modify')
-import Control.Monad.Trans.Class (MonadTrans)
-import Control.Monad.Trans.Free.Church (iterTM)
+import Control.Monad.Free.Church (iterM)
+import Control.Monad.State (MonadState, State, modify', runState)
 import Data.Foldable (toList)
 import Data.Sequence (Seq, (|>))
 import Data.Text (Text, filter, unpack)
@@ -23,28 +22,26 @@ data Message
 
 instance Show Message where
   show (Message s t) = "[" <> show s <> "] - " <> t'
-    where
-      t' = unpack $ filter (/= '\"') t
+   where
+    t' = unpack $ filter (/= '\"') t
 
+newtype ImplL a
+  = ImplL (State (Seq Message) a)
+  deriving newtype
+    ( Functor
+    , Applicative
+    , Monad
+    , MonadState (Seq Message)
+    )
 
-newtype ImplT m a
-  = ImplT (StateT (Seq Message) m a)
-    deriving newtype ( Functor
-                     , Applicative
-                     , Monad
-                     , MonadTrans
-                     , MonadState (Seq Message)
-                     )
+runImpl :: ImplL a -> Either Text (a, [Message])
+runImpl (ImplL s) =
+  return $ f (runState s mempty)
+ where
+  f (x, y) = (x, toList y)
 
-
-runImplT :: Functor m => ImplT m a -> m (a, [Message])
-runImplT (ImplT m)
-  = f <$> flip runStateT mempty m
-    where
-      f (x, y) = (x , toList y)
-
-interpret :: Monad m => LogT m a -> ImplT m a
-interpret = iterTM exec . runLogT
+interpret :: LogL a -> ImplL a
+interpret = iterM exec . runLogL
  where
   exec (LogF sev txt next) =
-    modify' (|> (Message sev txt)) >> next
+    modify' (|> Message sev txt) >> next
