@@ -16,7 +16,7 @@ import Data.Sequence (Seq, (|>))
 import Data.Text (Text, filter, unpack)
 import Prelude hiding (filter)
 
-import Horus.Logger (LogF (..), LogT (..))
+import Horus.Logger (LogF (..), LogL (..))
 
 data Message
   = Message Severity Text
