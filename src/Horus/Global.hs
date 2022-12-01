@@ -250,21 +250,21 @@ solveContract = do
  where
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
 
-logM :: (a -> L.LogT m ()) -> a -> GlobalT m ()
+logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v
   = do
-      config <- askConfig
+      config <- getConfig
       when (cfg_verbose config) $ do
         liftF' $ Log (lg v) ()
 
-logDebug :: Show a => a -> GlobalT m ()
+logDebug :: Show a => a -> GlobalL ()
 logDebug = logM L.logDebug
 
-logInfo :: Text -> GlobalT m ()
+logInfo :: Text -> GlobalL ()
 logInfo = logM L.logInfo
 
-logError :: Show a => a -> GlobalT m ()
+logError :: Show a => a -> GlobalL ()
 logError = logM L.logError
 
-logWarning :: Show a => a -> GlobalT m ()
+logWarning :: Show a => a -> GlobalL ()
 logWarning = liftF' . flip Log () .  L.logWarning
