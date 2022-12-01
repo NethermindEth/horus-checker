@@ -16,9 +16,9 @@ import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImpl)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (run)
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Global (Config (..), GlobalF (..), GlobalL (..))
+import Horus.Logger.Runner qualified as Logger (interpret, runImpl)
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
-import Horus.Logger.Runner qualified as Logger (interpret, runImpl)
 
 data Env = Env {e_config :: IORef Config, e_contractInfo :: ContractInfo}
 
@@ -56,7 +56,7 @@ interpret = iterM exec . runGlobalL
   exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
   exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
   exec (Log logger cont) = do
-    (_, vs) <- lift $ Logger.runImpl (Logger.interpret logger)
+    (_, vs) <- liftEither $ Logger.runImpl (Logger.interpret logger)
     liftIO $ mapM_ print vs
     cont
   exec (Throw t) = throwError t
