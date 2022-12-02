@@ -8,5 +8,3 @@ cairo.common.math.assert_le
 Unsat
 cairo.common.math.assert_nn
 Unsat
-cairo.common.math.unsigned_div_rem
-Unsat
