@@ -225,64 +225,218 @@ program that implements a stack data structure in Cairo. If you're unfamiliar
 with Cairo, or you need a refresher, check out the
 [documentation](https://www.cairo-lang.org/docs/)!
 
-The first thing we'll do is declare this file as a StarkNet contract with the
-line `%lang starknet` at the top of our program.
-
-Then we'll define a
-[`struct`](https://www.cairo-lang.org/docs/reference/syntax.html#structs)
-called `Stack` with two fields:
+Let's define a [`struct`](https://www.cairo-lang.org/docs/reference/syntax.html#structs)
+called `Stack` with two members:
 * one called `value` which has type [`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element),
 * one called `next` of type `Stack*`, which means it's a pointer to an instance
 of the struct `Stack` that we're currently defining.
 
 ```cairo
-// Declare this file as a StarkNet contract.
-%lang starknet
-
-struct Stack:
-    member value : felt
-    member next : Stack*
-end
+struct Stack {
+    value: felt,
+    next: Stack*,
+}
 ```
+
+Intuitively, we are representing our stack as a linked list. The `value` is the
+head of the list, i.e. the top of the stack, and the `next` member is a pointer
+to the next node in the list.
+
+Now we've got bare a data structure. Let's define some functions that operate on it.
+
+First, we'll define a function that takes no arguments and returns a pointer to a `Stack`.
+```cairo
+func empty() -> (stack: Stack*) {
+    return (cast(0, Stack*),);
+}
+```
+The use of `cast()` above is a
+[typed reference](https://www.cairo-lang.org/docs/how_cairo_works/consts.html?highlight=cast#typed-references).
+
+We'll also also define a function that adds the top two elements on the stack.
+It will take one argument, which will be a poointer to a stack, and it will
+have one return value, also a pointer to a stack.
+
+If we do things right, we expect that the return value points to a stack in
+which the top two elements of the stack represented by the argument have been
+summed.
+
+We can use
+[member accessor notation](https://www.cairo-lang.org/docs/how_cairo_works/consts.html?highlight=cast#typed-references)
+to access the appropriate data from our parameter `stack`.
 
 ```cairo
-// Declare this file as a StarkNet contract.
-%lang starknet
-
-struct Stack:
-    member value : felt
-    member next : Stack*
-end
-
-namespace _Stack:
-    func empty() -> (stack : Stack*):
-        return (cast(0, Stack*))
-    end
-
-    func add(stack : Stack*) -> (stack: Stack*):
-        let x = stack.value
-        let y = stack.next.value
-        return (new Stack(value=x + y, next=stack.next.next))
-    end
-
-    func lit(stack : Stack*, i : felt) -> (stack: Stack*):
-        return (new Stack(value=i, next=stack))
-    end
-
-    func top(stack : Stack*) -> (res : felt):
-        return (stack.value)
-    end
-end
-
-func main_() -> (res : felt):
-    let (stack) = _Stack.empty()
-    let (stack) = _Stack.lit(stack, 5)
-    let (stack) = _Stack.lit(stack, 6)
-    let (stack) = _Stack.add(stack)
-    let (top) = _Stack.top(stack)
-    return (top)
-end
+func add(stack: Stack*) -> (stack: Stack*) {
+    let x = stack.value;
+    let y = stack.next.value;
+    return (new Stack(value=x + y, next=stack.next.next),);
+}
 ```
+
+We use the
+[`new` operator](https://www.cairo-lang.org/docs/how_cairo_works/object_allocation.html?highlight=new#the-new-operator)
+which creates a specified object, in this case a `Stack`, in the
+[execution segment](https://www.cairo-lang.org/docs/how_cairo_works/segments.html#the-program-and-execution-segments)
+of our program. It then returns a pointer to the newly created object, which
+agrees with the stated type of our return value.
+
+Next, we'll define a function called `lit()` for pushing values onto the stack. It is convention to call this operation `LIT` since in implementations of stack machines and stack-based languages,
+> *LIT is the primitive word for pushing a "literal" number onto the data stack. -[Wikipedia page for Forth](https://en.wikipedia.org/wiki/Forth_(programming_language))*
+
+Our function will take two arguments, a pointer to a stack, and a literal value
+`i`, which has type
+[`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element).
+It will return, as you might guess, a pointer to a stack to which the literal
+`i` has been pushed.
+
+```cairo
+func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+    return (new Stack(value=i, next=stack),);
+}
+```
+
+And finally, we'll define a function `top()` which simply returns the top value
+on the stack without modifying the stack.
+```cairo
+func top(stack: Stack*) -> (res: felt) {
+    return (stack.value,);
+}
+```
+
+We can wrap all these functions up in a namespace to clarify usage.
+
+```cairo
+namespace _Stack {
+    func empty() -> (stack: Stack*) {
+        return (cast(0, Stack*),);
+    }
+
+    func add(stack: Stack*) -> (stack: Stack*) {
+        let x = stack.value;
+        let y = stack.next.value;
+        return (new Stack(value=x + y, next=stack.next.next),);
+    }
+
+    func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+        return (new Stack(value=i, next=stack),);
+    }
+
+    func top(stack: Stack*) -> (res: felt) {
+        return (stack.value,);
+    }
+}
+```
+
+Great! Now we'll just add a short `main()` function to test that our stack
+functions as we expect. Below is the whole program so far:
+
+```cairo
+// Declare that our program will produce output, and import a function to
+// perform this IO.
+%builtins output
+from starkware.cairo.common.serialize import serialize_word
+
+struct Stack {
+    value: felt,
+    next: Stack*,
+}
+
+namespace _Stack {
+    func empty() -> (stack: Stack*) {
+        return (cast(0, Stack*),);
+    }
+
+    func add(stack: Stack*) -> (stack: Stack*) {
+        let x = stack.value;
+        let y = stack.next.value;
+        return (new Stack(value=x + y, next=stack.next.next),);
+    }
+
+    func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+        return (new Stack(value=i, next=stack),);
+    }
+
+    func top(stack: Stack*) -> (res: felt) {
+        return (stack.value,);
+    }
+}
+
+// Perform some example operations on a stack to sum two integers, and then
+// print the result.
+func main{output_ptr : felt*}() -> () {
+    let (stack) = _Stack.empty();
+    let (stack) = _Stack.lit(stack, 5);
+    let (stack) = _Stack.lit(stack, 6);
+    let (stack) = _Stack.add(stack);
+    let (top) = _Stack.top(stack);
+    serialize_word(top);
+    return ();
+}
+```
+
+Note that we've added a compiler directive [`%builtins output`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#writing-a-main-function). The Cairo documentation explains this:
+
+> The directive `%builtins output` instructs the Cairo compiler that our program will use the “output” builtin.
+
+For the purposes of this example, this just allows us to print stuff.
+
+We are then allowed to import the `serialize_word()` library function:
+```cairo
+from starkware.cairo.common.serialize import serialize_word
+```
+You can think of it like `print()`.
+
+The main function above takes no arguments and returns no values. There is an
+implicit argument `output_ptr` that we need in order to perform output. We push
+two literals to an empty stack, add them, and then print the result.
+
+
+Let's try it out! If you've installed everything correctly, you should have the
+`cairo-compile` and `cairo-run` executables on your `PATH`.
+
+```console
+cairo-compile --version
+```
+<sub>Expected output:</sub>
+```
+cairo-compile 0.10.1
+```
+
+```console
+cairo-run --version
+```
+<sub>Expected output:</sub>
+```
+cairo-run 0.10.1
+```
+
+Now let's put our program source code in a file and compile it. You can
+download it from
+[here](https://raw.githubusercontent.com/NethermindEth/horus-checker/example.cairo).
+
+Run:
+```console
+cairo-compile example.cairo --output compiled.json
+```
+
+The compiler outputs a JSON file, which we name `compiled.json`. If everything
+went according to plan, you should see this file in your current working
+directory.
+
+We can run this compiled program using `cairo-run`:
+```console
+cairo-run --program compiled.json --layout all --print_output
+```
+
+<sub>Expected output:</sub>
+```
+Program output:
+  11
+
+```
+
+Fantastic!
+
 
 ## Usage
 
