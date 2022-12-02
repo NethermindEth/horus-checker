@@ -81,7 +81,7 @@ installed at all. Follow the instructions below to install the needed version.
 1.  Download and install
     [`miniconda`](https://docs.conda.io/en/latest/miniconda.html) on your
     system:
-    
+
     * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
     * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
     * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
@@ -90,7 +90,7 @@ installed at all. Follow the instructions below to install the needed version.
     In each case, run the downloaded script/executable, and follow the instructions.
 
 2.  Create a conda environment with python 3.7:
-  
+
     ```console
     conda create -n horus-py37 python=3.7
     ```
@@ -117,12 +117,12 @@ installed at all. Follow the instructions below to install the needed version.
   ```console
   curl -sSL https://get.haskellstack.org/ | sh
   ```
-  
+
 ###### On macOS:
   ```console
   brew install stack
   ```
-  
+
   > These setup instructions assume that you have [Homebrew](https://brew.sh/) installed on your Mac.
 
 <br>
@@ -143,7 +143,7 @@ Version 2.7.5, Git revision ba147e6f59b2da75b1beb98b1888cce97f7032b1 x86_64 hpac
   ```console
   pip3 install poetry
   ```
-  
+
 ### Clone repositories
 
 Clone the `horus-compile` and `horus-checker` repositories to your machine.
@@ -152,7 +152,7 @@ Clone the `horus-compile` and `horus-checker` repositories to your machine.
 git clone git@github.com:NethermindEth/horus-compile.git
 git clone git@github.com:NethermindEth/horus-checker.git
 ```
-  
+
 ### Install SMT solvers
 
 Navigate to the `horus-checker/` repository root.
@@ -230,7 +230,7 @@ line `%lang starknet` at the top of our program.
 
 Then we'll define a
 [`struct`](https://www.cairo-lang.org/docs/reference/syntax.html#structs)
-called `Stack` with two fields: 
+called `Stack` with two fields:
 * one called `value` which has type [`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element),
 * one called `next` of type `Stack*`, which means it's a pointer to an instance
 of the struct `Stack` that we're currently defining.
@@ -314,7 +314,7 @@ stack exec horus-check -- ./<path-to-file>/example.json -s z3 mathsat cvc5
 
 #### Horus Checker options
 
-The following flags are able to added with `stack exec horus-check`:
+Flags for `stack exec horus-check`:
 
 - `-v` (verbose) = If the flag is set all the intermediate steps are printed out.
 - `-output-queries` = Stores the (unoptimized) SMT queries for each module in .smt2 files inside DIR.
@@ -339,7 +339,7 @@ The following annotations are supported.
 <br/>
 
 ### `@post`
-Specifies conditions that must be true if the function returns.
+Specifies conditions that must be true when the function returns.
 
 Example:
 ```cairo
@@ -350,7 +350,7 @@ No claim is made about whether the function completes or reverts, but that if it
 <br/>
 
 ### `@pre`
-Restricts the initial state, value of logical variables, or set of possible inputs for which the postcondition must hold.
+Restricts the initial state, value of [logical variables](#declare), or set of possible inputs.
 
 Example:
 ```cairo
@@ -366,20 +366,55 @@ Example:
 ```cairo
 # @declare $x : felt
 ```
-Logical variable names must begin with a `$`. Note that if a logical variable is not mentioned in the precondition, then the spec must hold for all possible values of that variable.
+A **logical variable** is a variable defined and used within a function spec
+(i.e.  a set of annotations for a function, i.e. a set of lines starting with
+`# @`) for conveniently referring to subexpressions. They play the same role
+that ordinary variables do in any programming language, but they can only be
+used within `horus` annotations.
+
+In the above example, `$x` is the logical variable being declared.
+
+Logical variable names must begin with a `$`. Note that if a logical variable
+is not mentioned in the precondition, then the spec must hold for all possible
+values of that variable.
 
 <br/>
 
 ### `@storage_update`
 Allows claims to be made about the state of a storage variable before and after the function.
 
+> The first new primitive that we see in the code is `@storage_var`. Unlike a
+> Cairo program, which is stateless, StarkNet contracts have a state, called
+> “the contract’s storage”. Transactions invoked on such contracts may modify
+> this state, in a way defined by the contract.
+>
+> The `@storage_var` decorator declares a variable which will be kept as part
+> of this storage. In our case, this variable consists of a single felt, called
+> balance. To use this variable, we will use the `balance.read()` and
+> `balance.write()` functions which are automatically created by the
+> `@storage_var` decorator. When a contract is deployed, all its storage cells
+> are initialized to zero. In particular, all storage variables are initially
+> zero.
+>
+> *From the Cairo documentation on [writing Starknet contracts](https://www.cairo-lang.org/docs/hello_starknet/intro.html?highlight=storage%20variable)*
+
 Example:
 ```cairo
 # @storage_update x() := x() + 1
 ```
-A storage update must be included for all storage variables modified by a function otherwise it will not meet the spec.
+A storage update must be included for all storage variables modified by a
+function otherwise it will not meet the spec.
 
-Only the top-level storage variable reference on the left hand side refers to the state after the function. As such, if `x` took one input and we specified the update as such `x(y()) := x(y()) + 1`, both instances of `y()` refer to the state before the function was called. If you would like to make claims about the relationship between multiple storage variables after the function is complete, this can be achieved via the use of logical variables. To do so, equate your 'before' logical variable to the storage variable in the precondition. Then, also in the precondition, relate the 'after' and 'before' logical variables.  Finally assign the 'after' logical variable to the storage variable in a storage update annotation.
+Only the top-level storage variable reference on the left hand side refers to
+the state after the function. As such, if `x` took one input and we specified
+the update as such `x(y()) := x(y()) + 1`, both instances of `y()` refer to the
+state before the function was called. If you would like to make claims about
+the relationship between multiple storage variables after the function is
+complete, this can be achieved via the use of logical variables. To do so,
+equate your 'before' logical variable to the storage variable in the
+precondition. Then, also in the precondition, relate the 'after' and 'before'
+logical variables. Finally assign the 'after' logical variable to the storage
+variable in a storage update annotation.
 
 <br/>
 
@@ -390,9 +425,14 @@ Example:
 ```cairo
 # @invariant i <= 10
 ```
-The invariant annotation is only required in the case of low level loops implemented with jump instructions, however it can also be used to make claims that must hold at any specific point in a function by adding an appropriately named label and attaching the annotation to it.  Note that this effectively splits the function in two, and that anything from before the invariant that is not mentioned within it cannot be used after.
+The invariant annotation is only required in the case of low level loops
+implemented with jump instructions, however it can also be used to make claims
+that must hold at any specific point in a function by adding an appropriately
+named label and attaching the annotation to it.  Note that this effectively
+splits the function in two, and that anything from before the invariant that is
+not mentioned within it cannot be used after.
 
-## Spec syntax
+### Spec syntax
 
 The following are allowed within logical formula:
 * `a`, `$a` cairo references and logical variables can be used by name
