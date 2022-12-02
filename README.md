@@ -79,51 +79,51 @@ installed at all. Follow the instructions below to install the needed version.
 
 
 1.  Download and install
-    [`miniconda`](https://docs.conda.io/en/latest/miniconda.html) on your
-    system:
+  [`miniconda`](https://docs.conda.io/en/latest/miniconda.html) on your
+  system:
 
-    * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
-    * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-    * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-    * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
+  * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
+  * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+  * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
 
-    In each case, run the downloaded script/executable, and follow the instructions.
+  In each case, run the downloaded script/executable, and follow the instructions.
 
 2.  Create a conda environment with python 3.7:
 
-    ```console
-    conda create -n horus-py37 python=3.7
-    ```
-    In the above, `horus-py37` is just a name we've chosen for this environment.
+  ```console
+  conda create -n horus-py37 python=3.7
+  ```
+  In the above, `horus-py37` is just a name we've chosen for this environment.
 
 3.  Activate the created environmment:
 
-    ```console
-    conda activate horus-py37
-    ```
+  ```console
+  conda activate horus-py37
+  ```
 
 4.  Verify that you're running 3.7:
-    ```console
-    python3 --version
-    ```
-    <sub>Expected output:</sub>
-    ```
-    Python 3.7.15
-    ```
+  ```console
+  python3 --version
+  ```
+  <sub>Expected output:</sub>
+  ```
+  Python 3.7.15
+  ```
 
 ### Installing the Haskell tool stack
 
 ###### On Linux:
-  ```console
-  curl -sSL https://get.haskellstack.org/ | sh
-  ```
+```console
+curl -sSL https://get.haskellstack.org/ | sh
+```
 
 ###### On macOS:
-  ```console
-  brew install stack
-  ```
+```console
+brew install stack
+```
 
-  > These setup instructions assume that you have [Homebrew](https://brew.sh/) installed on your Mac.
+> These setup instructions assume that you have [Homebrew](https://brew.sh/) installed on your Mac.
 
 <br>
 
@@ -140,9 +140,9 @@ Version 2.7.5, Git revision ba147e6f59b2da75b1beb98b1888cce97f7032b1 x86_64 hpac
 
 ### Install poetry
 
-  ```console
-  pip3 install poetry
-  ```
+```console
+pip3 install poetry
+```
 
 ### Clone repositories
 
@@ -157,23 +157,23 @@ git clone git@github.com:NethermindEth/horus-checker.git
 
 Navigate to the `horus-checker/` repository root.
 
-  ```console
-  cd horus-checker/
-  ```
+```console
+cd horus-checker/
+```
 
 ###### On Linux:
-  ```console
-  # Inside the `horus-checker/` repository root.
-  sh ./scripts/ci/install-z3-linux.sh
-  sh ./scripts/ci/install-mathsat-linux.sh
-  ```
+```console
+# Inside the `horus-checker/` repository root.
+sh ./scripts/ci/install-z3-linux.sh
+sh ./scripts/ci/install-mathsat-linux.sh
+```
 
 ###### On macOS:
-  ```console
-  # Inside the `horus-checker/` repository root.
-  sh ./scripts/ci/install-z3-macos.sh
-  sh ./scripts/ci/install-mathsat-macos.sh
-  ```
+```console
+# Inside the `horus-checker/` repository root.
+sh ./scripts/ci/install-z3-macos.sh
+sh ./scripts/ci/install-mathsat-macos.sh
+```
 
 ### Create a python virtual environment
 
@@ -233,8 +233,8 @@ of the struct `Stack` that we're currently defining.
 
 ```cairo
 struct Stack {
-    value: felt,
-    next: Stack*,
+  value: felt,
+  next: Stack*,
 }
 ```
 
@@ -247,7 +247,7 @@ Now we've got bare a data structure. Let's define some functions that operate on
 First, we'll define a function that takes no arguments and returns a pointer to a `Stack`.
 ```cairo
 func empty() -> (stack: Stack*) {
-    return (cast(0, Stack*),);
+  return (cast(0, Stack*),);
 }
 ```
 The use of `cast()` above is a
@@ -267,9 +267,9 @@ to access the appropriate data from our parameter `stack`.
 
 ```cairo
 func add(stack: Stack*) -> (stack: Stack*) {
-    let x = stack.value;
-    let y = stack.next.value;
-    return (new Stack(value=x + y, next=stack.next.next),);
+  let x = stack.value;
+  let y = stack.next.value;
+  return (new Stack(value=x + y, next=stack.next.next),);
 }
 ```
 
@@ -291,7 +291,7 @@ It will return, as you might guess, a pointer to a stack to which the literal
 
 ```cairo
 func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
-    return (new Stack(value=i, next=stack),);
+  return (new Stack(value=i, next=stack),);
 }
 ```
 
@@ -299,7 +299,7 @@ And finally, we'll define a function `top()` which simply returns the top value
 on the stack without modifying the stack.
 ```cairo
 func top(stack: Stack*) -> (res: felt) {
-    return (stack.value,);
+  return (stack.value,);
 }
 ```
 
@@ -307,23 +307,23 @@ We can wrap all these functions up in a namespace to clarify usage.
 
 ```cairo
 namespace _Stack {
-    func empty() -> (stack: Stack*) {
-        return (cast(0, Stack*),);
-    }
+  func empty() -> (stack: Stack*) {
+      return (cast(0, Stack*),);
+  }
 
-    func add(stack: Stack*) -> (stack: Stack*) {
-        let x = stack.value;
-        let y = stack.next.value;
-        return (new Stack(value=x + y, next=stack.next.next),);
-    }
+  func add(stack: Stack*) -> (stack: Stack*) {
+      let x = stack.value;
+      let y = stack.next.value;
+      return (new Stack(value=x + y, next=stack.next.next),);
+  }
 
-    func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
-        return (new Stack(value=i, next=stack),);
-    }
+  func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+      return (new Stack(value=i, next=stack),);
+  }
 
-    func top(stack: Stack*) -> (res: felt) {
-        return (stack.value,);
-    }
+  func top(stack: Stack*) -> (res: felt) {
+      return (stack.value,);
+  }
 }
 ```
 
@@ -337,40 +337,40 @@ functions as we expect. Below is the whole program so far:
 from starkware.cairo.common.serialize import serialize_word
 
 struct Stack {
-    value: felt,
-    next: Stack*,
+  value: felt,
+  next: Stack*,
 }
 
 namespace _Stack {
-    func empty() -> (stack: Stack*) {
-        return (cast(0, Stack*),);
-    }
+  func empty() -> (stack: Stack*) {
+      return (cast(0, Stack*),);
+  }
 
-    func add(stack: Stack*) -> (stack: Stack*) {
-        let x = stack.value;
-        let y = stack.next.value;
-        return (new Stack(value=x + y, next=stack.next.next),);
-    }
+  func add(stack: Stack*) -> (stack: Stack*) {
+      let x = stack.value;
+      let y = stack.next.value;
+      return (new Stack(value=x + y, next=stack.next.next),);
+  }
 
-    func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
-        return (new Stack(value=i, next=stack),);
-    }
+  func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+      return (new Stack(value=i, next=stack),);
+  }
 
-    func top(stack: Stack*) -> (res: felt) {
-        return (stack.value,);
-    }
+  func top(stack: Stack*) -> (res: felt) {
+      return (stack.value,);
+  }
 }
 
 // Perform some example operations on a stack to sum two integers, and then
 // print the result.
 func main{output_ptr : felt*}() -> () {
-    let (stack) = _Stack.empty();
-    let (stack) = _Stack.lit(stack, 5);
-    let (stack) = _Stack.lit(stack, 6);
-    let (stack) = _Stack.add(stack);
-    let (top) = _Stack.top(stack);
-    serialize_word(top);
-    return ();
+  let (stack) = _Stack.empty();
+  let (stack) = _Stack.lit(stack, 5);
+  let (stack) = _Stack.lit(stack, 6);
+  let (stack) = _Stack.add(stack);
+  let (top) = _Stack.top(stack);
+  serialize_word(top);
+  return ();
 }
 ```
 
@@ -394,6 +394,9 @@ two literals to an empty stack, add them, and then print the result.
 Let's try it out! If you've installed everything correctly, you should have the
 `cairo-compile` and `cairo-run` executables on your `PATH`.
 
+<br>
+
+###### Check that `cairo-compile` is installed
 ```console
 cairo-compile --version
 ```
@@ -401,7 +404,9 @@ cairo-compile --version
 ```
 cairo-compile 0.10.1
 ```
+<br>
 
+###### Check that `cairo-run` is installed
 ```console
 cairo-run --version
 ```
@@ -410,17 +415,17 @@ cairo-run --version
 cairo-run 0.10.1
 ```
 
-Now let's put our program source code in a file and compile it. You can
-download it from
+Now let's put the source code of the program we just wrote in a file and compile it. You can
+download the source code from
 [here](https://raw.githubusercontent.com/NethermindEth/horus-checker/example.cairo).
 
-Run:
+Make sure your file has the name `example.cairo`, and then run the following command:
 ```console
 cairo-compile example.cairo --output compiled.json
 ```
 
 The compiler outputs a JSON file, which we name `compiled.json`. If everything
-went according to plan, you should see this file in your current working
+goes according to plan, you should see this file in your current working
 directory.
 
 We can run this compiled program using `cairo-run`:
@@ -431,11 +436,117 @@ cairo-run --program compiled.json --layout all --print_output
 <sub>Expected output:</sub>
 ```
 Program output:
-  11
+11
 
 ```
 
-Fantastic!
+And we see that it correctly added the two literal values we pushed, `5` and
+`6`. Fantastic!
+
+
+#### Verifying our program
+
+Now, let's add some annotations that describe how we expect our `_Stack`
+functions to behave, and then we'll prove that the implementations we wrote
+satisfy the specification of behavior given by the annotations.
+
+
+Here's our program with the annotations:
+```cairo
+%builtins output
+from starkware.cairo.common.serialize import serialize_word
+
+struct Stack {
+  value: felt,
+  next: Stack*,
+}
+
+namespace _Stack {
+  func empty() -> (stack: Stack*) {
+      return (cast(0, Stack*),);
+  }
+
+  // @post $Return.stack.value == stack.value + stack.next.value
+  // @post $Return.stack.next == stack.next.next
+  func add(stack: Stack*) -> (stack: Stack*) {
+      let x = stack.value;
+      let y = stack.next.value;
+      return (new Stack(value=x + y, next=stack.next.next),);
+  }
+
+  // @post $Return.stack.value == i
+  // @post $Return.stack.next == stack
+  func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+      return (new Stack(value=i, next=stack),);
+  }
+
+  // @post $Return.res == stack.value
+  func top(stack: Stack*) -> (res: felt) {
+      return (stack.value,);
+  }
+}
+
+// Perform some example operations on a stack.
+func main{output_ptr : felt*}() -> () {
+  let (stack) = _Stack.empty();
+  let (stack) = _Stack.lit(stack, 5);
+  let (stack) = _Stack.lit(stack, 6);
+  let (stack) = _Stack.add(stack);
+  let (top) = _Stack.top(stack);
+  serialize_word(top);
+  return ();
+}
+```
+The annotations are the comments directoy above each of the functions `add()`,
+`lit()`, and `top()`. They begin with `// @`. The `@post` keyword indicates
+that an annotation is specifying a condition that most hold when the function
+returns.
+
+Briefly, we are asserting that:
+* The `add()` function returns a pointer to a stack with the sum of the first two elements on top, and the remainder of the original stack (the third element and so on) after that.
+* The `lit` function puts `i` on the top of the stack, and preserves the old stack underneath it.
+* The `top` function actually returns the top of the stack we pass as an argument.
+
+Let's compile this annotated program with Horus and then check these properties:
+```console
+horus-compile annotated.cairo --output compiled.json
+```
+
+This should create a file called `compiled.json`. Now let's verify the compiled binary:
+```console
+horus-check -s z3 compiled.json
+```
+
+<sub>Expected output:</sub>
+```
+_Stack.add
+Unsat
+
+_Stack.empty
+Unsat
+
+_Stack.lit
+Unsat
+
+_Stack.top
+Unsat
+
+main
+Unsat
+
+cairo.lang.compiler.lib.registers.get_ap
+Unsat
+
+empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))
+Unsat
+```
+
+The judgement `Unsat` means verified! The three functions `_Stack.add`,
+`_Stack.lit`, and `_Stack.top` that we annotated all say `Unsat`, which means
+our implementations are correct with respect to the specifications we wrote in
+our annotations. Congrats! You've just formally verified your first Cairo
+program!
+
 
 
 ## Usage
