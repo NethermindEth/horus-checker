@@ -13,6 +13,23 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.7'
+
+      - uses: actions/cache@v2
+        name: Cache python dependencies
+        with:
+          path: ${{ env.pythonLocation }}
+          key: ${{ env.pythonLocation }}-${{ env.horus_compile_version }}
+          restore-keys:
+            ${{ env.pythonLocation }}-
+
+      - name: Install python dependencies
+        run: 
+          pip install cairo-lang==0.10.1
+
       - name: Install linters
         run: |
           curl -L -o /usr/local/bin/fourmolu ${{env.fourmolu_url}}
@@ -37,6 +54,10 @@ jobs:
         with:
           path: '["src/", "app/"]'
           fail-on: suggestion
+
+      - name: Run cairo-format
+        run:
+          find tests/resources/golden -name *.cairo -exec cairo-format -c {} +
 
   test:
     runs-on: ubuntu-latest
