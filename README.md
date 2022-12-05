@@ -225,6 +225,8 @@ program that implements a stack data structure in Cairo. If you're unfamiliar
 with Cairo, or you need a refresher, check out the
 [documentation](https://www.cairo-lang.org/docs/)!
 
+#### Define a struct called `Stack`
+
 Let's define a [`struct`](https://www.cairo-lang.org/docs/reference/syntax.html#structs)
 called `Stack` with two members:
 * one called `value` which has type [`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element),
@@ -244,8 +246,15 @@ to the next node in the list.
 
 Now we've got bare a data structure. Let's define some functions that operate on it.
 
+#### Define a function that constructs an empty `Stack`
+
 First, we'll define a function that takes no arguments and returns a pointer to a `Stack`.
 ```cairo
+struct Stack {
+  value: felt,
+  next: Stack*,
+}
+
 func empty() -> (stack: Stack*) {
   return (cast(0, Stack*),);
 }
@@ -253,19 +262,26 @@ func empty() -> (stack: Stack*) {
 The use of `cast()` above is a
 [typed reference](https://www.cairo-lang.org/docs/how_cairo_works/consts.html?highlight=cast#typed-references).
 
-We'll also also define a function that adds the top two elements on the stack.
-It will take one argument, which will be a poointer to a stack, and it will
-have one return value, also a pointer to a stack.
+#### Define a function that adds the top two elements on the stack
 
-If we do things right, we expect that the return value points to a stack in
-which the top two elements of the stack represented by the argument have been
-summed.
+We'll also also define a function that adds the top two elements on the stack.
+It will take one argument, which will be a pointer to a stack, and it will
+have one return value, also a pointer to a stack.
 
 We can use
 [member accessor notation](https://www.cairo-lang.org/docs/how_cairo_works/consts.html?highlight=cast#typed-references)
 to access the appropriate data from our parameter `stack`.
 
 ```cairo
+struct Stack {
+  value: felt,
+  next: Stack*,
+}
+
+func empty() -> (stack: Stack*) {
+  return (cast(0, Stack*),);
+}
+
 func add(stack: Stack*) -> (stack: Stack*) {
   let x = stack.value;
   let y = stack.next.value;
@@ -280,24 +296,61 @@ which creates a specified object, in this case a `Stack`, in the
 of our program. It then returns a pointer to the newly created object, which
 agrees with the stated type of our return value.
 
+#### Define a function that pushes values onto the stack
+
 Next, we'll define a function called `lit()` for pushing values onto the stack. It is convention to call this operation `LIT` since in implementations of stack machines and stack-based languages,
 > *LIT is the primitive word for pushing a "literal" number onto the data stack. -[Wikipedia page for Forth](https://en.wikipedia.org/wiki/Forth_(programming_language))*
 
 Our function will take two arguments, a pointer to a stack, and a literal value
 `i`, which has type
 [`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element).
-It will return, as you might guess, a pointer to a stack to which the literal
-`i` has been pushed.
+It will return a pointer to a stack to which the literal `i` has been pushed.
 
 ```cairo
+struct Stack {
+  value: felt,
+  next: Stack*,
+}
+
+func empty() -> (stack: Stack*) {
+  return (cast(0, Stack*),);
+}
+
+func add(stack: Stack*) -> (stack: Stack*) {
+  let x = stack.value;
+  let y = stack.next.value;
+  return (new Stack(value=x + y, next=stack.next.next),);
+}
+
 func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
   return (new Stack(value=i, next=stack),);
 }
 ```
 
+#### Define a function to peek the top value of the stack
+
 And finally, we'll define a function `top()` which simply returns the top value
 on the stack without modifying the stack.
 ```cairo
+struct Stack {
+  value: felt,
+  next: Stack*,
+}
+
+func empty() -> (stack: Stack*) {
+  return (cast(0, Stack*),);
+}
+
+func add(stack: Stack*) -> (stack: Stack*) {
+  let x = stack.value;
+  let y = stack.next.value;
+  return (new Stack(value=x + y, next=stack.next.next),);
+}
+
+func lit(stack: Stack*, i: felt) -> (stack: Stack*) {
+  return (new Stack(value=i, next=stack),);
+}
+
 func top(stack: Stack*) -> (res: felt) {
   return (stack.value,);
 }
@@ -306,6 +359,11 @@ func top(stack: Stack*) -> (res: felt) {
 We can wrap all these functions up in a namespace to clarify usage.
 
 ```cairo
+struct Stack {
+  value: felt,
+  next: Stack*,
+}
+
 namespace _Stack {
   func empty() -> (stack: Stack*) {
       return (cast(0, Stack*),);
@@ -327,8 +385,10 @@ namespace _Stack {
 }
 ```
 
+#### Add the necessary imports and a `main()` function
+
 Great! Now we'll just add a short `main()` function to test that our stack
-functions as we expect. Below is the whole program so far:
+functions as we expect.
 
 ```cairo
 // Declare that our program will produce output, and import a function to
@@ -390,11 +450,10 @@ The main function above takes no arguments and returns no values. There is an
 implicit argument `output_ptr` that we need in order to perform output. We push
 two literals to an empty stack, add them, and then print the result.
 
+#### Compile and run our example program
 
 Let's try it out! If you've installed everything correctly, you should have the
 `cairo-compile` and `cairo-run` executables on your `PATH`.
-
-<br>
 
 ###### Check that `cairo-compile` is installed
 ```console
@@ -404,6 +463,7 @@ cairo-compile --version
 ```
 cairo-compile 0.10.1
 ```
+
 <br>
 
 ###### Check that `cairo-run` is installed
@@ -444,7 +504,7 @@ And we see that it correctly added the two literal values we pushed, `5` and
 `6`. Fantastic!
 
 
-#### Verifying our program
+#### Formally verify our example program
 
 Now, let's add some annotations that describe how we expect our `_Stack`
 functions to behave, and then we'll prove that the implementations we wrote
@@ -497,7 +557,7 @@ func main{output_ptr : felt*}() -> () {
   return ();
 }
 ```
-The annotations are the comments directoy above each of the functions `add()`,
+The annotations are the comments directly above each of the functions `add()`,
 `lit()`, and `top()`. They begin with `// @`. The `@post` keyword indicates
 that an annotation is specifying a condition that most hold when the function
 returns.
@@ -548,6 +608,68 @@ our annotations. Congrats! You've just formally verified your first Cairo
 program!
 
 
+## FAQ
+
+### What is Horus?
+
+Horus is a command-line tool for the [Cairo ecosystem](https://www.cairo-lang.org/).
+It helps you [formally verify](https://en.wikipedia.org/wiki/Formal_verification)
+Cairo programs and [StarkNet smart contracts](https://starkware.co/starknet/).
+
+The way it works is like this:
+
+1. You write a Cairo program.
+2. You add annotations that describe how the program should operate.
+3. You run Horus on your program, and Horus tells you if the program obeys the annotations.
+
+> “Program testing can be used to show the presence of bugs, but never to show their absence!”
+> ― Edsger W. Dijkstra 
+
+Horus can be used to show the **absence** of bugs.
+
+### What is Cairo/StarkNet?
+
+[**Cairo**](https://www.cairo-lang.org/) is a [Turing-complete](https://en.wikipedia.org/wiki/Turing_completeness) language for writing [dApps](https://ethereum.org/en/dapps/#what-are-dapps) using [STARKs](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-starks/).
+
+Basically, it's a programming language that runs on [Layer 2 Ethereum](https://ethereum.org/en/layer-2/) that lets you write programs where one party can prove to another that a certain computation was executed correctly. The syntax is a bit like [Rust](https://www.rust-lang.org/).
+
+[**StarkNet**](https://starkware.co/starknet/) is a Layer 2 network over Ethereum. Specifically, it is a [ZK-Rollup (zero-knowledge rollup)](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-rollups/), which is basically a way of scaling up the number of transactions that a blockchain can process by bundling (rolling-up) many transactions into one.
+
+You can write StarkNet smart contracts in the Cairo language.
+
+### When should I use Horus?
+
+Use Horus when you need to be absolutely sure that a Cairo program or StarkNet
+contract executes correctly according to some specification. Horus is good for
+when you know what your program should do, but you aren't sure that the
+implementation actually does that thing, in all cases, no matter what. Horus
+will not help you if you don't know exactly what your program should do.
+
+Horus, and formal verification in general, proves that the implementation of a
+program **matches the expected behavior**, as expressed in some formal
+specification.
+
+You get the most mileage out of this when the expected behavior is simple, but
+the implementation is very complex.
+
+### Why should I use Horus?
+
+Because you love formal verification and care about writing provably correct programs!
+
+> [Really stupid “smart contract” bug let hackers steal $31 million in digital coin](https://arstechnica.com/information-technology/2021/12/hackers-drain-31-million-from-cryptocurrency-service-monox-finance/)
+
+Alternatively, because you don't want your firm to be in the news.
+
+### What does Horus do?
+
+It uses a modified version of the Cairo compiler to translate your
+[function specification annotations](#annotations) into
+[SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories)
+queries. These are mathematical assertions that the desired properties of the
+function in question are true for all inputs. Then these queries are run, and
+the SMT solver magically tells us whether or not it was able to prove that the
+program is sound!
+
 
 ## Usage
 
@@ -563,7 +685,7 @@ Thereafter you can point to the specific JSON file that you would like to run th
 
 <br>
 
-```
+```console
 stack exec horus-check -- ./<path-to-file>/example.json -s z3
 ```
 
@@ -594,7 +716,7 @@ Flags for `stack exec horus-check`:
 Horus works using an annotation system similar to Cairo itself, however Horus annotations are written in comments. For example:
 
 ```
-# @post $Result.res == 3
+// @post $Result.res == 3
 func example() -> (res):
 	return (3)
 end
@@ -608,7 +730,7 @@ Specifies conditions that must be true when the function returns.
 
 Example:
 ```cairo
-# @post $Return.res < 100 && $Return.res >= 50
+// @post $Return.res < 100 && $Return.res >= 50
 ```
 No claim is made about whether the function completes or reverts, but that if it completes then the postcondition holds.
 
@@ -619,7 +741,7 @@ Restricts the initial state, value of [logical variables](#declare), or set of p
 
 Example:
 ```cairo
-# @pre flag * (flag - 1) == 0
+// @pre flag * (flag - 1) == 0
 ```
 
 <br/>
@@ -629,11 +751,11 @@ Allows the introduction of logical variables.
 
 Example:
 ```cairo
-# @declare $x : felt
+// @declare $x : felt
 ```
 A **logical variable** is a variable defined and used within a function spec
 (i.e.  a set of annotations for a function, i.e. a set of lines starting with
-`# @`) for conveniently referring to subexpressions. They play the same role
+`// @`) for conveniently referring to subexpressions. They play the same role
 that ordinary variables do in any programming language, but they can only be
 used within `horus` annotations.
 
@@ -665,7 +787,7 @@ Allows claims to be made about the state of a storage variable before and after 
 
 Example:
 ```cairo
-# @storage_update x() := x() + 1
+// @storage_update x() := x() + 1
 ```
 A storage update must be included for all storage variables modified by a
 function otherwise it will not meet the spec.
@@ -688,7 +810,7 @@ Introduces a constraint attached to a label, typically used for loop invariants.
 
 Example:
 ```cairo
-# @invariant i <= 10
+// @invariant i <= 10
 ```
 The invariant annotation is only required in the case of low level loops
 implemented with jump instructions, however it can also be used to make claims
