@@ -3,7 +3,7 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.cairo.common.hash import hash2
-from math import assert_le, unsigned_div_rem
+from math import assert_le, assert_nn_le, unsigned_div_rem
 
 # The maximum amount of each token that belongs to the AMM.
 const BALANCE_UPPER_BOUND = 2 ** 64
