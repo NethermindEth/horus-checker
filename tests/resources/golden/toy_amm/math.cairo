@@ -18,6 +18,20 @@ func assert_le{range_check_ptr}(a, b):
     return ()
 end
 
+# Verifies that 0 <= a <= b.
+#
+# Prover assumption: b < RANGE_CHECK_BOUND.
+#
+# This function is still sound without the prover assumptions. In that case, it is guaranteed
+# that a < RANGE_CHECK_BOUND and b < 2 * RANGE_CHECK_BOUND.
+# @pre b < 2**128
+# @post 0 <= a and  a <= b
+func assert_nn_le{range_check_ptr}(a, b):
+    assert_nn(a)
+    assert_le(a, b)
+    return ()
+end
+
 # Returns q and r such that:
 #  0 <= q < rc_bound, 0 <= r < div and value = q * div + r.
 #
