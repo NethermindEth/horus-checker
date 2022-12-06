@@ -248,7 +248,8 @@ Now we've got bare a data structure. Let's define some functions that operate on
 
 #### Define a function that constructs an empty `Stack`
 
-First, we'll define a function that takes no arguments and returns a pointer to a `Stack`.
+First, we'll define a function called `empty()` that takes no arguments and
+returns a pointer to a new, empty `Stack`.
 ```cairo
 struct Stack {
   value: felt,
@@ -264,9 +265,9 @@ The use of `cast()` above is a
 
 #### Define a function that adds the top two elements on the stack
 
-We'll also also define a function that adds the top two elements on the stack.
-It will take one argument, which will be a pointer to a stack, and it will
-have one return value, also a pointer to a stack.
+We'll also define a function called `add()`. It will take one argument, which
+will be a pointer to a stack, and it will have one return value, also a pointer
+to a stack.
 
 We can use
 [member accessor notation](https://www.cairo-lang.org/docs/how_cairo_works/consts.html?highlight=cast#typed-references)
@@ -293,18 +294,24 @@ We use the
 [`new` operator](https://www.cairo-lang.org/docs/how_cairo_works/object_allocation.html?highlight=new#the-new-operator)
 which creates a specified object, in this case a `Stack`, in the
 [execution segment](https://www.cairo-lang.org/docs/how_cairo_works/segments.html#the-program-and-execution-segments)
-of our program. It then returns a pointer to the newly created object, which
-agrees with the stated type of our return value.
+of our program. It then returns a pointer to the newly created object. In this
+case, it returns a pointer to a `Stack`, and that makes sense, since our return
+value is `stack: Stack*`!
 
 #### Define a function that pushes values onto the stack
 
-Next, we'll define a function called `lit()` for pushing values onto the stack. It is convention to call this operation `LIT` since in implementations of stack machines and stack-based languages,
+Next, we'll define a function called `lit()` for pushing values onto the stack.
+
+By convention, `lit` stands for "literal", since we're pushing "literal"
+values. This is a naming tradition that originates from implementations of
+stack machines and stack-based languages:
 > *LIT is the primitive word for pushing a "literal" number onto the data stack. -[Wikipedia page for Forth](https://en.wikipedia.org/wiki/Forth_(programming_language))*
 
 Our function will take two arguments, a pointer to a stack, and a literal value
 `i`, which has type
 [`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element).
-It will return a pointer to a stack to which the literal `i` has been pushed.
+It will return a pointer to a stack to which the literal `i` has been pushed,
+and is now the top element.
 
 ```cairo
 struct Stack {
@@ -356,7 +363,10 @@ func top(stack: Stack*) -> (res: felt) {
 }
 ```
 
-We can wrap all these functions up in a namespace to clarify usage.
+#### Add a namespace for our `Stack`-related functions
+
+We can wrap all these functions up in a namespace called `_Stack` to clarify
+usage:
 
 ```cairo
 struct Stack {
@@ -384,6 +394,10 @@ namespace _Stack {
   }
 }
 ```
+
+This means when we call them we must write, for example, `_Stack.add` instead
+of just `add`, which makes it slightly clearer what sort of objects we're
+operating on, and where to find the implementation of that operation.
 
 #### Add the necessary imports and a `main()` function
 
@@ -447,8 +461,9 @@ from starkware.cairo.common.serialize import serialize_word
 You can think of it like `print()`.
 
 The main function above takes no arguments and returns no values. There is an
-implicit argument `output_ptr` that we need in order to perform output. We push
-two literals to an empty stack, add them, and then print the result.
+implicit argument `output_ptr` that we need in order to perform output. Our
+example `main()` function pushes two literals to an empty stack, adds them, and
+then prints the result.
 
 #### Compile and run our example program
 
@@ -559,8 +574,9 @@ func main{output_ptr : felt*}() -> () {
 ```
 The annotations are the comments directly above each of the functions `add()`,
 `lit()`, and `top()`. They begin with `// @`. The `@post` keyword indicates
-that an annotation is specifying a condition that most hold when the function
-returns.
+that an annotation is specifying a condition that must hold **at the end of the
+function call**, when the function returns. It is called `@post` because it is
+a "postcondition".
 
 Briefly, we are asserting that:
 * The `add()` function returns a pointer to a stack with the sum of the first two elements on top, and the remainder of the original stack (the third element and so on) after that.
