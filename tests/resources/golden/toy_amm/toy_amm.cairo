@@ -29,7 +29,6 @@ end
 # amount may be positive or negative.
 # Assert before setting that the balance does not exceed the upper bound.
 #
-# @pre token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B
 # @storage_update account_balance(account_id, token_type) := account_balance(account_id, token_type) + amount
 func modify_account_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_type : felt, amount : felt
@@ -53,7 +52,6 @@ end
 # Sets the pool's balance for the given token.
 # Asserts before setting that the balance does not exceed the upper bound.
 #
-# @pre token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B
 # @storage_update pool_balance(token_type) := balance
 func set_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt, balance : felt
@@ -64,7 +62,6 @@ func set_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ra
 end
 
 # Returns the pool's balance.
-# @pre token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B
 # @post $Return.balance == pool_balance(token_type)
 func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt
@@ -80,7 +77,7 @@ end
 # @pre pool_balance(token_to) == $old_pool_balance_to
 #
 # Tokens should be different
-# @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B) or (token_from == TOKEN_TYPE_B and token_to == TOKEN_TYPE_A)
+# @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B)
 #
 # The account has enough balance
 # @pre 0 < amount_from and amount_from <= account_balance(account_id, token_from)
