@@ -643,15 +643,27 @@ The way it works is like this:
 
 Horus can be used to show the **absence** of bugs.
 
+<br>
+
+Horus consists of two command-line tools, called `horus-compile` and
+`horus-check`. The first, `horus-compile`, is a modified version of the Cairo
+compiler that you can use to compile a program with [Horus annotations](#annotations).
+You can then run `horus-check` on the compiled program to formally verify the
+program's behavior.
+
+<br>
+
 ### What is Cairo/StarkNet?
 
-[**Cairo**](https://www.cairo-lang.org/) is a [Turing-complete](https://en.wikipedia.org/wiki/Turing_completeness) language for writing [dApps](https://ethereum.org/en/dapps/#what-are-dapps) using [STARKs](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-starks/).
+[**Cairo**](https://www.cairo-lang.org/) is a [Turing-complete](https://en.wikipedia.org/wiki/Turing_completeness) language for writing [dApps](https://ethereum.org/en/dapps/#what-are-dapps) using [STARKs](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-starks/). STARK stands for Scalable Transparent Argument of Knowledge.
 
 Basically, it's a programming language that runs on [Layer 2 Ethereum](https://ethereum.org/en/layer-2/) that lets you write programs where one party can prove to another that a certain computation was executed correctly. The syntax is a bit like [Rust](https://www.rust-lang.org/).
 
 [**StarkNet**](https://starkware.co/starknet/) is a Layer 2 network over Ethereum. Specifically, it is a [ZK-Rollup (zero-knowledge rollup)](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-rollups/), which is basically a way of scaling up the number of transactions that a blockchain can process by bundling (rolling-up) many transactions into one.
 
 You can write StarkNet smart contracts in the Cairo language.
+
+<br>
 
 ### When should I use Horus?
 
@@ -668,6 +680,8 @@ specification.
 You get the most mileage out of this when the expected behavior is simple, but
 the implementation is very complex.
 
+<br>
+
 ### Why should I use Horus?
 
 Because you love formal verification and care about writing provably correct programs!
@@ -675,6 +689,8 @@ Because you love formal verification and care about writing provably correct pro
 > [Really stupid “smart contract” bug let hackers steal $31 million in digital coin](https://arstechnica.com/information-technology/2021/12/hackers-drain-31-million-from-cryptocurrency-service-monox-finance/)
 
 Alternatively, because you don't want your firm to be in the news.
+
+<br>
 
 ### What does Horus do?
 
@@ -688,6 +704,38 @@ program is sound!
 
 
 ## Usage
+
+Horus consists of two command-line tools, `horus-compile` and `horus-check`.
+
+<br>
+
+### `horus-compile`
+```console
+horus-compile [options] <file>
+```
+
+The `[options]` are described in the [`horus-compile`](#horus-compile) section
+below.
+
+The `<file>` argument is a Horus-annotated Cairo program, usually with a
+filename of the form `<program>.cairo`.
+
+The `horus-compile` tool emits a compiled Cairo program in the form of JSON.
+The JSON output of `horus-compile` is printed to `stdout` by default.
+
+<br>
+
+```console
+horus-check --solver <solver_name> <compiled_file>
+```
+
+The `<solver_name>` argument above is either `z3`, `cvc5`, or `mathsat`.
+
+The `<compiled_file>` is the output of a `horus-compile` call. This should be a
+JSON file. You can save the JSON emitted by `horus-compile` to a file using the
+`--output FILE` flag.
+
+<br>
 
 #### Using `horus-check`
 
