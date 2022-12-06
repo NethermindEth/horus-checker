@@ -43,7 +43,6 @@ end
 
 # Returns the account's balance for the given token.
 #
-# @pre token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B
 # @post $Return.balance == account_balance(account_id, token_type)
 func get_account_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     account_id : felt, token_type : felt
@@ -128,7 +127,7 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     return (amount_to=amount_to, r=r)
 end
 
-# @post (token_type == TOKEN_TYPE_A -> $Return.t == TOKEN_TYPE_B) and (token_type != TOKEN_TYPE_B -> $Return.t == TOKEN_TYPE_A)
+# @post (token_type == TOKEN_TYPE_A and $Return.t == TOKEN_TYPE_B) or (token_type != TOKEN_TYPE_A and $Return.t == TOKEN_TYPE_A)
 func get_opposite_token(token_type : felt) -> (t : felt):
     if token_type == TOKEN_TYPE_A:
         return (TOKEN_TYPE_B)
@@ -142,8 +141,8 @@ end
 # @declare $token_to: felt
 #
 # Tokens are different
-# @pre (token_from == TOKEN_TYPE_A and $token_to == TOKEN_TYPE_B)
-# pre (token_from == TOKEN_TYPE_A and $token_to == TOKEN_TYPE_B) or (token_from == TOKEN_TYPE_B and $token_to == TOKEN_TYPE_A)
+# @pre (token_from == TOKEN_TYPE_A or token_from == TOKEN_TYPE_B)
+# @pre $token_to == 3 - token_from
 # 
 # @declare $old_pool_balance_from: felt
 # @declare $old_pool_balance_to: felt
@@ -184,7 +183,13 @@ func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     )
     # assert_le(amount_from, account_from_balance)
 
-    let (token_to) = get_opposite_token(token_type=token_from)
+    #let (token_to) = get_opposite_token(token_type=token_from)
+    local token_to
+    if token_from == TOKEN_TYPE_A:
+        token_to = TOKEN_TYPE_B
+    else:
+        token_to = TOKEN_TYPE_A
+    end
     let (amount_to,r) = do_swap(
         account_id=account_id, token_from=token_from, token_to=token_to, amount_from=amount_from
     )
