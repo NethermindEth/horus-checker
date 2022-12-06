@@ -1,25 +1,9 @@
 max+T
 Unknown
-Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 116) that does require it
+Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
 max+F
 Unknown
-Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 116) that does require it
-cairo.common.math.assert_le
-Unsat
-cairo.common.math.assert_le_felt+T
-Unsat
-cairo.common.math.assert_le_felt+FT
-Unsat
-cairo.common.math.assert_le_felt+FF
-Unsat
-cairo.common.math.assert_nn
-Unsat
-cairo.common.math.assert_nn_le
-Unsat
-cairo.common.math.split_felt+T
-Unsat
-cairo.common.math.split_felt+F
-Unsat
+Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
 cairo.common.math_cmp.is_le
 Unsat
 cairo.common.math_cmp.is_nn+TT

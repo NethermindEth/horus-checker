@@ -12,6 +12,7 @@ import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
 import Data.Text (Text, unpack)
+import Data.Text as Text (splitOn)
 import Data.Traversable (for)
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
@@ -214,5 +215,10 @@ solveContract = do
   modules <- makeModules cfg
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers
-      removeTrusted = filter (\m -> moduleName m `notElem` trustedStdFuncs)
+      removeTrusted =
+        filter
+          ( \m -> case Text.splitOn "+" (moduleName m) of
+              (name : _) -> name `notElem` trustedStdFuncs
+              [] -> True
+          )
   for (removeTrusted modules) solveModule
