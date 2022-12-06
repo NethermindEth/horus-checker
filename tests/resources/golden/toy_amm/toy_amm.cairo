@@ -3,7 +3,7 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.cairo.common.hash import hash2
-from math import assert_le, assert_nn_le, unsigned_div_rem
+from math import assert_le, unsigned_div_rem
 
 # The maximum amount of each token that belongs to the AMM.
 const BALANCE_UPPER_BOUND = 2 ** 64
@@ -134,67 +134,6 @@ func get_opposite_token(token_type : felt) -> (t : felt):
     else:
         return (TOKEN_TYPE_A)
     end
-end
-
-# Swaps tokens between the given account and the pool.
-#
-# @declare $token_to: felt
-#
-# Tokens are different
-# @pre (token_from == TOKEN_TYPE_A or token_from == TOKEN_TYPE_B)
-# @pre $token_to == 3 - token_from
-# 
-# @declare $old_pool_balance_from: felt
-# @declare $old_pool_balance_to: felt
-# @pre pool_balance(token_from) == $old_pool_balance_from
-# @pre pool_balance($token_to) == $old_pool_balance_to
-#
-# Enough balance
-# @pre 0 < amount_from and amount_from <= account_balance(account_id, token_from)
-#
-# The pool balances are positive
-# @pre pool_balance($token_to) >= 0
-# @pre pool_balance(token_from) >= 0
-#
-# Assumptions needed for unsigned_div_rem to not overflow
-# @pre pool_balance(token_from) + amount_from <= 10633823966279326983230456482242756608
-# @pre pool_balance($token_to) * amount_from < 2**128 * (pool_balance(token_from) + amount_from)
-#
-# Pool balance is updated
-# @storage_update pool_balance(token_from) := pool_balance(token_from) + amount_from
-# @storage_update pool_balance($token_to) := pool_balance($token_to) - $Return.amount_to
-#
-# Account balance is updated
-# @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
-# @storage_update account_balance(account_id, $token_to) := account_balance(account_id, $token_to) + $Return.amount_to
-#
-# The returned amount_to is correct.
-# @post $old_pool_balance_to * amount_from == $Return.amount_to * ($old_pool_balance_from + amount_from) + $Return.r
-func swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
-    account_id : felt, token_from : felt, amount_from : felt
-) -> (amount_to : felt, r: felt):
-    alloc_locals
-
-    # Check requested amount_from is valid.
-    # assert_nn_le(amount_from, BALANCE_UPPER_BOUND - 1)
-    # Check user has enough funds.
-    let (account_from_balance) = get_account_token_balance(
-        account_id=account_id, token_type=token_from
-    )
-    # assert_le(amount_from, account_from_balance)
-
-    #let (token_to) = get_opposite_token(token_type=token_from)
-    local token_to
-    if token_from == TOKEN_TYPE_A:
-        token_to = TOKEN_TYPE_B
-    else:
-        token_to = TOKEN_TYPE_A
-    end
-    let (amount_to,r) = do_swap(
-        account_id=account_id, token_from=token_from, token_to=token_to, amount_from=amount_from
-    )
-
-    return (amount_to=amount_to, r=r)
 end
 
 # Adds demo tokens to the given account.
