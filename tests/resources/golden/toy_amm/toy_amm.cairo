@@ -60,6 +60,7 @@ func set_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, ra
 end
 
 # Returns the pool's balance.
+# @pre token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B
 # @post $Return.balance == pool_balance(token_type)
 func get_pool_token_balance{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     token_type : felt
@@ -75,7 +76,7 @@ end
 # @pre pool_balance(token_to) == $old_pool_balance_to
 #
 # Tokens should be different
-# @pre (token_to != token_from)
+# @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B) or (token_from == TOKEN_TYPE_B and token_to == TOKEN_TYPE_A)
 #
 # The account has enough balance
 # @pre 0 < amount_from and amount_from < account_balance(account_id, token_from)
@@ -104,10 +105,8 @@ func do_swap{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(
     alloc_locals
 
     # Get pool balance.
-    let (local amm_from_balance) = pool_balance.read(token_type=token_from)
-    let (local amm_to_balance) = pool_balance.read(token_type=token_to)
-    #let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
-    #let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
+    let (local amm_from_balance) = get_pool_token_balance(token_type=token_from)
+    let (local amm_to_balance) = get_pool_token_balance(token_type=token_to)
 
     # Calculate swap amount.
     let (local amount_to, local r) = unsigned_div_rem(
