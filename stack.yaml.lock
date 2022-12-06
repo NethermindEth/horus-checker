@@ -18,14 +18,14 @@ packages:
 - completed:
     name: z3
     version: '408.2'
-    git: https://github.com/IagoAbal/haskell-z3.git
+    git: https://github.com/aemartinez/haskell-z3.git
     pantry-tree:
       size: 2204
-      sha256: 540b083755abfe88c5338162505b04db576c0a7072e676c1d27001f2f4cc67f9
-    commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
+      sha256: f40a91f16c9e4f65dd69b48df62f42876c7154cbfb329fb14eeec013a5278de6
+    commit: e39b3cfce8e925c8ae65ea19f87075a1ea5ab678
   original:
-    git: https://github.com/IagoAbal/haskell-z3.git
-    commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
+    git: https://github.com/aemartinez/haskell-z3.git
+    commit: e39b3cfce8e925c8ae65ea19f87075a1ea5ab678
 snapshots:
 - completed:
     size: 618884
