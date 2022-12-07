@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.CFGBuild
   ( CFGBuildL (..)
   , ArcCondition (..)
@@ -46,13 +45,12 @@ import Horus.Instruction
   )
 import Horus.Label (Label (..), moveLabel)
 import Horus.Program (Program (..), Identifiers)
-import Horus.SW.FuncSpec (FuncSpec' (fs'_pre, fs'_post, fs'_storage))
+import Horus.SW.FuncSpec (FuncSpec' (fs'_pre, fs'_post))
 import Horus.SW.Identifier (Identifier (IFunction, ILabel), Function (fu_pc))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (appendList, whenJustM)
 import Horus.Expr qualified as Expr
 
-import Debug.Trace (trace)
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -170,9 +168,7 @@ addArcsFrom inlinable prog rows s
         else let
           callers = callersOf rows owner
           returnAddrs = map (`moveLabel` sizeOfCall) callers
-       in 
-        -- trace ("owner: " ++ show owner ++ " callers: " ++ show callers ++ " returnAddrs: " ++ show returnAddrs)
-          forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
+       in forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
   | JumpAbs <- i_pcUpdate endInst =
       let lTo = Label (fromInteger (i_imm endInst))
        in addArc' lFrom lTo (init insts)
@@ -200,10 +196,9 @@ addAssertions inlinable identifiers = do
     IFunction f -> do
       pre <- fs'_pre <$> getFuncSpec idName
       post <- fs'_post <$> getFuncSpec idName
-      -- storage <- fs'_storage <$> getFuncSpec idName
       rets <- getRets idName
-      -- There are functions that will end up with True -> True even with inlining turned on,
-      -- namely the ones that are (transitively) loopy. The condition is here therefore.
+      -- Handle functions that will end up with `True -> True` even with
+      -- inlining turned on, namely the ones that are (transitively) loopy.
       case (pre, post) of
         (Nothing, Nothing) ->
           when (fu_pc f  `Set.notMember` inlinable) $

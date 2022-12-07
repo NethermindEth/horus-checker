@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.ContractInfo (ContractInfo (..), mkContractInfo) where
 
 import Control.Monad.Except (MonadError (..))
@@ -22,13 +21,13 @@ import Horus.SW.FuncSpec
     ( FuncSpec,
       FuncSpec'(..),
       emptyFuncSpec',
-      FuncSpec(..), toFuncSpec )
+      FuncSpec(..),
+      toFuncSpec )
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName (..))
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
 import Horus.FunctionAnalysis (inlinableFuns, mkGeneratedNames, storageVarsOfCD)
-import Debug.Trace (traceM)
 
 data ContractInfo = ContractInfo
   { ci_contractDef :: ContractDefinition
@@ -54,9 +53,7 @@ mkContractInfo cd = do
   retsByFun <- mkRetsByFun insts
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
-  -- traceM ("sources: " ++ show (map (fu_pc . fst) sources))
   let inlinable = fromList $ Map.keys $ inlinableFuns insts program cd
-  -- traceM ("Can inline: " ++ show inlinable)
   pure
     ContractInfo
       { ci_contractDef = cd
@@ -186,13 +183,13 @@ mkContractInfo cd = do
   mkRetsByFun insts = do
     retAndFun <- sequenceA [fmap (,[pc]) (getFunName' pc) | (pc, inst) <- insts, isRet inst]
     let preliminaryRes = Map.fromListWith (++) retAndFun
-    -- 'preliminaryRes' doesn't contain info about functions, with
-    -- zero returns. A function might not contain returns, when it
-    -- ends with an endless loop.
+    -- Note that `preliminaryRes` doesn't contain info about functions with
+    -- zero returns. A function might not contain returns when it ends with an
+    -- endless loop.
     let insertFunWithNoRets fun = Map.insertWith (\_new old -> old) fun []
     pure (foldr (insertFunWithNoRets . fst) preliminaryRes functions)
 
-  --- data producers that depend on non-plain data, expressed as parameters
+  --- Data producers that depend on non-plain data, expressed as parameters.
   -- mkGeneratedNames :: [ScopedName] -> [ScopedName]
   -- mkGeneratedNames = concatMap svNames
   --  where
