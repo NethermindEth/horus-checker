@@ -1,7 +1,4 @@
 {-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
-{-# OPTIONS_GHC -Wno-unused-local-binds #-}
-{-# OPTIONS_GHC -Wno-unused-matches #-}
 
 module Horus.CairoSemantics
   ( encodeModule
@@ -24,7 +21,7 @@ import Data.Map qualified as Map ((!?))
 import Data.Set qualified as Set (member)
 import Data.Text (Text)
 
-import Horus.CallStack as CS (CallEntry, callerOfRoot, CallStack)
+import Horus.CallStack as CS (CallEntry, CallStack)
 import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
@@ -47,10 +44,10 @@ import Horus.Instruction
   , OpCode (..)
   , ResLogic (..)
   , callDestination
-  , getNextPc
   , isCall
   , isRet
-  , uncheckedCallDestination, getNextPcInlined, getNextPcInlinedWithFallback
+  , uncheckedCallDestination
+  , getNextPcInlinedWithFallback
   )
 import Horus.Label (Label (..), tShowLabel)
 import Horus.Module (Module (..), ModuleSpec (..), PlainSpec (..), richToPlainSpec)
@@ -58,14 +55,12 @@ import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
 import Horus.SW.FuncSpec (FuncSpec (..), FuncSpec', toFuncSpec)
-import Horus.SW.ScopedName (ScopedName (ScopedName))
+import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
-import Horus.Expr.Vars qualified as Util
 import Horus.Expr qualified as TSMT
-import Debug.Trace (trace, traceM)
 import Horus.Expr.Vars qualified as Vars
 
 data MemoryVariable = MemoryVariable
@@ -180,14 +175,9 @@ pop = liftF (Pop ())
 top :: CairoSemanticsL CallEntry
 top = liftF (Top id)
 
-isCtxRoot :: CairoSemanticsL Bool
-isCtxRoot = (callerOfRoot ==) . fst <$> top
-
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
 storageRemoval mexp = let res = Expr.transform step mexp in
   do
-  r <- res
-  -- traceM ("called storageRemovel on: " ++ show mexp ++ " resulting in: " ++ show r)
   res
  where
   step :: Expr b -> CairoSemanticsL (Expr b)
@@ -252,12 +242,9 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   enableStorage
   fp <- getFp
   apEnd <- moduleEndAp mdl
-  -- traceM ("apEnd in rich: " ++ show apEnd)
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
-  -- traceM ("Prepared storage for module: " ++ show (m_calledF mdl) ++ " is: " ++ show preparedStorage)
   encodePlainSpec mdl plainSpec
   accumulatedStorage <- getStorage
-  -- traceM ("Accumulated storage for module: " ++ show (m_calledF mdl) ++ " is: " ++ show accumulatedStorage)
   expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec
@@ -266,8 +253,6 @@ encodePlainSpec :: Module -> PlainSpec -> CairoSemanticsL ()
 encodePlainSpec mdl PlainSpec{..} = do
   apStart <- moduleStartAp mdl
   apEnd <- moduleEndAp mdl
-  -- traceM ("module last PC: " ++ show (m_lastPc mdl))
-  -- traceM ("apEnd in plain: " ++ show apEnd)
   fp <- getFp
   assert (fp .<= apStart)
   pre <- prepare' apStart fp ps_pre
@@ -276,7 +261,6 @@ encodePlainSpec mdl PlainSpec{..} = do
   let instrs = zip (m_prog mdl) [0..]
   for_ instrs $ \(instr, pos) -> mkInstructionConstraints (m_prog mdl) pos (m_jnzOracle mdl) instr
   expect post
-  traceM ("new module" ++ show (m_calledF mdl))
   whenJust (nonEmpty (m_prog mdl)) $ \neInsts -> do
     mkApConstraints apEnd neInsts
     mkBuiltinConstraints apEnd neInsts
@@ -343,7 +327,6 @@ withExecutionCtx ctx action = do
 
 mkInstructionConstraints :: [LabeledInst] -> Int -> Map (NonEmpty Label, Label) Bool -> LabeledInst -> CairoSemanticsL ()
 mkInstructionConstraints instrs pos jnzOracle lInst@(pc, Instruction{..}) = do
-  -- traceM ("current instr pc: " ++ show pc ++ " with imm: " ++ show i_imm)
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
@@ -356,11 +339,8 @@ mkInstructionConstraints instrs pos jnzOracle lInst@(pc, Instruction{..}) = do
         Just True -> assert (dst ./= 0)
         Nothing -> pure ()
     Ret ->
-      -- trace (show ("found ret at: " ++ show pc))
       pop
 
-traceWhen :: Bool -> String -> CairoSemanticsL ()
-traceWhen isPertinent x = do when isPertinent $ traceM x
 
 mkCallConstraints :: Label -> Int -> [LabeledInst] -> Expr TFelt -> LabeledInst -> CairoSemanticsL ()
 mkCallConstraints pc pos instrs fp inst =
@@ -369,43 +349,26 @@ mkCallConstraints pc pos instrs fp inst =
       nextPc = getNextPcInlinedWithFallback instrs pos
       stackFrame = (pc, calleePc)
    in do
-        -- traceM ("instrs are: " ++ show instrs)
-        -- traceM ("IN CALL with current instr: " ++ show inst ++ " nextPc': " ++ show nextPc' ++ " nextPc: " ++ show nextPc)
-        dbgCallee <- getCallee inst
-        let isRead = dbgCallee == ScopedName ["__main__", "balance", "read"]
-        let traceWhenRead = traceWhen isRead
-        -- traceM ("In call:" ++ show dbgCallee)
         calleeFp <- withExecutionCtx stackFrame getFp
         nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
         saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
-        -- traceM ("current instr pc: " ++ show inst)
-        -- traceM ("unLabel nextPc: " ++ show (unLabel nextPc))
         setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
         assert (TSMT.and [nextAp, saveOldFp, setNextPc])
         push stackFrame
         canInline <- isInlinable calleePc
-        -- traceWhenRead ("can inline: " ++ show calleePc ++ "? " ++ show canInline)
         unless canInline $ do
           (FuncSpec pre post storage) <- (getCallee inst >>= getFuncSpec) <&> toFuncSpec
-          -- traceWhenRead ("function: " ++ show calleePc ++ " abstracting with storage: " ++ show storage)
           let pre' = suffixLogicalVariables lvarSuffix pre
               post' = suffixLogicalVariables lvarSuffix post
           removedStorage <- storageRemoval pre'
-          -- traceWhenRead ("removed storage: " ++ show removedStorage)
           preparedPre <- prepare calleePc calleeFp removedStorage
-          -- traceWhenRead ("prepared pre: " ++ show preparedPre)
           preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp =<< storageRemoval pre'
-          -- traceWhenRead ("updating storage in: " ++ show calleeFp)
           dbgStrg <- traverseStorage (prepare nextPc calleeFp) storage
-          -- traceWhenRead ("new storage: " ++ show dbgStrg)
           updateStorage dbgStrg
           pop
           rm1 <- storageRemoval post'
           rm2 <- storageRemoval rm1
           preparedPost <- prepare nextPc calleeFp rm2
-          -- traceWhenRead ("removed post': " ++ show rm1 ++ " \nremoved again: " ++ show rm2 ++ " \npost: " ++ show post ++ " -> " ++ show preparedPost)
-          -- -- preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
-          -- traceWhenRead ("prepared post: " ++ show preparedPost)
           checkPoint preparedPreCheckPoint
           assert (preparedPre .&& preparedPost)
   where lvarSuffix = "+" <> tShowLabel pc
@@ -422,7 +385,6 @@ mkApConstraints apEnd insts = do
   forM_ (zip (toList insts) (NonEmpty.tail insts)) $ \(lInst@(pc, inst), (pcNext, _)) -> do
     at1 <- getApTracking pc
     at2 <- getApTracking pcNext
-    traceM ("pc: " ++ show pc ++ " pcNext: " ++ show pcNext ++ " at1: " ++ show at1 ++ " at2: " ++ show at2)
     canInline <- isInlinable $ uncheckedCallDestination lInst
     when (at_group at1 /= at_group at2) $ do
       ap1 <- getAp pc
@@ -432,31 +394,23 @@ mkApConstraints apEnd insts = do
       ap2 <- getAp pcNext
       fp <- getFp
       getApIncrement fp lInst >>= \case
-        Just apIncrement -> let res = assert (ap1 + apIncrement .== ap2) in
-          trace ("en passant -- generating the eq : " ++ show (ap1 + apIncrement .== ap2)) $ res
+        Just apIncrement -> let res = assert (ap1 + apIncrement .== ap2) in res
           -- res
-        Nothing | not canInline -> trace "was call and can't inline: " $ assert (ap1 .< ap2)
-        Nothing -> trace "was call and can inline" $ pure ()
+        Nothing | not canInline -> assert (ap1 .< ap2)
+        Nothing -> pure ()
   lastAp <- getAp lastPc
-  -- traceM ("last ap is: " ++ show lastAp)
   when (isRet lastInst) $ do 
-    -- traceM "the last instruction is ret" 
     pop
   fp <- getFp
-  -- traceM ("current FP: " ++ show fp)
   getApIncrement fp lastLInst >>= \case
-    Just lastApIncrement -> let res = assert (lastAp + lastApIncrement .== apEnd) in
-      trace ("last -- generating the eq: " ++ show (lastAp + lastApIncrement .== apEnd)) $ res
-      -- res
+    Just lastApIncrement -> let res = assert (lastAp + lastApIncrement .== apEnd) in res
     Nothing -> assert (lastAp .< apEnd)
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
 mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkBuiltinConstraints apEnd insts = do
-  -- traceM ("making builtin constraints")
   fp <- getFp
-  -- traceM ("making builtin constraints, apEnd: " ++ show apEnd ++ " fp: " ++ show fp)
   funPc <- getFunPc (fst (NonEmpty.head insts))
   for_ enumerate $ \b ->
     getBuiltinOffsets funPc b >>= \case
@@ -464,8 +418,7 @@ mkBuiltinConstraints apEnd insts = do
         let (pre, post) = getBuiltinContract fp apEnd b bo
         assert pre *> expect post
         -- TODO: Hic Sunt Dracones
-        -- traceM ("-------> INSTS ARE: " ++ show insts)
-        for_ (zip (NonEmpty.toList insts) [0..]) $ \(inst, i) -> mkBuiltinConstraintsForInst apEnd (i == length insts - 1) i (NonEmpty.toList insts) b inst
+        for_ (zip (NonEmpty.toList insts) [0..]) $ \(inst, i) -> mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
       Nothing -> checkBuiltinNotRequired b (toList insts)
 
 getBuiltinContract ::
@@ -477,29 +430,20 @@ getBuiltinContract fp apEnd b bo = (pre, post)
   initialPtr = memory (fp - fromIntegral (bo_input bo))
   finalPtr = memory (apEnd - fromIntegral (bo_output bo))
 
-mkBuiltinConstraintsForInst :: Expr TFelt -> Bool -> Int -> [LabeledInst] -> Builtin -> LabeledInst -> CairoSemanticsL ()
-mkBuiltinConstraintsForInst apEnd isLast pos instrs b inst@(pc, Instruction{..}) =
-  -- trace ("current inst: " ++ show inst ++ " current apEnd: " ++ show apEnd) $
-  -- trace ("CALLED mkBuiltinCFI - apEnd: " ++ show apEnd ++ " isLast: " ++ show isLast ++ "pc: " ++ show pc) $
-  trace ("making builtins for: " ++ show b)
+mkBuiltinConstraintsForInst :: Int -> [LabeledInst] -> Builtin -> LabeledInst -> CairoSemanticsL ()
+mkBuiltinConstraintsForInst pos instrs b inst@(pc, Instruction{..}) =
   getFp >>= \fp -> do
-    stackTrace <- getStackTraceDescr
-    -- traceM ("STACK TRACE: " ++ show stackTrace)
     case i_opCode of
       Call ->
         let calleePc = uncheckedCallDestination inst
             stackFrame = (pc, calleePc)
          in do
-              -- traceM ("mkBuiltin - push: " ++ show calleePc)
               push stackFrame
-              traceM ("PUSH!: " ++ show stackFrame)
               canInline <- isInlinable calleePc
               unless canInline $ do
-                -- traceM "this is NOT inlinable call"
-                mkBuiltinConstraintsForFunc apEnd False
-                t <- top
-                traceM ("POP!: " ++ show t)
-                -- pop
+                mkBuiltinConstraintsForFunc False
+                _ <- top
+                return ()
       AssertEqual -> do
         res <- getRes fp inst
         case res of
@@ -510,74 +454,22 @@ mkBuiltinConstraintsForInst apEnd isLast pos instrs b inst@(pc, Instruction{..})
           _ -> pure ()
       -- 'ret's are not in the bytecote for functions that are not inlinable
       Ret -> do
-        mkBuiltinConstraintsForFunc apEnd True
-        t <- top
-        traceM ("POP!: " ++ show t)
-        -- pop
+        mkBuiltinConstraintsForFunc True
+        _ <- top
+        return ()
       _ -> pure ()
  where
-  mkBuiltinConstraintsForFunc lastAp canInline = do
-    -- traceM (">>>>>> forFun with lastAp: " ++ show lastAp)
+  mkBuiltinConstraintsForFunc canInline = do
     calleeFp <- getFp
     callEntry@(_, calleePc) <- 
       do
-        -- traceM "mkBuiltin - pop"
         top <* pop
-    stackTrace <- getStackTraceDescr
-    isRoot <- isCtxRoot 
-    traceM ("STACK TRACE: " ++ show stackTrace ++ " is root: " ++ show isRoot)
-    traceM ("getting builtin for b: " ++ show b ++ " at pc: " ++ show calleePc)
-    gg <- getBuiltinOffsets calleePc b
-    traceM ("got builtins offsets: " ++ show gg)
-    -- unless canInline pop
-    -- pop
     -- NOTE TO SELF: add_two should never be seen by this! (skip over the push?)
     whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
-      traceM ("isLast: " ++ show isLast)
-      traceM ("canInline: " ++ show canInline)
-      traceM ("current instruction: " ++ show inst)
       -- TODO: NOTE TO SELF - IF THIS IS FALSE, IT'S SAT PROPER
-      -- when canInline pop
-      resr <- getAp (getNextPcInlinedWithFallback instrs pos)
-      traceM ("nextAp: " ++ show resr)
-      traceM ("next last PC: " ++ show (getNextPcInlinedWithFallback instrs pos))
-      traceM ("lastAP: " ++ show lastAp ++ " getNextAP: " ++ show resr)
-
-      -- calleeApEnd <- if canInline then withExecutionCtx callEntry (getAp (fst $ instrs !! (pos - 1))) else getAp (getNextPcInlinedWithFallback instrs pos)
-
       calleeApEnd <- if canInline then withExecutionCtx callEntry (getAp pc) else getAp (getNextPcInlinedWithFallback instrs pos)
-
-      -- calleeApEnd <- if canInline then pure lastAp else getAp (getNextPcInlinedWithFallback instrs pos)
-
-      -- calleeApEnd <- if not isLast
-      --   -- ret
-      --   -- then getAp (getNextPcInlinedWithFallback instrs pos)
-      --   then getAp (getNextPcInlinedWithFallback instrs pos)
-      --   -- call
-      --   else pure lastAp
-
-          -- call
-          -- pure lastAp
-      -- calleeApEnd <- if isLast then pure lastAp else if canInline then getAp pc else getAp (getNextPcInlinedWithFallback instrs pos)
-      -- calleeApEnd <- getAp (getNextPcInlinedWithFallback instrs pos)
-      -- calleeApEnd <-
-      --   if not canInline -- e || not isLast -- && not isRoot?
-      --     then do
-      --       res <- getAp (getNextPcInlinedWithFallback instrs pos)
-      --       -- traceM ("nextPc': " ++ show (getNextPcInlinedWithFallback instrs pos) ++ " nextPc: " ++ show (getNextPc inst))
-      --       traceM ("[[standard last ap: " ++ show res ++ "]]")
-      --       -- traceM ("res: " ++ show res ++ " lastAp: " ++ show lastAp)
-      --       getAp (getNextPcInlinedWithFallback instrs pos)
-      --     else do
-      --       traceM ("[[custom last ap: " ++ show lastAp ++ "]]")
-      --       pure lastAp
-      -- traceM ("callee AP end: " ++ show calleeApEnd)
-      traceM ("getting contract for calleeFp: " ++ show calleeFp ++ " calleeApEnd: " ++ show calleeApEnd)
       let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
-      -- traceM ("expecting PRE: " ++ show pre)
-      traceM ("asserting post: " ++ show post ++ " expecting pre: " ++ show pre)
       expect pre *> assert post
-    -- pop
 
 checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsL ()
 checkBuiltinNotRequired b = traverse_ check

@@ -33,7 +33,6 @@ import Horus.Expr.Std (stdNames)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
 import Horus.SW.Builtin qualified as Builtin (name, size)
-import Debug.Trace (traceM)
 
 prime :: Expr TFelt
 prime = Expr.const "prime"
@@ -68,11 +67,9 @@ pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: ad
 parseStorageVar :: forall ty. Expr ty -> Maybe (ty :~: TFelt, Text, [Expr TFelt])
 parseStorageVar e = do
   res@(_, name, _) <- Expr.unfoldVariadic @TFelt e
-  -- traceM ("Parsing svar name: " ++ show name ++ " isStd: " ++ show (isStd name) ++ " isReg: " ++ show (isReg name) ++ " isLVar: " ++ show (isLVar name))
   guard (not (isStd name))
   guard (not (isReg name))
   guard (not (isLVar name))
-  -- traceM ("svar: " ++ show e ++ " IS STORAGE VAR")
   pure res
  where
   isStd n = n `elem` stdNames || n == "memory"

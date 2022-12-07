@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.CairoSemantics.Runner
   ( run
   , MemoryVariable (..)
@@ -49,7 +48,6 @@ import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
 import Horus.Util (fieldPrime, tShow, unlessM)
-import Debug.Trace
 
 data AssertionBuilder
   = QFAss (Expr TBool)
@@ -136,7 +134,6 @@ interpret = iterM exec
     r <- cont
     restAss <- use (eConstraints . csAsserts)
     restExp <- use (eConstraints . csExpects)
-    -- traceM ("checkpointing restExp: " ++ show restExp)
     eConstraints . csAsserts
       .= ( ExistentialAss
             ( \mv ->
@@ -188,10 +185,7 @@ interpret = iterM exec
   exec (GetOracle cont) = do
     get >>= cont . stackTrace . fst . e_constraints
   exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
-    -- modify ( \ env@(Env (stack, cs) _ _) -> env { e_constraints = (push entry stack, cs) }) >> cont
-    -- Bifunc.first (push entry)
   exec (Pop cont) = eConstraints . csCallStack %= (snd . pop) >> cont
-    -- modify (Bifunc.first (snd . pop)) >> cont
   exec (Top cont) = do
     get >>= cont . top . fst . e_constraints
   exec (GetFunPc label cont) = do
@@ -202,11 +196,9 @@ interpret = iterM exec
     ci_getBuiltinOffsets ci label builtin >>= cont
   exec (EnableStorage cont) = eStorageEnabled .= True >> cont
   exec (ReadStorage name args cont) = do
-    -- traceM ("called readStorage on name: " ++ show name)
     unlessM (use eStorageEnabled) $
       throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
     storage <- use eStorage
-    -- traceM ("reading: " ++ show name)
     cont (Storage.read storage name args)
   exec (UpdateStorage newStorage cont) = do
     storageEnabled <- use eStorageEnabled
