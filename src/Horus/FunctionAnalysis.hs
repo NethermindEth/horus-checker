@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.FunctionAnalysis
   ( pcToFunOfProg
   , callersOf
@@ -44,7 +43,9 @@ import Data.Map qualified as Map
   , map
   , mapMaybe
   , toList
-  , (!), (!?), member, lookup
+  , (!)
+  , member
+  , lookup
   )
 import Data.Maybe (fromJust, fromMaybe, isNothing, mapMaybe)
 
@@ -67,12 +68,9 @@ import Horus.Program
   )
 import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
--- import Horus.SW.Std (FuncSpec (fs_name), stdFuncs)
 import Horus.Util (invert, safeHead, safeLast)
 import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_specs, cd_storageVars, cd_program))
 import Horus.SW.Std (stdSpecsList)
-import Horus.SW.FuncSpec (isFuncSpecTrivial, isExprTrivial)
-import Data.Map ((!))
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -200,16 +198,6 @@ labelNamesOfPc idents lblpc =
   , Just pc <- [getFunctionPc ident <|> getLabelPc ident]
   , pc == lblpc
   ]
-
--- isNontriviallyAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
--- isNontriviallyAnnotated idents checks =
---   any
---     ( liftM2
---         (\inv spec -> inv || spec)
---         (maybe False (not . isFuncSpecTrivial) . (cd_specs checks Map.!?))
---         (maybe False (not . isExprTrivial) . (cd_invariants checks Map.!?))
---     )
---     . labelNamesOfPc idents
 
 isAnnotated :: Identifiers -> ContractDefinition -> Label -> Bool
 isAnnotated idents checks =

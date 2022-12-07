@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.Global
   ( GlobalL (..)
   , GlobalF (..)
@@ -8,7 +7,7 @@ module Horus.Global
   )
 where
 
-import Control.Monad ( when, forM, forM_ )
+import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
@@ -34,22 +33,19 @@ import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program ( Identifiers, Program (Program) )
+import Horus.Program ( Identifiers, Program )
 import Horus.SW.Identifier ( Function(..) )
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow, whenJust)
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Expr qualified as Expr
-import Data.Set (Set, elems, fromList)
+import Data.Set (fromList)
 import Data.Map qualified as Map
 import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
 import Horus.ContractDefinition (ContractDefinition)
-import Horus.Expr (Expr)
-import Horus.Expr.Type ( Ty(TBool) )
 import Data.List ((\\))
 import Data.Functor ((<&>))
-import Debug.Trace
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -150,9 +146,6 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalL ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
--- makeCFG :: GlobalL CFG
--- makeCFG = runCFGBuildL buildCFG
-
 makeModules :: (Label -> Bool) -> CFG -> GlobalL [Module]
 makeModules allow cfg =
   (runModuleL . gatherModules cfg) . filter (\(Function fpc _, _) -> allow fpc) =<< getSources
@@ -244,7 +237,6 @@ solveContract = do
   cd <- getContractDef
   idents <- getIdentifiers
   let inlinable = Map.keys $ inlinableFuns instructions program cd
-  -- traceM ("inlinable: " ++ show inlinable)
   cfg <- runCFGBuildL $ buildCFG $ fromList inlinable
   cfgs <- for inlinable $ \f -> (runCFGBuildL . buildCFG . fromList $ inlinable \\ [f]) <&> (, (==f))
   for_ cfgs $ verbosePrint . fst
