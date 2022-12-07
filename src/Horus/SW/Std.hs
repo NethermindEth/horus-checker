@@ -29,9 +29,8 @@ mkWriteSpec name arity = emptyFuncSpec{fs_storage = [(name, [(args, memory (fp -
   offsets = [-4 - arity + 1 .. -4]
   args = [memory (fp + fromIntegral offset) | offset <- offsets]
 
-{- | A list of names of trusted standard library functions.
-These functions will not be checked against their specifications.
--}
+-- A list of names of trusted standard library functions.
+-- These functions will not be checked against their specifications.
 trustedStdFuncs :: [Text]
 trustedStdFuncs =
   [ "starknet.common.syscalls.get_block_timestamp"
