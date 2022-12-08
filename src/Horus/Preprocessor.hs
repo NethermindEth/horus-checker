@@ -67,11 +67,14 @@ catch :: PreprocessorL a -> (Text -> PreprocessorL a) -> PreprocessorL a
 catch preprocessor handler = liftF (Catch preprocessor handler id)
 
 mkTactic :: Text -> PreprocessorL Tactic
-mkTactic tactic = runZ3 $ Z3.mkTactic (unpack tactic)
+mkTactic tactic = runZ3 $ do 
+  t <- Z3.mkTactic (unpack tactic)
+  skip <- Z3.skipTactic
+  Z3.orElseTactic t skip 
 
 preprocessGoal :: [Tactic] -> Goal -> PreprocessorL [Goal]
 preprocessGoal tactics goal = runZ3 $ do
-  skip <- Z3.mkTactic "skip"
+  skip <- Z3.skipTactic
   combinedTactic <- foldlM Z3.andThenTactic skip tactics
   Z3.applyTactic combinedTactic goal
     >>= Z3.getApplyResultSubgoals
