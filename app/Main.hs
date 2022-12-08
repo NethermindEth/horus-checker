@@ -1,3 +1,6 @@
+{-# LANGUAGE ImportQualifiedPost #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Main (main) where
 
 import Control.Applicative ((<**>))
@@ -7,22 +10,15 @@ import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.Foldable (for_)
 import Data.IORef (newIORef)
 import Data.Text (Text, pack, unpack)
-import qualified Data.Text.IO as Text (putStrLn)
+import Data.Text.IO qualified as Text (putStrLn)
 import Lens.Micro ((%~), (<&>))
-import Options.Applicative
-  ( execParser
-  , fullDesc
-  , header
-  , helper
-  , info
-  , progDesc
-  )
+import Options.Applicative (execParser, fullDesc, header, helper, info, progDesc)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdSpecs)
 import Horus.ContractInfo (mkContractInfo)
 import Horus.Global (SolvingInfo (..), solveContract)
-import qualified Horus.Global.Runner as Global (Env (..), run)
+import Horus.Global.Runner qualified as Global (Env (..), run)
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
 
@@ -59,9 +55,6 @@ main = do
       (argParser <**> helper)
       ( fullDesc
           <> progDesc
-            ( "Verifies "
-                <> unpack fileArgument
-                <> " (a contract compiled with horus-compile)"
-            )
+            ("Verifies " <> unpack fileArgument <> " (a contract compiled with horus-compile)")
           <> header "horus-check: SMT-based checker for Cairo language"
       )
