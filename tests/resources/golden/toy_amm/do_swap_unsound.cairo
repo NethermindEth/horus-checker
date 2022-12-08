@@ -25,19 +25,23 @@ func account_balance(account_id: felt, token_type: felt) -> (balance: felt) {
 func pool_balance(token_type: felt) -> (balance: felt) {
 }
 
+// Returns the account's balance for the given token.
+func get_account_token_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
+    account_id: felt, token_type: felt
+) -> (balance: felt) {
+    return account_balance.read(account_id, token_type);
+}
+
 // Adds amount to the account's balance for the given token.
 // amount may be positive or negative.
 // Assert before setting that the balance does not exceed the upper bound.
 //
 // @pre (token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B)
-// @storage_update account_balance(account_id, token_type) := account_balance(account_id, token_type) + amount
-func modify_account_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
+// @storage_update account_balance(account_id, token_type) := amount
+func set_account_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     account_id: felt, token_type: felt, amount: felt
 ) {
-    let (current_balance) = account_balance.read(account_id, token_type);
-    tempvar new_balance = current_balance + amount;
-    assert_nn_le(new_balance, BALANCE_UPPER_BOUND - 1);
-    account_balance.write(account_id=account_id, token_type=token_type, value=new_balance);
+    account_balance.write(account_id=account_id, token_type=token_type, value=amount);
     return ();
 }
 
@@ -56,7 +60,7 @@ func get_pool_token_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, rang
 // @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B) or (token_from == TOKEN_TYPE_B and token_to == TOKEN_TYPE_A)
 //
 // Account balance is updated
-// @storage_update account_balance(account_id, token_from) := account_balance(account_id, token_from) - amount_from
+// @storage_update account_balance(account_id, token_from) := amount_from
 //
 // False postcondition:
 // @post 1 == 2
@@ -65,15 +69,12 @@ func do_swap{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
 ) -> (amount_to: felt, r: felt) {
     alloc_locals;
 
-    // Get pool balance.
     let (local amm_from_balance) = get_pool_token_balance(token_type=token_from);
 
-    // Call to unsigned_div_rem.
     local amount_to = 42;
     local r = 5;
 
-    // Update account balances.
-    modify_account_balance(account_id=account_id, token_type=token_from, amount=-amount_from);
-
+    set_account_balance(account_id=account_id, token_type=token_from, amount=amount_from);
+    
     return (amount_to=amount_to, r=r);
 }
