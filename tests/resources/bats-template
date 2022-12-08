@@ -9,7 +9,7 @@ test_case() {
     temp_file="${base}.temp"
 
     horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s mathsat -s z3 -t 240000 &> "$temp_file" || true
+    stack run horus-check "$compiled_file" -- -s z3 -s mathsat -t 240000 &> "$temp_file" || true
     diff "$gold_file" "$temp_file" \
          --unified \
          --ignore-trailing-space \
