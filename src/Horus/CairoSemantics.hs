@@ -176,9 +176,7 @@ top :: CairoSemanticsL CallEntry
 top = liftF (Top id)
 
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
-storageRemoval mexp = let res = Expr.transform step mexp in
-  do
-  res
+storageRemoval = Expr.transform step
  where
   step :: Expr b -> CairoSemanticsL (Expr b)
   step (StorageVar name args) = readStorage (ScopedName.fromText name) args
@@ -213,7 +211,8 @@ encodeApTracking traceDescr ApTracking{..} =
   Expr.const ("ap!" <> traceDescr <> "@" <> tShow at_group) + fromIntegral at_offset
 
 getAp' :: Maybe CallStack -> Label -> CairoSemanticsL (Expr TFelt)
-getAp' callstack pc = getStackTraceDescr' callstack >>= \stackTrace -> getApTracking pc <&> encodeApTracking stackTrace
+getAp' callstack pc =
+  getStackTraceDescr' callstack >>= \stackTrace -> getApTracking pc <&> encodeApTracking stackTrace
 
 getFp' :: Maybe CallStack -> CairoSemanticsL (Expr TFelt)
 getFp' callstack = getStackTraceDescr' callstack <&> Expr.const . ("fp!" <>)
@@ -338,14 +337,11 @@ mkInstructionConstraints instrs pos jnzOracle lInst@(pc, Instruction{..}) = do
         Just False -> assert (dst .== 0)
         Just True -> assert (dst ./= 0)
         Nothing -> pure ()
-    Ret ->
-      pop
-
+    Ret -> pop
 
 mkCallConstraints :: Label -> Int -> [LabeledInst] -> Expr TFelt -> LabeledInst -> CairoSemanticsL ()
 mkCallConstraints pc pos instrs fp inst =
   let calleePc = uncheckedCallDestination inst
-      -- nextPc' = getNextPc inst
       nextPc = getNextPcInlinedWithFallback instrs pos
       stackFrame = (pc, calleePc)
    in do
@@ -366,9 +362,7 @@ mkCallConstraints pc pos instrs fp inst =
           dbgStrg <- traverseStorage (prepare nextPc calleeFp) storage
           updateStorage dbgStrg
           pop
-          rm1 <- storageRemoval post'
-          rm2 <- storageRemoval rm1
-          preparedPost <- prepare nextPc calleeFp rm2
+          preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
           checkPoint preparedPreCheckPoint
           assert (preparedPre .&& preparedPost)
   where lvarSuffix = "+" <> tShowLabel pc
@@ -395,12 +389,10 @@ mkApConstraints apEnd insts = do
       fp <- getFp
       getApIncrement fp lInst >>= \case
         Just apIncrement -> let res = assert (ap1 + apIncrement .== ap2) in res
-          -- res
         Nothing | not canInline -> assert (ap1 .< ap2)
         Nothing -> pure ()
   lastAp <- getAp lastPc
-  when (isRet lastInst) $ do 
-    pop
+  when (isRet lastInst) pop
   fp <- getFp
   getApIncrement fp lastLInst >>= \case
     Just lastApIncrement -> let res = assert (lastAp + lastApIncrement .== apEnd) in res
@@ -417,8 +409,8 @@ mkBuiltinConstraints apEnd insts = do
       Just bo -> do
         let (pre, post) = getBuiltinContract fp apEnd b bo
         assert pre *> expect post
-        -- TODO: Hic Sunt Dracones
-        for_ (zip (NonEmpty.toList insts) [0..]) $ \(inst, i) -> mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
+        for_ (zip (NonEmpty.toList insts) [0..]) $ \(inst, i) ->
+          mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
       Nothing -> checkBuiltinNotRequired b (toList insts)
 
 getBuiltinContract ::
@@ -437,13 +429,9 @@ mkBuiltinConstraintsForInst pos instrs b inst@(pc, Instruction{..}) =
       Call ->
         let calleePc = uncheckedCallDestination inst
             stackFrame = (pc, calleePc)
-         in do
-              push stackFrame
-              canInline <- isInlinable calleePc
-              unless canInline $ do
-                mkBuiltinConstraintsForFunc False
-                _ <- top
-                return ()
+         in do push stackFrame
+               canInline <- isInlinable calleePc
+               unless canInline $ mkBuiltinConstraintsForFunc False
       AssertEqual -> do
         res <- getRes fp inst
         case res of
@@ -453,21 +441,17 @@ mkBuiltinConstraintsForInst pos instrs b inst@(pc, Instruction{..}) =
             assert (isBuiltin .=> Expr.ExitField (op0 + op1 .== (op0 + op1) `Expr.mod` prime))
           _ -> pure ()
       -- 'ret's are not in the bytecote for functions that are not inlinable
-      Ret -> do
-        mkBuiltinConstraintsForFunc True
-        _ <- top
-        return ()
+      Ret -> mkBuiltinConstraintsForFunc True
       _ -> pure ()
  where
   mkBuiltinConstraintsForFunc canInline = do
     calleeFp <- getFp
-    callEntry@(_, calleePc) <- 
-      do
-        top <* pop
-    -- NOTE TO SELF: add_two should never be seen by this! (skip over the push?)
+    callEntry@(_, calleePc) <- top <* pop
     whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
-      -- TODO: NOTE TO SELF - IF THIS IS FALSE, IT'S SAT PROPER
-      calleeApEnd <- if canInline then withExecutionCtx callEntry (getAp pc) else getAp (getNextPcInlinedWithFallback instrs pos)
+      calleeApEnd <-
+        if canInline
+          then withExecutionCtx callEntry (getAp pc)
+          else getAp (getNextPcInlinedWithFallback instrs pos)
       let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
       expect pre *> assert post
 
