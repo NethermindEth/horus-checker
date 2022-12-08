@@ -3,17 +3,6 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin
 from starkware.cairo.common.hash import hash2
-from math import assert_le, assert_nn_le, unsigned_div_rem
-
-// The maximum amount of each token that belongs to the AMM.
-const BALANCE_UPPER_BOUND = 2 ** 64;
-
-const TOKEN_TYPE_A = 1;
-const TOKEN_TYPE_B = 2;
-
-// Ensure the user's balances are much smaller than the pool's balance.
-const POOL_UPPER_BOUND = 2 ** 30;
-const ACCOUNT_BALANCE_BOUND = 1073741;  // 2**30 // 1000.
 
 // A map from account and token type to the corresponding balance of that account.
 @storage_var
@@ -36,7 +25,7 @@ func get_account_token_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, r
 // amount may be positive or negative.
 // Assert before setting that the balance does not exceed the upper bound.
 //
-// @pre (token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B)
+// @pre (token_type == 1 or token_type == 2)
 // @storage_update account_balance(account_id, token_type) := amount
 func set_account_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     account_id: felt, token_type: felt, amount: felt
@@ -46,9 +35,9 @@ func set_account_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_c
 }
 
 // Returns the pool's balance.
-// @pre (token_type == TOKEN_TYPE_A or token_type == TOKEN_TYPE_B)
+// @pre (token_type == 1 or token_type == 2)
 // @post $Return.balance == pool_balance(token_type)
-func get_pool_token_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
+func get_pool_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     token_type: felt
 ) -> (balance: felt) {
     return pool_balance.read(token_type);
@@ -57,24 +46,30 @@ func get_pool_token_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, rang
 // Swaps tokens between the given account and the pool.
 //
 // Tokens should be different
-// @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B) or (token_from == TOKEN_TYPE_B and token_to == TOKEN_TYPE_A)
+// @pre token_from == 1 or token_from == 2
 //
 // Account balance is updated
 // @storage_update account_balance(account_id, token_from) := amount_from
 //
 // False postcondition:
 // @post 1 == 2
-func do_swap{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
-    account_id: felt, token_from: felt, token_to: felt, amount_from: felt
+func main{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
+    account_id: felt, token_from: felt, amount_from: felt
 ) -> (amount_to: felt, r: felt) {
-    alloc_locals;
 
-    let (local amm_from_balance) = get_pool_token_balance(token_type=token_from);
+    [ap] = token_from, ap++;
+    call get_pool_balance;
+    [fp] = [ap-1];
 
-    local amount_to = 42;
-    local r = 5;
+    [fp+1] = 42;
+    [fp+2] = 5;
 
-    set_account_balance(account_id=account_id, token_type=token_from, amount=amount_from);
+    [ap] = account_id, ap++;
+    [ap] = token_from, ap++;
+    [ap] = amount_from, ap++;
+    call set_account_balance;
     
-    return (amount_to=amount_to, r=r);
+    [ap] = [fp+1], ap++;
+    [ap] = [fp+2], ap++;
+    ret;
 }

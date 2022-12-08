@@ -162,13 +162,13 @@ optimizeQuery smtQuery = do
     traverse
       mkTactic
       [ "simplify"
-      , "split-clause"
-      , "split-clause"
+      -- , "split-clause"
+      -- , "split-clause"
       , "solve-eqs"
       , "propagate-values"
       , "simplify"
-      , "split-clause"
-      , "split-clause"
+      -- , "split-clause"
+      -- , "split-clause"
       ]
   goal <- runZ3 $ sexprToGoal smtQuery
   preprocessGoal magicTactics goal
