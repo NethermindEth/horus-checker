@@ -156,10 +156,8 @@ makeModules cfg = do
   sources <- getSources
   runModuleL (gatherModules cfg sources)
 
-data SolvingInfo = SolvingInfo
-  { si_moduleName :: Text
-  , si_result :: SolverResult
-  }
+-- Module name and solver result.
+data SolvingInfo = SolvingInfo Text SolverResult
 
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
@@ -167,7 +165,7 @@ solveModule m = do
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers m
   result <- mkResult moduleName
-  pure SolvingInfo{si_moduleName = moduleName, si_result = result}
+  pure (SolvingInfo moduleName result)
  where
   mkResult moduleName = printingErrors $ do
     constraints <- runCairoSemanticsL (encodeModule m)

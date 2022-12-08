@@ -38,10 +38,7 @@ import Options.Applicative
 import Horus.Global (Config (..))
 import Horus.Preprocessor.Solvers (MultiSolver (..), SingleSolver, SolverSettings (..), cvc5, mathsat, z3)
 
-data Arguments = Arguments
-  { arg_fileName :: FilePath
-  , arg_config :: Config
-  }
+data Arguments = Arguments FilePath Config
 
 fileArgument :: Text
 fileArgument = "COMPILED_FILE"
