@@ -25,8 +25,7 @@ checkStorageIsSubset a b = Expr.and $ map equalReads (getWrites a)
   equalReads (name, args, _value) = read a name args .== read b name args
 
 read :: Storage -> ScopedName -> [Expr TFelt] -> Expr TFelt
-read storage name args = let readchain = buildReadChain args baseCase writes in
-    readchain
+read storage name args = buildReadChain args baseCase writes
  where
   baseCase = Expr.apply (Expr.Fun (tShow name)) args
   writes = Map.findWithDefault [] name storage
@@ -41,8 +40,7 @@ buildReadChain readAt baseCase writes = go baseCase (reverse writes)
   arity = length readAt
 
 getWrites :: Storage -> [(ScopedName, [Expr TFelt], Expr TFelt)]
-getWrites storage = let writes = concatMap getWritesForName (Map.toList storage) in 
-    writes
+getWrites storage = concatMap getWritesForName (Map.toList storage)
  where
   getWritesForName (name, writes) = [(name, args, value) | (args, value) <- writes]
 

@@ -101,10 +101,7 @@ builtinEnd :: Builtin -> Expr TFelt
 builtinEnd = Expr.const . builtinEndName
 
 builtinAligned :: Expr TFelt -> Builtin -> Expr TBool
-builtinAligned ptr b = start .<= ptr .&& ptr `Expr.mod` size .== 0
- where
-  start = builtinStart b
-  size = Builtin.size b
+builtinAligned ptr b = builtinStart b .<= ptr
 
 builtinInSegment :: Expr TFelt -> Builtin -> Expr TBool
 builtinInSegment ptr b = builtinAligned ptr b .&& ptr .< builtinEnd b
