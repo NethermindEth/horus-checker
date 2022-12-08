@@ -7,7 +7,7 @@ import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.Foldable (for_)
 import Data.IORef (newIORef)
 import Data.Text (Text, pack, unpack)
-import Data.Text.IO qualified as Text (putStrLn)
+import qualified Data.Text.IO as Text (putStrLn)
 import Lens.Micro ((%~), (<&>))
 import Options.Applicative
   ( execParser
@@ -22,7 +22,7 @@ import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdSpecs)
 import Horus.ContractInfo (mkContractInfo)
 import Horus.Global (SolvingInfo (..), solveContract)
-import Horus.Global.Runner qualified as Global (Env (..), run)
+import qualified Horus.Global.Runner as Global (Env (..), run)
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
 
@@ -30,6 +30,7 @@ type EIO = ExceptT Text IO
 
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
+  -- Load contract definition from JSON, and set standard library function specs.
   contract <- eioDecodeFileStrict arg_fileName <&> cdSpecs %~ (<> stdSpecs)
   contractInfo <- mkContractInfo contract
   configRef <- liftIO (newIORef arg_config)

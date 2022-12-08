@@ -6,32 +6,6 @@ category:           Language
 common deps
     build-depends:           base
     default-language:        Haskell2010
-    default-extensions:
-      AllowAmbiguousTypes
-      ConstraintKinds
-      DataKinds
-      DeriveFunctor
-      DerivingStrategies
-      FlexibleContexts
-      FlexibleInstances
-      GADTs
-      GeneralizedNewtypeDeriving
-      ImportQualifiedPost
-      KindSignatures
-      MultiParamTypeClasses
-      OverloadedStrings
-      PatternSynonyms
-      PolyKinds
-      RankNTypes
-      RecordWildCards
-      ScopedTypeVariables
-      StandaloneDeriving
-      StandaloneKindSignatures
-      TupleSections
-      TypeApplications
-      TypeFamilies
-      TypeOperators
-      ViewPatterns
     ghc-options:
       -Weverything -Werror
       -Wno-safe -Wno-unsafe -Wno-implicit-prelude
