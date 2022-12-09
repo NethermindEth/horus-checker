@@ -1,9 +1,9 @@
-# @post [ap - 1] == 15
-func main():
-    [ap] = 5; ap++
-    call succ
-    ret
-end
+// @post [ap - 1] == 15
+func main() {
+    [ap] = 5, ap++;
+    call succ;
+    ret;
+}
 
 # @post $Return.res == 3 * [fp - 3]
 func succ(x) -> (res):

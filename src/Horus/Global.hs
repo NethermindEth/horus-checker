@@ -13,6 +13,7 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
+import Data.Text as Text (splitOn)
 import Data.Traversable (for)
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
@@ -244,7 +245,12 @@ solveContract = do
                for ((cfg, isStandardSource inlinable idents) : cfgs) (uncurry $ flip makeModules)
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers
-      removeTrusted = filter (\m -> moduleName m `notElem` trustedStdFuncs)
+      removeTrusted =
+        filter
+          ( \m -> case Text.splitOn "+" (moduleName m) of
+              (name : _) -> name `notElem` trustedStdFuncs
+              [] -> True
+          )
   for (removeTrusted modules) solveModule
  where
   isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)

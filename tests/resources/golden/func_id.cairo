@@ -1,9 +1,9 @@
-# @post [ap - 1] == 42
-func main():
-    [ap] = 42; ap++
-    call id
-    ret
-end
+// @post [ap - 1] == 42
+func main() {
+    [ap] = 42, ap++;
+    call id;
+    ret;
+}
 
 # @post $Return.res == x
 func id(x) -> (res):
