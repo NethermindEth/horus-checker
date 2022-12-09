@@ -32,7 +32,6 @@ where
 
 import Control.Monad.Except (throwError)
 import Data.List (intercalate)
-import Data.Text (Text, unpack)
 import Options.Applicative
 
 import Horus.Global (Config (..))
@@ -40,7 +39,7 @@ import Horus.Preprocessor.Solvers (MultiSolver (..), SingleSolver, SolverSetting
 
 data Arguments = Arguments FilePath Config
 
-fileArgument :: Text
+fileArgument :: String
 fileArgument = "COMPILED_FILE"
 
 defaultTimeoutMs :: Int
@@ -79,11 +78,7 @@ multiSolverParser :: Parser MultiSolver
 multiSolverParser = MultiSolver <$> some singleSolverParser
 
 argParser :: Parser Arguments
-argParser =
-  Arguments
-    <$> strArgument
-      (metavar (unpack fileArgument))
-    <*> configParser
+argParser = Arguments <$> strArgument (metavar fileArgument) <*> configParser
 
 configParser :: Parser Config
 configParser =
