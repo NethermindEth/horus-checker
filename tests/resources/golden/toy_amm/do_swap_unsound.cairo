@@ -73,3 +73,28 @@ func main{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     [ap] = [fp+2], ap++;
     ret;
 }
+
+// Swaps tokens between the given account and the pool.
+//
+// Tokens should be different
+// @pre (token_from == 1 and token_to == 2) or (token_from == 2 and token_to == 1)
+//
+// Account balance is updated
+// @storage_update account_balance(account_id, token_from) := amount_from
+//
+// False postcondition:
+// @post 1 == 2
+func main2{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
+    account_id: felt, token_from: felt, token_to: felt, amount_from: felt
+) -> (amount_to: felt, r: felt) {
+    alloc_locals;
+
+    let (local amm_from_balance) = get_pool_balance(token_type=token_from);
+
+    local amount_to = 42;
+    local r = 5;
+
+    set_account_balance(account_id=account_id, token_type=token_from, amount=amount_from);
+    
+    return (amount_to=amount_to, r=r);
+}
