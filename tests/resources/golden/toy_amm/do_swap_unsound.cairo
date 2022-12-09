@@ -46,7 +46,7 @@ func get_pool_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_chec
 // Swaps tokens between the given account and the pool.
 //
 // Tokens should be different
-// @pre token_from == 1 or token_from == 2
+// @pre (token_from == 1 and token_to == 2) or (token_from == 2 and token_to == 1)
 //
 // Account balance is updated
 // @storage_update account_balance(account_id, token_from) := amount_from
@@ -54,8 +54,9 @@ func get_pool_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_chec
 // False postcondition:
 // @post 1 == 2
 func main{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
-    account_id: felt, token_from: felt, amount_from: felt
+    account_id: felt, token_from: felt, token_to: felt, amount_from: felt
 ) -> (amount_to: felt, r: felt) {
+    ap += 3;
 
     [ap] = token_from, ap++;
     call get_pool_balance;
