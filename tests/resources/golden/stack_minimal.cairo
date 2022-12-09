@@ -1,14 +1,14 @@
 %lang starknet
 
-struct Stack:
-    member value : felt
-    member next : Stack*
-end
+struct Stack {
+    value: felt,
+    next: Stack*,
+}
 
-namespace _Stack:
-    func empty() -> (stack : Stack*):
-        return (cast(0, Stack*))
-    end
+namespace _Stack {
+    func empty() -> (stack: Stack*) {
+        return (cast(0, Stack*),);
+    }
 
     # @post $Return.stack.value == stack.value + stack.next.value
     # @post $Return.stack.next == stack.next.next
@@ -30,12 +30,12 @@ namespace _Stack:
     end
 end
 
-# @post [ap - 1] == 11
-func main_() -> (res : felt):
-    let (stack) = _Stack.empty()
-    let (stack) = _Stack.lit(stack, 5)
-    let (stack) = _Stack.lit(stack, 6)
-    let (stack) = _Stack.add(stack)
-    let (top) = _Stack.top(stack)
-    return (top)
-end
+// @post [ap - 1] == 11
+func main_() -> (res: felt) {
+    let (stack) = _Stack.empty();
+    let (stack) = _Stack.lit(stack, 5);
+    let (stack) = _Stack.lit(stack, 6);
+    let (stack) = _Stack.add(stack);
+    let (top) = _Stack.top(stack);
+    return (top,);
+}

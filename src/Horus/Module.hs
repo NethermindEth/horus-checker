@@ -47,7 +47,16 @@ data Module = Module
   , m_calledF :: Label
   , m_lastPc :: (CallStack, Label)
   }
-  deriving (Show)
+  deriving stock (Show)
+
+data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
+  deriving stock (Show)
+
+data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
+  deriving stock (Show)
+
+richToPlainSpec :: FuncSpec -> PlainSpec
+richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
 
 data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
   deriving stock (Show)

@@ -1,7 +1,7 @@
-struct MyStruct:
-       member x : felt
-       member y : felt
-end
+struct MyStruct {
+    x: felt,
+    y: felt,
+}
 
 # @declare $s : MyStruct
 # @pre s == $s

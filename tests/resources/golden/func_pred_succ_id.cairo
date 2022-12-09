@@ -1,9 +1,9 @@
-# @post [ap - 1] == 5
-func main():
-    [ap] = 5; ap++
-    call comp_id
-    ret
-end
+// @post [ap - 1] == 5
+func main() {
+    [ap] = 5, ap++;
+    call comp_id;
+    ret;
+}
 
 # @post $Return.res == x + 1
 func succ(x) -> (res):
