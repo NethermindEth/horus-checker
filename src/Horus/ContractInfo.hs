@@ -8,13 +8,17 @@ import Data.Map (Map)
 import Data.Map qualified as Map (fromList, toList, (!), (!?), keys, union, foldrWithKey, insert, empty, lookup, fromListWith, insertWith)
 import Data.Maybe (mapMaybe)
 import Data.Set ( Set, fromList )
+import Data.List (elemIndex)
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (..))
 import Horus.Expr (Expr, Ty (..))
 import Horus.Instruction (LabeledInst, callDestination, isRet, labelInstructions, readAllInstructions, toSemiAsmUnsafe)
 import Horus.Label (Label)
-import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..))
+import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..), sizeOfType)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.FuncSpec
@@ -25,6 +29,10 @@ import Horus.SW.FuncSpec
       toFuncSpec )
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName (..))
+import Horus.SW.CairoType (CairoType (..))
+import Horus.SW.FuncSpec (FuncSpec, emptyFuncSpec)
+import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
+import Horus.SW.ScopedName (ScopedName (..), fromText)
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
 import Horus.FunctionAnalysis (inlinableFuns, mkGeneratedNames, storageVarsOfCD)
@@ -103,15 +111,19 @@ mkContractInfo cd = do
     funName <- getFunName' l
     args <- getStruct (funName <> "Args")
     implicits <- getStruct (funName <> "ImplicitArgs")
-    returns <- getStruct (funName <> "Return")
+    returns <- getTypeDef (funName <> "Return")
+    outputOffset <- getOutputOffset (Builtin.ptrName b) returns implicits
     pure $
       BuiltinOffsets
         <$> getInputOffset (Builtin.ptrName b) args implicits
-        <*> getOutputOffset (Builtin.ptrName b) returns implicits
+        <*> outputOffset
    where
     getStruct name = case identifiers Map.! name of
       IStruct s -> pure s
       _ -> throwError ("Expected '" <> tShow name <> "' to have a 'struct' type")
+    getTypeDef name = case identifiers Map.! name of
+      IType t -> pure t
+      _ -> throwError ("Expected '" <> tShow name <> "' to have a 'type_definition' type")
     getInputOffset n args implicits =
       asum
         [ st_members args Map.!? n
@@ -119,13 +131,23 @@ mkContractInfo cd = do
         , st_members implicits Map.!? n
             <&> \m -> -me_offset m + 2 + st_size args + st_size implicits
         ]
-    getOutputOffset n returns implicits =
+    getOutputOffset n returns@(TypeTuple mems) implicits = do
+      returnSize <- sizeOfType returns identifiers
       asum
-        [ st_members returns Map.!? n
-            <&> \m -> -me_offset m + st_size returns
-        , st_members implicits Map.!? n
-            <&> \m -> -me_offset m + st_size returns + st_size implicits
-        ]
+        <$> sequenceA
+          [ sequenceA $
+              lookup (Just (fromText n)) mems
+                <&> \m ->
+                  case elemIndex (Just $ fromText n, m) mems of
+                    Just memIndex -> do
+                      offset <- sizeOfType (TypeTuple $ take (memIndex + 1) mems) identifiers
+                      pure $ -offset + returnSize
+                    Nothing -> throwError "This not supposed to be reachable."
+          , pure $
+              st_members implicits Map.!? n
+                <&> \m -> -me_offset m + returnSize + st_size implicits
+          ]
+    getOutputOffset n returns implicits = getOutputOffset n (TypeTuple [(Nothing, Just returns)]) implicits
 
   getCallee :: MonadError Text m => LabeledInst -> m ScopedName
   getCallee inst = callDestination' inst >>= getFunName'
