@@ -1,9 +1,9 @@
-# @post [ap - 1] == 26
-func main():
-    [ap] = 5; ap++
-    call square_succ
-    ret
-end
+// @post [ap - 1] == 26
+func main() {
+    [ap] = 5, ap++;
+    call square_succ;
+    ret;
+}
 
 # @post $Return.res == [fp - 3] + 1
 func succ(x) -> (res):

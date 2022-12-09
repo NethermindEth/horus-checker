@@ -1,11 +1,11 @@
-# @post [ap - 1] == 32
-func main():
-    [ap] = 5; ap++
-    [ap] = 6; ap++
-    call prod
-    [ap] = [ap - 1] + 2; ap++
-    ret
-end
+// @post [ap - 1] == 32
+func main() {
+    [ap] = 5, ap++;
+    [ap] = 6, ap++;
+    call prod;
+    [ap] = [ap - 1] + 2, ap++;
+    ret;
+}
 
 # @post $Return.res == x * y
 func prod(x, y) -> (res):
