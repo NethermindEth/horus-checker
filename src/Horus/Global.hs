@@ -36,6 +36,7 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
+import Data.IORef (IORef, readIORef, writeIORef)
 import Data.Text (Text, unpack)
 import Data.Text as Text (splitOn)
 import Data.Traversable (for)
@@ -51,6 +52,7 @@ import Horus.CairoSemantics.Runner
   , debugFriendlyModel
   , makeModel
   )
+import Horus.ContractInfo (ContractInfo (..), Config (..), Env (..))
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.Instruction (LabeledInst)
 import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
@@ -63,14 +65,6 @@ import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
-
-data Config = Config
-  { cfg_verbose :: Bool
-  , cfg_outputQueries :: Maybe FilePath
-  , cfg_outputOptimizedQueries :: Maybe FilePath
-  , cfg_solver :: Solver
-  , cfg_solverSettings :: SolverSettings
-  }
 
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
@@ -231,9 +225,9 @@ solveSMT cs = do
   query = makeModel cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-solveContract :: GlobalL [SolvingInfo]
-solveContract = do
-  cfg <- runCFGBuildL buildCFG
+solveContract :: Env -> IO [SolvingInfo]
+solveContract env = do
+  cfg <- buildCFG env
   verbosePrint cfg
   modules <- makeModules cfg
   identifiers <- getIdentifiers

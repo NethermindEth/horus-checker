@@ -39,10 +39,10 @@ main' (Arguments filePath config) = do
   cd@(ContractDefinition _ cdSpecs _ _) <- readContract filePath
   -- Use standard library function specs as defaults.
   contractInfo <- mkContractInfo cd { cd_specs = M.union cdSpecs stdSpecs }
-  configRef    <- liftIO (newIORef config)
+  configRef    <- liftIO (newIORef (config)
   let env = Global.Env configRef contractInfo
   -- Run everything, collecting a list of module names and solver results.
-  infos <- liftIO (Global.run env solveContract) >>= liftEither
+  infos <- solveContract env >>= liftEither
   for_ infos $ \si -> liftIO $ do
     Text.putStrLn (ppSolvingInfo si)
 

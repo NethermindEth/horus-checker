@@ -40,11 +40,9 @@ import Text.Pretty.Simple (pPrintString)
 import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImpl)
 import Horus.CairoSemantics.Runner qualified as CairoSemantics (run)
 import Horus.ContractInfo (ContractInfo (..))
-import Horus.Global (Config (..), GlobalF (..), GlobalL (..))
+import Horus.Global (Config (..), GlobalF (..), GlobalL (..), Env (..))
 import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
-
-data Env = Env {e_config :: IORef Config, e_contractInfo :: ContractInfo}
 
 type Impl = ReaderT Env (ExceptT Text IO) -- TODO replace ExceptT with exceptions
 

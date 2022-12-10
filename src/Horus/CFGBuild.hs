@@ -1,51 +1,33 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ViewPatterns #-}
 module Horus.CFGBuild
-  ( CFGBuildL (..)
+  ( CFG (..)
   , ArcCondition (..)
   , addAssertion
-  , throw
   , buildCFG
   , Label (..)
-  , CFGBuildF (..)
   , LabeledInst
   )
 where
 
-import Control.Monad.Except (MonadError (..))
-import Control.Monad.Free.Church (F, liftF)
 import Data.Coerce (coerce)
-import Data.Foldable (for_, toList)
+import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.List (sort, union)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
-import Data.Map qualified as Map (elems, toList)
+import Data.Map (Map)
+import Data.Map qualified as Map (empty, elems, toList)
 import Data.Maybe (mapMaybe)
 import Data.Text (Text)
+import Lens.Micro (Lens', at, (^.), _Just, (%~))
 import Lens.Micro.GHC ()
 
 import Horus.Expr (Expr, Ty (..))
@@ -63,71 +45,66 @@ import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Identifier (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName)
-import Horus.Util (appendList, whenJustM)
+import Horus.Util (appendList)
+import Horus.ContractInfo (ContractInfo (..), Env (..))
+
+data CFG = CFG
+  { cfg_vertices :: [Label]
+  , cfg_arcs :: Map Label [(Label, [LabeledInst], ArcCondition)]
+  , cfg_assertions :: Map Label [Expr TBool]
+  }
+  deriving (Show)
+
+emptyCFG :: CFG
+emptyCFG = CFG [] Map.empty Map.empty
+
+cfgVertices :: Lens' CFG [Label]
+cfgVertices lMod g = fmap (\x -> g{cfg_vertices = x}) (lMod (cfg_vertices g))
+
+cfgArcs :: Lens' CFG (Map Label [(Label, [LabeledInst], ArcCondition)])
+cfgArcs lMod g = fmap (\x -> g{cfg_arcs = x}) (lMod (cfg_arcs g))
+
+cfgAssertions :: Lens' CFG (Map Label [Expr TBool])
+cfgAssertions lMod g = fmap (\x -> g{cfg_assertions = x}) (lMod (cfg_assertions g))
+
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
 
-data CFGBuildF a
-  = AddVertex Label a
-  | AddArc Label Label [LabeledInst] ArcCondition a
-  | AddAssertion Label (Expr TBool) a
-  | AskIdentifiers (Identifiers -> a)
-  | AskInstructions ([LabeledInst] -> a)
-  | GetFuncSpec ScopedName (FuncSpec -> a)
-  | GetInvariant ScopedName (Maybe (Expr TBool) -> a)
-  | GetRets ScopedName ([Label] -> a)
-  | Throw Text
-  | forall b. Catch (CFGBuildL b) (Text -> CFGBuildL b) (b -> a)
+addVertex :: Label -> CFG -> CFG
+addVertex l g = (cfgVertices %~ ([l] `union`)) g
 
-deriving instance Functor CFGBuildF
+addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> CFG -> CFG
+addArc lFrom lTo insts test = cfgArcs . at lFrom %~ doAdd
+ where
+  doAdd mArcs = Just ((lTo, insts, test) : mArcs ^. _Just)
 
-newtype CFGBuildL a = CFGBuildL {runCFGBuildL :: F CFGBuildF a}
-  deriving newtype (Functor, Applicative, Monad)
+addAssertion :: Label -> Expr TBool -> CFG -> CFG
+addAssertion l assertion = cfgAssertions . at l %~ doAdd
+ where
+  doAdd mAssertions = Just (assertion : mAssertions ^. _Just)
 
-instance MonadError Text CFGBuildL where
-  throwError = throw
-  catchError = catch
+askIdentifiers :: Env -> Identifiers
+askIdentifiers env = (ci_identifiers . e_contractInfo) env
 
-liftF' :: CFGBuildF a -> CFGBuildL a
-liftF' = CFGBuildL . liftF
+askInstructions :: Env -> [LabeledInst]
+askInstructions env = (ci_instructions . e_contractInfo) env
 
-addVertex :: Label -> CFGBuildL ()
-addVertex l = liftF' (AddVertex l ())
+getFuncSpec :: Env -> ScopedName -> FuncSpec
+getFuncSpec env name = (ci_getFuncSpec . e_contractInfo) env name
 
-addArc :: Label -> Label -> [LabeledInst] -> ArcCondition -> CFGBuildL ()
-addArc lFrom lTo insts test = liftF' (AddArc lFrom lTo insts test ())
+getInvariant :: Env -> ScopedName -> Maybe (Expr TBool)
+getInvariant env name = (ci_getInvariant . e_contractInfo) env name
 
-addAssertion :: Label -> Expr TBool -> CFGBuildL ()
-addAssertion l assertion = liftF' (AddAssertion l assertion ())
+getRets :: Env -> ScopedName -> Either Text [Label]
+getRets env name = (ci_getRets . e_contractInfo) env name
 
-askIdentifiers :: CFGBuildL Identifiers
-askIdentifiers = liftF' (AskIdentifiers id)
-
-askInstructions :: CFGBuildL [LabeledInst]
-askInstructions = liftF' (AskInstructions id)
-
-getFuncSpec :: ScopedName -> CFGBuildL FuncSpec
-getFuncSpec name = liftF' (GetFuncSpec name id)
-
-getInvariant :: ScopedName -> CFGBuildL (Maybe (Expr TBool))
-getInvariant name = liftF' (GetInvariant name id)
-
-getRets :: ScopedName -> CFGBuildL [Label]
-getRets name = liftF' (GetRets name id)
-
-throw :: Text -> CFGBuildL a
-throw t = liftF' (Throw t)
-
-catch :: CFGBuildL a -> (Text -> CFGBuildL a) -> CFGBuildL a
-catch m h = liftF' (Catch m h id)
-
-buildCFG :: CFGBuildL ()
-buildCFG = do
-  labeledInsts <- askInstructions
-  identifiers <- askIdentifiers
-  buildFrame labeledInsts identifiers
-  addAssertions identifiers
+buildCFG :: Env -> Either Text CFG
+buildCFG env = addAssertions env identifiers g
+ where
+  labeledInsts = askInstructions env
+  identifiers = askIdentifiers env
+  g = buildFrame labeledInsts identifiers
 
 newtype Segment = Segment (NonEmpty LabeledInst)
   deriving (Show)
@@ -141,13 +118,12 @@ nextSegmentLabel s = getNextPc (NonEmpty.last (coerce s))
 segmentInsts :: Segment -> [LabeledInst]
 segmentInsts (Segment ne) = toList ne
 
-buildFrame :: [LabeledInst] -> Identifiers -> CFGBuildL ()
-buildFrame rows identifiers = do
-  let segments = breakIntoSegments labels rows
-  for_ segments $ \s -> do
-    addVertex (segmentLabel s)
-    addArcsFrom s
+buildFrame :: [LabeledInst] -> Identifiers -> CFG
+buildFrame rows identifiers =
+  foldr (\s -> (addArcsFrom s) . (addVertex (segmentLabel s))) g segments
  where
+  segments = breakIntoSegments labels rows
+  g = emptyCFG
   funLabels = identifiers & Map.elems & mapMaybe getFunctionPc & coerce
   namedLabels = identifiers & Map.elems & mapMaybe getLabelPc & coerce
   jumpLabels = concat [[jmpDst, getNextPc i] | i <- rows, Just jmpDst <- [jumpDestination i]]
@@ -165,43 +141,51 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
     | l == pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
     | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
 
-addArc' :: Label -> Label -> [LabeledInst] -> CFGBuildL ()
-addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone
+addArc' :: Label -> Label -> [LabeledInst] -> CFG -> CFG
+addArc' lFrom lTo insts g = addArc lFrom lTo insts ACNone g
 
-addArcsFrom :: Segment -> CFGBuildL ()
-addArcsFrom s
-  | Call <- i_opCode endInst = do
+addArcsFrom :: Segment -> CFG -> CFG
+addArcsFrom s g
+  | Call <- i_opCode endInst =
       let lTo = nextSegmentLabel s
-      addArc' lFrom lTo insts
-  | Ret <- i_opCode endInst = do
-      pure ()
-  | JumpAbs <- i_pcUpdate endInst = do
+      in addArc' lFrom lTo insts g
+  | Ret <- i_opCode endInst = g
+  | JumpAbs <- i_pcUpdate endInst =
       let lTo = Label (fromInteger (i_imm endInst))
-      addArc' lFrom lTo (init insts)
-  | JumpRel <- i_pcUpdate endInst = do
+      in addArc' lFrom lTo (init insts) g
+  | JumpRel <- i_pcUpdate endInst =
       let lTo = moveLabel endPc (fromInteger (i_imm endInst))
-      addArc' lFrom lTo (init insts)
-  | Jnz <- i_pcUpdate endInst = do
+      in addArc' lFrom lTo (init insts) g
+  | Jnz <- i_pcUpdate endInst =
       let lTo1 = nextSegmentLabel s
           lTo2 = moveLabel endPc (fromInteger (i_imm endInst))
-      addArc lFrom lTo1 insts (ACJnz endPc False)
-      addArc lFrom lTo2 insts (ACJnz endPc True)
-  | otherwise = do
+      in
+        (  addArc lFrom lTo1 insts (ACJnz endPc False)
+         . addArc lFrom lTo2 insts (ACJnz endPc True)
+        ) g
+  | otherwise =
       let lTo = nextSegmentLabel s
-      addArc' lFrom lTo insts
+      in addArc' lFrom lTo insts g
  where
   lFrom = segmentLabel s
   (endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
 
-addAssertions :: Identifiers -> CFGBuildL ()
-addAssertions identifiers = do
-  for_ (Map.toList identifiers) $ \(idName, def) -> case def of
-    IFunction{} -> do
-      post <- fs_post <$> getFuncSpec idName
-      rets <- getRets idName
-      for_ rets (`addAssertion` post)
-    ILabel pc -> do
-      whenJustM (getInvariant idName) $ \inv ->
-        pc `addAssertion` inv
-    _ -> pure ()
+addAssertions :: Env -> Identifiers -> CFG -> Either Text CFG
+addAssertions env identifiers g =
+  foldr handleDef (Right g) (Map.toList identifiers)
+ where
+  handleDef :: (ScopedName, Identifier) -> Either Text CFG -> Either Text CFG
+  handleDef (idName, def) g' =
+    case def of
+      IFunction{} -> foldr (\l -> addAssertion l post) <$> g' <*> rets
+       where
+        post = fs_post (getFuncSpec env idName)
+        rets = getRets env idName
+      ILabel pc ->
+        case mbInvariant of
+          Just inv -> addAssertion pc inv <$> g'
+          Nothing -> g'
+       where
+        mbInvariant = getInvariant env idName
+      _ -> g'

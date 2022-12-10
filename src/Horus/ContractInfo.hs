@@ -1,29 +1,11 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ImportQualifiedPost #-}
-{-# LANGUAGE KindSignatures #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE StandaloneKindSignatures #-}
 {-# LANGUAGE TupleSections #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE ViewPatterns #-}
-module Horus.ContractInfo (ContractInfo (..), mkContractInfo) where
+module Horus.ContractInfo (ContractInfo (..), mkContractInfo, Env (..), Config (..)) where
 
 import Control.Monad.Except (MonadError (..))
 import Data.Foldable (asum)
@@ -48,19 +30,31 @@ import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct 
 import Horus.SW.ScopedName (ScopedName (..), fromText)
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
+import Horus.Preprocessor.Solvers (Solver, SolverSettings)
+
+data Env = Env {e_config :: Config, e_contractInfo :: ContractInfo}
+
+data Config = Config
+  { cfg_verbose :: Bool
+  , cfg_outputQueries :: Maybe FilePath
+  , cfg_outputOptimizedQueries :: Maybe FilePath
+  , cfg_solver :: Solver
+  , cfg_solverSettings :: SolverSettings
+  }
+
 
 data ContractInfo = ContractInfo
   { ci_instructions :: [LabeledInst]
   , ci_identifiers :: Identifiers
   , ci_sources :: [(Function, FuncSpec)]
   , ci_storageVars :: [ScopedName]
-  , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
-  , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
+  , ci_getApTracking :: Label -> Either Text ApTracking
+  , ci_getBuiltinOffsets :: Label -> Builtin -> Either Text (Maybe BuiltinOffsets)
   , ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
   , ci_getFuncSpec :: ScopedName -> FuncSpec
   , ci_getInvariant :: ScopedName -> Maybe (Expr TBool)
   , ci_getCallee :: forall m. MonadError Text m => LabeledInst -> m ScopedName
-  , ci_getRets :: forall m. MonadError Text m => ScopedName -> m [Label]
+  , ci_getRets :: ScopedName -> Either Text [Label]
   }
 
 mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' ContractInfo
@@ -99,7 +93,7 @@ mkContractInfo cd = do
    where
     msg = "Can't find the call destination of " <> toSemiAsmUnsafe (snd i)
 
-  getApTracking :: MonadError Text m => Label -> m ApTracking
+  getApTracking :: Label -> Either Text ApTracking
   getApTracking l = case instructionLocations Map.!? l of
     Nothing -> throwError ("There is no instruction_locations entry for '" <> tShow l <> "'")
     Just il -> pure (il_flowTrackingData il & ftd_apTracking)
@@ -207,7 +201,7 @@ mkContractInfo cd = do
    where
     svNames sv = [sv <> "addr", sv <> "read", sv <> "write"]
 
-  mkGetRets :: MonadError Text m => Map ScopedName [Label] -> ScopedName -> m [Label]
+  mkGetRets :: Map ScopedName [Label] -> ScopedName -> Either Text [Label]
   mkGetRets retsByFun name = maybeToError msg (retsByFun Map.!? name)
    where
     msg = "Can't find 'ret' instructions for " <> tShow name <> ". Is it a function?"
