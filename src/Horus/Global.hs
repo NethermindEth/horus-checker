@@ -38,13 +38,13 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
 import Data.IORef (IORef, readIORef, writeIORef)
 import Data.Text (Text, unpack)
+import Data.Text.IO qualified as TextIO
 import Data.Text as Text (splitOn)
 import Data.Traversable (for)
 import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildL, buildCFG)
-import Horus.CFGBuild.Runner (CFG (..))
+import Horus.CFGBuild (buildCFG, CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
@@ -67,8 +67,7 @@ import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 
 data GlobalF a
-  = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
-  | forall b. RunCairoSemanticsL (CairoSemanticsL b) (ConstraintsState -> a)
+  = forall b. RunCairoSemanticsL (CairoSemanticsL b) (ConstraintsState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
   | GetCallee LabeledInst (ScopedName -> a)
@@ -93,9 +92,6 @@ instance MonadError Text GlobalL where
 
 liftF' :: GlobalF a -> GlobalL a
 liftF' = GlobalL . liftF
-
-runCFGBuildL :: CFGBuildL a -> GlobalL CFG
-runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 
 runCairoSemanticsL :: CairoSemanticsL a -> GlobalL ConstraintsState
 runCairoSemanticsL smt2Builder = liftF' (RunCairoSemanticsL smt2Builder id)
@@ -142,8 +138,11 @@ verbosePutStrLn what = do
   config <- getConfig
   when (cfg_verbose config) (putStrLn' what)
 
-verbosePrint :: Show a => a -> GlobalL ()
-verbosePrint what = verbosePutStrLn (tShow what)
+printIfVerbose :: Show a => Env -> a -> IO ()
+printIfVerbose env what = do
+  if (cfg_verbose . e_config) env
+  then TextIO.putStrLn (tShow what)
+  else pure ()
 
 makeModules :: CFG -> GlobalL [Module]
 makeModules cfg = do
@@ -153,19 +152,21 @@ makeModules cfg = do
 -- Module name and solver result.
 data SolvingInfo = SolvingInfo Text SolverResult
 
-solveModule :: Module -> GlobalL SolvingInfo
-solveModule m = do
+solveModule :: Env -> Module -> IO SolvingInfo
+solveModule env m = do
   checkMathsat m
-  identifiers <- getIdentifiers
-  let moduleName = nameOfModule identifiers m
-  result <- mkResult moduleName
+  result <- mkResult env moduleName
   pure (SolvingInfo moduleName result)
  where
-  mkResult moduleName = printingErrors $ do
+  identifiers = (ci_identifiers . e_contractInfo) env
+  moduleName = nameOfModule identifiers m
+
+  mkResult :: Env -> Text -> IO SolverResult
+  mkResult env moduleName = printingErrors $ do
     constraints <- runCairoSemanticsL (encodeModule m)
     outputSmtQueries moduleName constraints
-    verbosePrint m
-    verbosePrint (debugFriendlyModel constraints)
+    printIfVerbose m
+    printIfVerbose (debugFriendlyModel constraints)
     solveSMT constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
 
@@ -197,7 +198,7 @@ writeSmtQueries queries dir moduleName = do
   newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
   writeQueryFile (n, q) = writeFile' (newFileName n) q
 
-checkMathsat :: Module -> GlobalL ()
+checkMathsat :: Module -> IO (Either Text Config)
 checkMathsat m = do
   conf <- getConfig
   let solver = cfg_solver conf
@@ -225,17 +226,22 @@ solveSMT cs = do
   query = makeModel cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
+
 solveContract :: Env -> IO [SolvingInfo]
-solveContract env = do
-  cfg <- buildCFG env
-  verbosePrint cfg
-  modules <- makeModules cfg
-  identifiers <- getIdentifiers
-  let moduleName = nameOfModule identifiers
-      removeTrusted =
-        filter
-          ( \m -> case Text.splitOn "+" (moduleName m) of
-              (name : _) -> name `notElem` trustedStdFuncs
-              [] -> True
-          )
-  for (removeTrusted modules) solveModule
+solveContract env =
+  case buildCFG env of
+    Left err -> do
+      TextIO.putStrLn err
+      pure []
+    Right cfg -> do
+      printIfVerbose cfg
+      modules <- makeModules cfg
+      identifiers <- getIdentifiers
+      let moduleName = nameOfModule identifiers
+          removeTrusted =
+            filter
+              ( \m -> case Text.splitOn "+" (moduleName m) of
+                  (name : _) -> name `notElem` trustedStdFuncs
+                  [] -> True
+              )
+      for (removeTrusted modules) (solveModule env)

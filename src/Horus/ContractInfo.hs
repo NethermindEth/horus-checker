@@ -42,7 +42,6 @@ data Config = Config
   , cfg_solverSettings :: SolverSettings
   }
 
-
 data ContractInfo = ContractInfo
   { ci_instructions :: [LabeledInst]
   , ci_identifiers :: Identifiers

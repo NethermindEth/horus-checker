@@ -39,13 +39,16 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, toList, traverse_)
 import Data.Functor ((<&>))
 import Data.List (tails)
+import Data.List qualified as List (find)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
 import Data.Set qualified as Set (member)
 import Data.Text (Text)
+import Lens.Micro (Lens', (%~), (<&>), (.~), (<%~), (^.), (&))
 
+import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
@@ -84,6 +87,65 @@ import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 
+data AssertionBuilder
+  = QFAss (Expr TBool)
+  | ExistentialAss ([MemoryVariable] -> Expr TBool)
+
+builderToAss :: [MemoryVariable] -> AssertionBuilder -> Expr TBool
+builderToAss _ (QFAss e) = e
+builderToAss mv (ExistentialAss f) = f mv
+
+data ConstraintsState = ConstraintsState
+  { cs_memoryVariables :: [MemoryVariable]
+  , cs_asserts :: [AssertionBuilder]
+  , cs_expects :: [Expr TBool]
+  , cs_nameCounter :: Int
+  }
+
+csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
+csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
+
+csAsserts :: Lens' ConstraintsState [AssertionBuilder]
+csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
+
+csExpects :: Lens' ConstraintsState [Expr TBool]
+csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
+
+csNameCounter :: Lens' ConstraintsState Int
+csNameCounter lMod g = fmap (\x -> g{cs_nameCounter = x}) (lMod (cs_nameCounter g))
+
+emptyConstraintsState :: ConstraintsState
+emptyConstraintsState =
+  ConstraintsState
+    { cs_memoryVariables = []
+    , cs_asserts = []
+    , cs_expects = []
+    , cs_nameCounter = 0
+    }
+
+data SemanticsEnv = SemanticsEnv
+  { e_constraints :: ConstraintsState
+  , e_storageEnabled :: Bool
+  , e_storage :: Storage
+  }
+
+eConstraints :: Lens' SemanticsEnv ConstraintsState
+eConstraints lMod g = fmap (\x -> g{e_constraints = x}) (lMod (e_constraints g))
+
+eStorageEnabled :: Lens' SemanticsEnv Bool
+eStorageEnabled lMod g = fmap (\x -> g{e_storageEnabled = x}) (lMod (e_storageEnabled g))
+
+eStorage :: Lens' SemanticsEnv Storage
+eStorage lMod g = fmap (\x -> g{e_storage = x}) (lMod (e_storage g))
+
+emptySemanticsEnv :: SemanticsEnv
+emptySemanticsEnv =
+  SemanticsEnv
+    { e_constraints = emptyConstraintsState
+    , e_storageEnabled = False
+    , e_storage = mempty
+    }
+
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
   , mv_addrName :: Text
@@ -111,17 +173,27 @@ data CairoSemanticsF a
 
 type CairoSemanticsL = F CairoSemanticsF
 
-assert' :: Expr TBool -> CairoSemanticsL ()
-assert' a = liftF (Assert' a ())
+assert' :: SemanticsEnv -> Expr TBool -> SemanticsEnv
+assert' env a = env & (eConstraints . csAsserts) %~ (QFAss a :)
 
-expect' :: Expr TBool -> CairoSemanticsL ()
-expect' a = liftF (Expect' a ())
+expect' :: SemanticsEnv -> Expr TBool -> SemanticsEnv
+expect' env a = env & (eConstraints . csExpects) %~ (a :)
 
 checkPoint :: ([MemoryVariable] -> Expr TBool) -> CairoSemanticsL ()
 checkPoint a = liftF (CheckPoint a ())
 
-declareMem :: Expr TFelt -> CairoSemanticsL (Expr TFelt)
-declareMem address = liftF (DeclareMem address id)
+declareMem :: SemanticsEnv -> Expr TFelt -> (SemanticsEnv, Expr TFelt)
+declareMem env address =
+  case List.find ((address ==) . mv_addrExpr) memVars of
+    Just MemoryVariable{..} -> (env, Expr.const mv_varName)
+    Nothing -> (env'', Expr.const name)
+ where
+  memVars = env ^. eConstraints . csMemoryVariables
+  -- Increment `csNameCounter` and grab its new value.
+  (freshCount, env') = env & (eConstraints . csNameCounter) <%~ (+1)
+  name = "MEM!" <> tShow freshCount
+  addrName = "ADDR!" <> tShow freshCount
+  env'' = env' & eConstraints . csMemoryVariables %~ (MemoryVariable name addrName address :)
 
 getCallee :: LabeledInst -> CairoSemanticsL ScopedName
 getCallee call = liftF (GetCallee call id)
@@ -132,8 +204,8 @@ getFuncSpec name = liftF (GetFuncSpec name id)
 declareLocalMem :: Expr TFelt -> CairoSemanticsL MemoryVariable
 declareLocalMem address = liftF (DeclareLocalMem address id)
 
-getApTracking :: Label -> CairoSemanticsL ApTracking
-getApTracking inst = liftF (GetApTracking inst id)
+getApTracking :: ContractInfo -> Label -> Either Text ApTracking
+getApTracking ci inst = ci_getApTracking ci inst
 
 getFunPc :: Label -> CairoSemanticsL Label
 getFunPc l = liftF (GetFunPc l id)
@@ -144,8 +216,8 @@ getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
 throw :: Text -> CairoSemanticsL a
 throw t = liftF (Throw t)
 
-enableStorage :: CairoSemanticsL ()
-enableStorage = liftF (EnableStorage ())
+enableStorage :: SemanticsEnv -> SemanticsEnv
+enableStorage env = (eStorageEnabled .~ True) env
 
 readStorage :: ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
 readStorage name args = liftF (ReadStorage name args id)
@@ -156,18 +228,19 @@ updateStorage storage = liftF (UpdateStorage storage ())
 getStorage :: CairoSemanticsL Storage
 getStorage = liftF (GetStorage id)
 
-assert :: Expr TBool -> CairoSemanticsL ()
-assert a = assert' =<< memoryRemoval a
+assert :: SemanticsEnv -> Expr TBool -> SemanticsEnv
+assert env a = (uncurry assert') $ memoryRemoval env a
 
-expect :: Expr TBool -> CairoSemanticsL ()
-expect a = expect' =<< memoryRemoval a
+expect :: SemanticsEnv -> Expr TBool -> SemanticsEnv
+expect env a = (uncurry expect') $ memoryRemoval env a
 
-memoryRemoval :: Expr a -> CairoSemanticsL (Expr a)
-memoryRemoval = Expr.transform step
+memoryRemoval :: SemanticsEnv -> Expr a -> (SemanticsEnv, Expr a)
+memoryRemoval env y = (env', Expr.transformId (snd . step) y')
  where
-  step :: Expr b -> CairoSemanticsL (Expr b)
-  step (Memory x) = declareMem x
-  step e = pure e
+  (env', y') = step y
+  step :: Expr b -> (SemanticsEnv, Expr b)
+  step (Memory x) = declareMem env x
+  step e = (env, e)
 
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
 storageRemoval = Expr.transform step
@@ -188,48 +261,49 @@ substitute what forWhat = Expr.canonicalize . Expr.transformId step
 That is, deduce AP from the ApTracking data by PC and replace FP name
 with the given one.
 -}
-prepare :: Label -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
-prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
+prepare :: ContractInfo -> SemanticsEnv -> Label -> Expr TFelt -> Expr a -> Either Text (SemanticsEnv, Expr a)
+prepare ci env pc fp expr = (\ap -> prepare' env ap fp expr) <$> (getAp ci pc)
 
-prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
-prepare' ap fp expr = memoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
+prepare' :: SemanticsEnv -> Expr TFelt -> Expr TFelt -> Expr a -> (SemanticsEnv, Expr a)
+prepare' env ap fp expr = memoryRemoval env (substitute "fp" fp (substitute "ap" ap expr))
 
 prepareCheckPoint ::
-  Label -> Expr TFelt -> Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
-prepareCheckPoint pc fp expr = do
-  ap <- getAp pc
-  exMemoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
+  ContractInfo -> Label -> Expr TFelt -> Expr TBool -> ([MemoryVariable] -> Expr TBool)
+prepareCheckPoint ci pc fp expr = exMemoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
+ where
+  ap = getAp ci pc
 
 encodeApTracking :: ApTracking -> Expr TFelt
 encodeApTracking ApTracking{..} =
   Expr.const ("ap!" <> tShow at_group) + fromIntegral at_offset
 
-getAp :: Label -> CairoSemanticsL (Expr TFelt)
-getAp pc = getApTracking pc <&> encodeApTracking
+getAp :: ContractInfo -> Label -> Either Text (Expr TFelt)
+getAp ci = encodeApTracking <$> getApTracking ci
 
 moduleStartAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
 moduleStartAp [] = pure (Expr.const "ap!")
 moduleStartAp ((pc0, _) : _) = getAp pc0
 
-moduleEndAp :: [LabeledInst] -> CairoSemanticsL (Expr TFelt)
-moduleEndAp [] = pure (Expr.const "ap!")
+moduleEndAp :: [LabeledInst] -> Expr TFelt
+moduleEndAp [] = Expr.const "ap!"
 moduleEndAp insts = getAp (getNextPc (last insts))
 
-encodeModule :: Module -> CairoSemanticsL ()
+-- This is the entrypoint for everything in `CairoSemantics.hs`.
+encodeModule :: ContractInfo -> Module -> ConstraintsState
 encodeModule Module{..} = case m_spec of
   MSRich spec -> encodeRichSpec m_prog m_jnzOracle spec
   MSPlain spec -> encodePlainSpec m_prog m_jnzOracle spec
 
-encodeRichSpec :: [LabeledInst] -> Map Label Bool -> FuncSpec -> CairoSemanticsL ()
-encodeRichSpec insts oracle funcSpec@(FuncSpec _pre _post storage) = do
-  enableStorage
-  let fp = Expr.const @TFelt "fp!"
+encodeRichSpec :: SemanticsEnv -> [LabeledInst] -> Map Label Bool -> FuncSpec -> CairoSemanticsL ()
+encodeRichSpec env insts oracle funcSpec@(FuncSpec _pre _post storage) = do
   apEnd <- moduleEndAp insts
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec insts oracle plainSpec
   accumulatedStorage <- getStorage
   expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
+  fp = Expr.const @TFelt "fp!"
+  env' = enableStorage env
   plainSpec = richToPlainSpec funcSpec
 
 encodePlainSpec :: [LabeledInst] -> Map Label Bool -> PlainSpec -> CairoSemanticsL ()
@@ -248,7 +322,7 @@ encodePlainSpec insts jnzOracle PlainSpec{..} = do
     mkApConstraints fp apEnd neInsts
     mkBuiltinConstraints fp neInsts
 
-exMemoryRemoval :: Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
+exMemoryRemoval :: Expr TBool -> ([MemoryVariable] -> Expr TBool)
 exMemoryRemoval expr = do
   (expr', localMemVars, _referencesLocals) <- unsafeMemoryRemoval expr
   pure (intro expr' localMemVars)

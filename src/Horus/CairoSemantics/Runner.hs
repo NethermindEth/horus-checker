@@ -24,8 +24,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
 module Horus.CairoSemantics.Runner
-  ( run
-  , MemoryVariable (..)
+  ( MemoryVariable (..)
   , ConstraintsState (..)
   , makeModel
   , debugFriendlyModel
@@ -66,67 +65,10 @@ import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
 import Horus.Util (fieldPrime, tShow, unlessM)
 
-data AssertionBuilder
-  = QFAss (Expr TBool)
-  | ExistentialAss ([MemoryVariable] -> Expr TBool)
-
-builderToAss :: [MemoryVariable] -> AssertionBuilder -> Expr TBool
-builderToAss _ (QFAss e) = e
-builderToAss mv (ExistentialAss f) = f mv
-
-data ConstraintsState = ConstraintsState
-  { cs_memoryVariables :: [MemoryVariable]
-  , cs_asserts :: [AssertionBuilder]
-  , cs_expects :: [Expr TBool]
-  , cs_nameCounter :: Int
-  }
-
-csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
-csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
-
-csAsserts :: Lens' ConstraintsState [AssertionBuilder]
-csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
-
-csExpects :: Lens' ConstraintsState [Expr TBool]
-csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
-
-csNameCounter :: Lens' ConstraintsState Int
-csNameCounter lMod g = fmap (\x -> g{cs_nameCounter = x}) (lMod (cs_nameCounter g))
-
-emptyConstraintsState :: ConstraintsState
-emptyConstraintsState =
-  ConstraintsState
-    { cs_memoryVariables = []
-    , cs_asserts = []
-    , cs_expects = []
-    , cs_nameCounter = 0
-    }
-
-data Env = Env
-  { e_constraints :: ConstraintsState
-  , e_storageEnabled :: Bool
-  , e_storage :: Storage
-  }
-
-eConstraints :: Lens' Env ConstraintsState
-eConstraints lMod g = fmap (\x -> g{e_constraints = x}) (lMod (e_constraints g))
-
-eStorageEnabled :: Lens' Env Bool
-eStorageEnabled lMod g = fmap (\x -> g{e_storageEnabled = x}) (lMod (e_storageEnabled g))
-
-eStorage :: Lens' Env Storage
-eStorage lMod g = fmap (\x -> g{e_storage = x}) (lMod (e_storage g))
-
-emptyEnv :: Env
-emptyEnv =
-  Env
-    { e_constraints = emptyConstraintsState
-    , e_storageEnabled = False
-    , e_storage = mempty
-    }
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State Env))
 
+{-
 interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
@@ -209,6 +151,7 @@ interpret = iterM exec
 
   plainSpecStorageAccessErr :: Text
   plainSpecStorageAccessErr = "Storage access isn't allowed in a plain spec."
+-}
 
 debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
@@ -276,9 +219,12 @@ runImpl contractInfo m = v $> e_constraints env
       & runExceptT
       & flip runState emptyEnv
 
+{-
 run :: ContractInfo -> CairoSemanticsL a -> Either Text ConstraintsState
 run contractInfo a =
   runImpl contractInfo (interpret a)
     <&> csMemoryVariables %~ reverse
     <&> csAsserts %~ reverse
     <&> csExpects %~ reverse
+-}
+
