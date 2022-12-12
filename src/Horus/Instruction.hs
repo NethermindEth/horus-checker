@@ -29,11 +29,11 @@ import Control.Monad.Except (MonadError, throwError)
 import Data.Bits
 import Data.Coerce (coerce)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 
 import Horus.Label (Label (..), moveLabel)
-import Horus.Util (tShow, toSignedFelt, atMay)
-import Data.Maybe (fromMaybe)
+import Horus.Util (atMay, tShow, toSignedFelt)
 
 dstRegBit, op0RegBit, op1ImmBit, op1FpBit, op1ApBit :: Int
 resAddBit, resMulBit, pcJumpAbsBit, pcJumpRelBit, pcJnzBit :: Int
@@ -102,8 +102,8 @@ getNextPcInlined instrs pos = fst <$> atMay instrs (pos + 1)
 getNextPcInlinedWithFallback :: [LabeledInst] -> Int -> Label
 getNextPcInlinedWithFallback instrs pos =
   let nextPcInlined = getNextPcInlined instrs pos
-      def = getNextPc (instrs !! pos) in
-      fromMaybe def nextPcInlined
+      def = getNextPc (instrs !! pos)
+   in fromMaybe def nextPcInlined
 
 uncheckedCallDestination :: LabeledInst -> Label
 uncheckedCallDestination (pc, i)

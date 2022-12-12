@@ -18,15 +18,17 @@ import Horus.SW.CairoType.JSON ()
 import Horus.SW.ScopedName (ScopedName)
 
 data Member = Member {me_cairoType :: CairoType, me_offset :: Int}
-  deriving stock (Show)
+  deriving stock (Eq, Show)
+
 data Struct = Struct
   { st_fullName :: ScopedName
   , st_members :: Map Text Member
   , st_size :: Int
   }
-  deriving stock (Show)
+  deriving stock (Eq, Show)
+
 data Function = Function {fu_pc :: Label, fu_decorators :: [Text]}
-  deriving stock (Show)
+  deriving stock (Eq, Show)
 
 data Identifier
   = IAlias ScopedName
@@ -39,6 +41,7 @@ data Identifier
   | INamespace
   | IReference
   | IScope
+  deriving (Eq)
 
 getFunctionPc :: Identifier -> Maybe Label
 getFunctionPc (IFunction f) = pure (fu_pc f)

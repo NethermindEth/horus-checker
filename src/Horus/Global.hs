@@ -11,14 +11,15 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
+import Data.Functor ((<&>))
 import Data.Maybe (fromMaybe)
+import Data.Set (Set, difference, singleton, toAscList)
 import Data.Text (Text, unpack)
 import Data.Text as Text (splitOn)
 import Data.Traversable (for)
-import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (Label, LabeledInst, buildCFG, CFGBuildL)
+import Horus.CFGBuild (CFGBuildL, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
@@ -29,24 +30,19 @@ import Horus.CairoSemantics.Runner
   , makeModel
   )
 import Horus.CallStack (CallStack, initialWithFunc)
+import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
+import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
 import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program ( Identifiers, Program )
-import Horus.SW.Identifier ( Function(..) )
+import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
-import Horus.SW.ScopedName (ScopedName)
-import Horus.Util (tShow, whenJust)
+import Horus.SW.Identifier (Function (..))
+import Horus.SW.ScopedName (ScopedName ())
 import Horus.SW.Std (trustedStdFuncs)
-import Horus.Expr qualified as Expr
-import Data.Set (fromList)
-import Data.Map qualified as Map
-import Horus.FunctionAnalysis (inlinableFuns, isWrapper)
-import Horus.ContractDefinition (ContractDefinition)
-import Data.List ((\\))
-import Data.Functor ((<&>))
+import Horus.Util (tShow, whenJust)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -61,14 +57,12 @@ data GlobalF a
   | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ExecutionState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
-  | GetCallee LabeledInst (ScopedName -> a)
+  | GetCallee LabeledInst (ScopedFunction -> a)
   | GetConfig (Config -> a)
-  | GetContractDef (ContractDefinition -> a)
-  | GetFuncSpec ScopedName (FuncSpec' -> a)
+  | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetIdentifiers (Identifiers -> a)
-  | GetInstructions ([LabeledInst] -> a)
-  | GetProgram (Program -> a)
-  | GetSources ([(Function, FuncSpec)] -> a)
+  | GetInlinable (Set ScopedFunction -> a)
+  | GetSources ([(Function, ScopedName, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
   | WriteFile' FilePath Text a
@@ -100,25 +94,19 @@ runPreprocessorL :: PreprocessorEnv -> PreprocessorL a -> GlobalL a
 runPreprocessorL penv preprocessor =
   liftF' (RunPreprocessorL penv preprocessor id)
 
-getCallee :: LabeledInst -> GlobalL ScopedName
+getCallee :: LabeledInst -> GlobalL ScopedFunction
 getCallee inst = liftF' (GetCallee inst id)
 
 getConfig :: GlobalL Config
 getConfig = liftF' (GetConfig id)
 
-getContractDef :: GlobalL ContractDefinition
-getContractDef = liftF' (GetContractDef id)
-
-getFuncSpec :: ScopedName -> GlobalL FuncSpec'
+getFuncSpec :: ScopedFunction -> GlobalL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
 
-getInstructions :: GlobalL [LabeledInst]
-getInstructions = liftF' (GetInstructions id)
+getInlinable :: GlobalL (Set ScopedFunction)
+getInlinable = liftF' (GetInlinable id)
 
-getProgram :: GlobalL Program
-getProgram = liftF' (GetProgram id)
-
-getSources :: GlobalL [(Function, FuncSpec)]
+getSources :: GlobalL [(Function, ScopedName, FuncSpec)]
 getSources = liftF' (GetSources id)
 
 getIdentifiers :: GlobalL Identifiers
@@ -147,9 +135,13 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalL ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeModules :: (Label -> Bool) -> CFG -> GlobalL [Module]
+makeModules :: (ScopedFunction -> Bool) -> CFG -> GlobalL [Module]
 makeModules allow cfg =
-  (runModuleL . gatherModules cfg) . filter (\(Function fpc _, _) -> allow fpc) =<< getSources
+  (runModuleL . gatherModules cfg)
+    . filter
+      ( \(Function fpc _, name, _) -> allow $ ScopedFunction name fpc
+      )
+    =<< getSources
 
 extractConstraints :: Module -> GlobalL ExecutionState
 extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (encodeModule mdl)
@@ -231,18 +223,16 @@ solveSMT es@(_, cs) = do
   query = makeModel es
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-solveContract :: GlobalL [SolvingInfo]
-solveContract = do
-  instructions <- getInstructions
-  program <- getProgram
-  cd <- getContractDef
-  idents <- getIdentifiers
-  let inlinable = Map.keys $ inlinableFuns instructions program cd
-  cfg <- runCFGBuildL $ buildCFG $ fromList inlinable
-  cfgs <- for inlinable $ \f -> (runCFGBuildL . buildCFG . fromList $ inlinable \\ [f]) <&> (, (==f))
+solveContract :: [LabeledInst] -> GlobalL [SolvingInfo]
+solveContract lInstructions = do
+  inlinable <- getInlinable
+  cfg <- runCFGBuildL $ buildCFG lInstructions inlinable
+  cfgs <- for (toAscList inlinable) $ \f ->
+    runCFGBuildL (buildCFG lInstructions $ difference inlinable (singleton f)) <&> (,(== f))
   for_ cfgs $ verbosePrint . fst
-  modules <- concat <$>
-               for ((cfg, isStandardSource inlinable idents) : cfgs) (uncurry $ flip makeModules)
+  modules <-
+    concat
+      <$> for ((cfg, isStandardSource inlinable) : cfgs) (uncurry (flip makeModules))
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers
       removeTrusted =
@@ -253,4 +243,4 @@ solveContract = do
           )
   for (removeTrusted modules) solveModule
  where
-  isStandardSource inlinable idents f = f `notElem` inlinable && not (isWrapper f idents)
+  isStandardSource inlinable f = f `notElem` inlinable && not (isWrapper f)

@@ -21,6 +21,6 @@ func f() {
 
 // @post [ap - 1] == 1337
 func main() {
-  call f;
-  ret;
+    call f;
+    ret;
 }
