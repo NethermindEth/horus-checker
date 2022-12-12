@@ -39,7 +39,6 @@ import Horus.CallStack (CallStack, initialWithFunc, push, pop, stackTrace, calle
 import Horus.FunctionAnalysis (FuncOp (ArcCall, ArcRet), FInfo, sizeOfCall, isRetArc)
 import Horus.Label (moveLabel)
 
-
 data Module = Module
   { m_spec :: ModuleSpec
   , m_prog :: [LabeledInst]
@@ -48,15 +47,6 @@ data Module = Module
   , m_lastPc :: (CallStack, Label)
   }
   deriving stock (Show)
-
-data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
-  deriving stock (Show)
-
-data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
-  deriving stock (Show)
-
-richToPlainSpec :: FuncSpec -> PlainSpec
-richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
 
 data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
   deriving stock (Show)

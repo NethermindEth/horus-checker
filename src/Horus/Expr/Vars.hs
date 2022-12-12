@@ -1,4 +1,3 @@
-{-# OPTIONS_GHC -Wno-unused-imports #-}
 module Horus.Expr.Vars
   ( prime
   , ap
@@ -16,6 +15,9 @@ module Horus.Expr.Vars
   , builtinAligned
   , builtinInSegment
   , builtinConstraint
+  , blockTimestamp
+  , callerAddress
+  , contractAddress
   )
 where
 
@@ -27,12 +29,12 @@ import Data.Text qualified as Text
 import Data.Typeable ((:~:) (Refl))
 import Text.Read (readMaybe)
 
-import Horus.Expr (Cast (..), Expr (..), Ty (..), cast, (.&&), (.<), (.<=), (.==), (.=>))
+import Horus.Expr (Cast (..), Expr (..), Ty (..), cast, (.&&), (.<), (.<=), (.=>))
 import Horus.Expr qualified as Expr
 import Horus.Expr.Std (stdNames)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
-import Horus.SW.Builtin qualified as Builtin (name, size)
+import Horus.SW.Builtin qualified as Builtin (name)
 
 prime :: Expr TFelt
 prime = Expr.const "prime"
@@ -63,6 +65,19 @@ pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
 pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
+
+
+-- Syscalls
+blockTimestamp :: Expr TFelt
+blockTimestamp = Expr.const "%block_timestamp"
+
+callerAddress :: Expr TFelt
+callerAddress = Expr.const "%caller_address"
+
+contractAddress :: Expr TFelt
+contractAddress = Expr.const "%contract_address"
+
+--
 
 parseStorageVar :: forall ty. Expr ty -> Maybe (ty :~: TFelt, Text, [Expr TFelt])
 parseStorageVar e = do
