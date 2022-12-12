@@ -20,8 +20,8 @@ import Lens.Micro.Mtl ((%=))
 
 import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst)
 import Horus.ContractInfo (ContractInfo (..))
-import Horus.FunctionAnalysis (FInfo)
 import Horus.Expr (Expr, Ty (..))
+import Horus.FunctionAnalysis (FInfo)
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State CFG))
 
@@ -55,7 +55,6 @@ interpret = iterM exec . runCFGBuildL
    where
     doAdd mAssertions = Just (assertion : mAssertions ^. _Just)
   exec (AskIdentifiers cont) = asks ci_identifiers >>= cont
-  exec (AskInstructions cont) = asks ci_instructions >>= cont
   exec (AskProgram cont) = asks ci_program >>= cont
   exec (GetFuncSpec name cont) = do
     ci <- ask

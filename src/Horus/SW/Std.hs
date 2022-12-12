@@ -8,7 +8,7 @@ import Data.Text (Text)
 
 import Horus.Expr (Expr (ExitField), (.&&), (.<), (.<=), (.==))
 import Horus.Expr qualified as Expr
-import Horus.Expr.Vars (ap, callerAddress, contractAddress, fp, memory, prime, rcBound, blockTimestamp)
+import Horus.Expr.Vars (ap, blockTimestamp, callerAddress, contractAddress, fp, memory, prime, rcBound)
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
