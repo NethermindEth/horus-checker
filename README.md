@@ -244,7 +244,7 @@ Intuitively, we are representing our stack as a linked list. The `value` is the
 head of the list, i.e. the top of the stack, and the `next` member is a pointer
 to the next node in the list.
 
-Now we've got bare a data structure. Let's define some functions that operate on it.
+Now we've got a bare data structure. Let's define some functions that operate on it.
 
 #### Define a function that constructs an empty `Stack`
 
