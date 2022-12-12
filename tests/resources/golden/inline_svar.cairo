@@ -11,11 +11,9 @@ func add_two(a: felt, b: felt) -> (res: felt) {
 }
 
 // @storage_update balance() := balance() + amount
-func increase_balance{
-    syscall_ptr: felt*,
-    pedersen_ptr: HashBuiltin*,
-    range_check_ptr,
-}(amount: felt) {
+func increase_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
+    amount: felt
+) {
     let (res) = balance.read();
     let (sum) = add_two(res, amount);
     balance.write(sum);
@@ -23,11 +21,7 @@ func increase_balance{
 }
 
 // @post $Return.res == balance()
-func get_balance{
-    syscall_ptr: felt*,
-    pedersen_ptr: HashBuiltin*,
-    range_check_ptr,
-}() -> (res: felt) {
+func get_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (res: felt) {
     let (res) = balance.read();
     return (res=res);
 }
