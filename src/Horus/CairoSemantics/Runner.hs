@@ -8,23 +8,22 @@ module Horus.CairoSemantics.Runner
   )
 where
 
-import Control.Monad.Except (ExceptT, runExceptT, throwError)
-import Control.Monad.Reader
-    ( ReaderT,
-      asks,
-      runReaderT,
-      ReaderT,
-      ask,
-      runReaderT )
-import Control.Monad.State ( MonadState(get), State, runState )
 import Control.Monad (unless)
+import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Free.Church (iterM)
+import Control.Monad.Reader
+  ( ReaderT
+  , ask
+  , asks
+  , runReaderT
+  )
+import Control.Monad.State (MonadState (get), State, runState)
 import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails)
-import Data.Map qualified as Map (null, unionWith)
-import Data.Maybe ( mapMaybe, fromMaybe )
+import Data.Map qualified as Map (map, null, unionWith)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Data.Singletons (sing)
 import Data.Some (foldSome)
 import Data.Text (Text)
@@ -37,13 +36,14 @@ import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, MemoryVariab
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
-import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>), unAnd, (.||))
+import Horus.Expr (Expr (ExitField, Fun), Ty (..), unAnd, (.&&), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Std (Function (..))
 import Horus.Expr.Type (STy (..))
 import Horus.Expr.Util (gatherNonStdFunctions)
 import Horus.Expr.Vars (prime, rcBound)
+import Horus.FunctionAnalysis (ScopedFunction (sf_scopedName))
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
@@ -79,7 +79,7 @@ csNameCounter :: Lens' ExecutionState Int
 csNameCounter lMod (st, g) = fmap (\x -> (st, g{cs_nameCounter = x})) (lMod (cs_nameCounter g))
 
 csCallStack :: Lens' ExecutionState CallStack
-csCallStack lMod (st, g) = fmap (, g) (lMod st)
+csCallStack lMod (st, g) = fmap (,g) (lMod st)
 
 emptyConstraintsState :: ConstraintsState
 emptyConstraintsState =
@@ -118,8 +118,6 @@ emptyEnv initStack =
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State Env))
 
-
-
 interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
@@ -140,7 +138,7 @@ interpret = iterM exec
                 let rest = map (builderToAss mv) restAss
                     asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) rest
                  in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
-                    .=> Expr.and (rest ++ [Expr.not (Expr.and restExp) | not (null restExp)])
+                      .=> Expr.and (rest ++ [Expr.not (Expr.and restExp) | not (null restExp)])
             )
             : initAss
          )
@@ -165,35 +163,37 @@ interpret = iterM exec
         let name = "MEM!" <> tShow freshCount
         let addrName = "ADDR!" <> tShow freshCount
         cont (MemoryVariable name addrName address)
+  exec (GetApTracking label cont) = do
+    ci <- ask
+    ci_getApTracking ci label >>= cont
+  exec (GetBuiltinOffsets label builtin cont) = do
+    ci <- ask
+    ci_getBuiltinOffsets ci label builtin >>= cont
   exec (GetCallee inst cont) = do
     ci <- ask
     ci_getCallee ci inst >>= cont
   exec (GetFuncSpec name cont) = do
     ci <- ask
     ci_getFuncSpec ci name & cont
-  exec (GetApTracking label cont) = do
+  exec (GetFunPc label cont) = do
     ci <- ask
-    ci_getApTracking ci label >>= cont
-  exec (IsInlinable label cont) = do
-    inlinableFs <- asks ci_inlinable
-    cont (label `elem` inlinableFs)
+    ci_getFunPc ci label >>= cont
+  exec (GetInlinable cont) = do
+    ask >>= cont . ci_inlinable
   exec (GetStackTraceDescr callstack cont) = do
-    fNames <- asks ci_functionNames
+    fNames <- asks (Map.map sf_scopedName . ci_functions)
     case callstack of
       Nothing -> get >>= cont . digestOfCallStack fNames . fst . e_constraints
       Just stack -> cont $ digestOfCallStack fNames stack
   exec (GetOracle cont) = do
     get >>= cont . stackTrace . fst . e_constraints
+  exec (IsInlinable label cont) = do
+    inlinableFs <- asks ci_inlinable
+    cont (label `elem` inlinableFs)
   exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
   exec (Pop cont) = eConstraints . csCallStack %= (snd . pop) >> cont
   exec (Top cont) = do
     get >>= cont . top . fst . e_constraints
-  exec (GetFunPc label cont) = do
-    ci <- ask
-    ci_getFunPc ci label >>= cont
-  exec (GetBuiltinOffsets label builtin cont) = do
-    ci <- ask
-    ci_getBuiltinOffsets ci label builtin >>= cont
   exec (EnableStorage cont) = eStorageEnabled .= True >> cont
   exec (ReadStorage name args cont) = do
     unlessM (use eStorageEnabled) $

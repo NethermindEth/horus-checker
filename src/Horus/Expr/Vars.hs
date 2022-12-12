@@ -53,7 +53,7 @@ memory = Expr.function "memory"
 data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
   deriving stock (Eq, Ord)
 
--- TODO: Fix this!
+-- TODO: The system for printing these is 'of course' broken.
 parseRegKind :: Text -> Maybe RegKind
 parseRegKind "fp!" = Just MainFp
 parseRegKind "ap!" = Just SingleAp
@@ -65,7 +65,6 @@ pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
 pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
-
 
 -- Syscalls
 blockTimestamp :: Expr TFelt
@@ -88,7 +87,12 @@ parseStorageVar e = do
   pure res
  where
   isStd n = n `elem` stdNames || n == "memory"
-  isReg n = isJust (parseRegKind n) || n == "ap" || n == "fp" || n == "range-check-bound" || n == "prime"
+  isReg n =
+    isJust (parseRegKind n)
+      || n == "ap"
+      || n == "fp"
+      || n == "range-check-bound"
+      || n == "prime"
   isLVar n = "$" `Text.isPrefixOf` n
 
 pattern StorageVar :: () => (a ~ TFelt) => Text -> [Expr TFelt] -> Expr a

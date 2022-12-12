@@ -13,10 +13,10 @@ import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
 
+import Data.List.NonEmpty (NonEmpty)
 import Horus.Label (Label (..))
 import Horus.Module (Error, Module (..), ModuleF (..), ModuleL (..))
 import Horus.Util (tShow)
-import Data.List.NonEmpty (NonEmpty)
 
 type Impl = ReaderT (Set (NonEmpty Label, Label)) (WriterT (DList Module) (Except Error))
 
@@ -34,7 +34,9 @@ interpret = iterM exec . runModuleL
 
 run :: ModuleL a -> Either Text [Module]
 run m =
-  bimap tShow toList
+  bimap
+    tShow
+    toList
     ( interpret m
         & flip runReaderT Set.empty
         & execWriterT

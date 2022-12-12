@@ -18,12 +18,13 @@ import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail, toList)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
-import Data.Set qualified as Set (member)
+import Data.Set qualified as Set (Set, member)
 import Data.Text (Text)
 
 import Horus.CallStack as CS (CallEntry, CallStack)
 import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
+import Horus.Expr qualified as TSMT
 import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
 import Horus.Expr.Vars
   ( builtinAligned
@@ -36,6 +37,8 @@ import Horus.Expr.Vars
   , pattern Memory
   , pattern StorageVar
   )
+import Horus.Expr.Vars qualified as Vars
+import Horus.FunctionAnalysis (ScopedFunction (sf_pc))
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -44,10 +47,10 @@ import Horus.Instruction
   , OpCode (..)
   , ResLogic (..)
   , callDestination
+  , getNextPcInlinedWithFallback
   , isCall
   , isRet
   , uncheckedCallDestination
-  , getNextPcInlinedWithFallback
   )
 import Horus.Label (Label (..), tShowLabel)
 import Horus.Module (Module (..), ModuleSpec (..), PlainSpec (..), richToPlainSpec)
@@ -60,8 +63,6 @@ import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
-import Horus.Expr qualified as TSMT
-import Horus.Expr.Vars qualified as Vars
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -76,14 +77,15 @@ data CairoSemanticsF a
   | CheckPoint ([MemoryVariable] -> Expr TBool) a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
   | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
-  | GetCallee LabeledInst (ScopedName -> a)
-  | GetFuncSpec ScopedName (FuncSpec' -> a)
   | GetApTracking Label (ApTracking -> a)
-  | GetFunPc Label (Label -> a)
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
+  | GetCallee LabeledInst (ScopedFunction -> a)
+  | GetFuncSpec ScopedFunction (FuncSpec' -> a)
+  | GetFunPc Label (Label -> a)
+  | GetInlinable (Set.Set ScopedFunction -> a)
   | GetStackTraceDescr (Maybe CallStack) (Text -> a)
   | GetOracle (NonEmpty Label -> a)
-  | IsInlinable Label (Bool -> a)
+  | IsInlinable ScopedFunction (Bool -> a)
   | Push CallEntry a
   | Pop a
   | Top (CallEntry -> a)
@@ -108,23 +110,23 @@ checkPoint a = liftF (CheckPoint a ())
 declareMem :: Expr TFelt -> CairoSemanticsL (Expr TFelt)
 declareMem address = liftF (DeclareMem address id)
 
-getCallee :: LabeledInst -> CairoSemanticsL ScopedName
-getCallee call = liftF (GetCallee call id)
-
-getFuncSpec :: ScopedName -> CairoSemanticsL FuncSpec'
-getFuncSpec name = liftF (GetFuncSpec name id)
-
-declareLocalMem :: Expr TFelt -> CairoSemanticsL MemoryVariable
-declareLocalMem address = liftF (DeclareLocalMem address id)
-
 getApTracking :: Label -> CairoSemanticsL ApTracking
 getApTracking inst = liftF (GetApTracking inst id)
+
+getBuiltinOffsets :: Label -> Builtin -> CairoSemanticsL (Maybe BuiltinOffsets)
+getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
+
+getCallee :: LabeledInst -> CairoSemanticsL ScopedFunction
+getCallee call = liftF (GetCallee call id)
+
+getFuncSpec :: ScopedFunction -> CairoSemanticsL FuncSpec'
+getFuncSpec name = liftF (GetFuncSpec name id)
 
 getFunPc :: Label -> CairoSemanticsL Label
 getFunPc l = liftF (GetFunPc l id)
 
-getBuiltinOffsets :: Label -> Builtin -> CairoSemanticsL (Maybe BuiltinOffsets)
-getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
+declareLocalMem :: Expr TFelt -> CairoSemanticsL MemoryVariable
+declareLocalMem address = liftF (DeclareLocalMem address id)
 
 throw :: Text -> CairoSemanticsL a
 throw t = liftF (Throw t)
@@ -154,8 +156,8 @@ memoryRemoval = Expr.transform step
   step (Memory x) = declareMem x
   step e = pure e
 
-isInlinable :: Label -> CairoSemanticsL Bool
-isInlinable l = liftF (IsInlinable l id)
+isInlinable :: ScopedFunction -> CairoSemanticsL Bool
+isInlinable f = liftF (IsInlinable f id)
 
 getStackTraceDescr' :: Maybe CallStack -> CairoSemanticsL Text
 getStackTraceDescr' callstack = liftF (GetStackTraceDescr callstack id)
@@ -253,13 +255,16 @@ encodePlainSpec mdl PlainSpec{..} = do
   apStart <- moduleStartAp mdl
   apEnd <- moduleEndAp mdl
   fp <- getFp
+
   assert (fp .<= apStart)
-  pre <- prepare' apStart fp ps_pre
-  post <- prepare' apEnd fp ps_post
-  assert pre
-  let instrs = zip (m_prog mdl) [0..]
-  for_ instrs $ \(instr, pos) -> mkInstructionConstraints (m_prog mdl) pos (m_jnzOracle mdl) instr
-  expect post
+  assert =<< prepare' apStart fp ps_pre
+
+  let instrs = m_prog mdl
+  for_ (zip [0 ..] instrs) $ \(idx, instr) ->
+    mkInstructionConstraints instr (getNextPcInlinedWithFallback instrs idx) (m_jnzOracle mdl)
+
+  expect =<< prepare' apEnd fp ps_post
+
   whenJust (nonEmpty (m_prog mdl)) $ \neInsts -> do
     mkApConstraints apEnd neInsts
     mkBuiltinConstraints apEnd neInsts
@@ -324,12 +329,12 @@ withExecutionCtx ctx action = do
   pop
   pure res
 
-mkInstructionConstraints :: [LabeledInst] -> Int -> Map (NonEmpty Label, Label) Bool -> LabeledInst -> CairoSemanticsL ()
-mkInstructionConstraints instrs pos jnzOracle lInst@(pc, Instruction{..}) = do
+mkInstructionConstraints :: LabeledInst -> Label -> Map (NonEmpty Label, Label) Bool -> CairoSemanticsL ()
+mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc jnzOracle = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
-    Call -> mkCallConstraints pc pos instrs fp lInst
+    Call -> mkCallConstraints pc nextPc fp =<< getCallee lInst
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
     Nop -> do
       stackTrace <- getOracle
@@ -339,33 +344,32 @@ mkInstructionConstraints instrs pos jnzOracle lInst@(pc, Instruction{..}) = do
         Nothing -> pure ()
     Ret -> pop
 
-mkCallConstraints :: Label -> Int -> [LabeledInst] -> Expr TFelt -> LabeledInst -> CairoSemanticsL ()
-mkCallConstraints pc pos instrs fp inst =
-  let calleePc = uncheckedCallDestination inst
-      nextPc = getNextPcInlinedWithFallback instrs pos
-      stackFrame = (pc, calleePc)
-   in do
-        calleeFp <- withExecutionCtx stackFrame getFp
-        nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
-        saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
-        setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
-        assert (TSMT.and [nextAp, saveOldFp, setNextPc])
-        push stackFrame
-        canInline <- isInlinable calleePc
-        unless canInline $ do
-          (FuncSpec pre post storage) <- (getCallee inst >>= getFuncSpec) <&> toFuncSpec
-          let pre' = suffixLogicalVariables lvarSuffix pre
-              post' = suffixLogicalVariables lvarSuffix post
-          removedStorage <- storageRemoval pre'
-          preparedPre <- prepare calleePc calleeFp removedStorage
-          preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp =<< storageRemoval pre'
-          dbgStrg <- traverseStorage (prepare nextPc calleeFp) storage
-          updateStorage dbgStrg
-          pop
-          preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
-          checkPoint preparedPreCheckPoint
-          assert (preparedPre .&& preparedPost)
-  where lvarSuffix = "+" <> tShowLabel pc
+mkCallConstraints :: Label -> Label -> Expr TFelt -> ScopedFunction -> CairoSemanticsL ()
+mkCallConstraints pc nextPc fp f = do
+  calleeFp <- withExecutionCtx stackFrame getFp
+  nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
+  saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
+  setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
+  assert (TSMT.and [nextAp, saveOldFp, setNextPc])
+  push stackFrame
+  canInline <- isInlinable f
+  unless canInline $ do
+    (FuncSpec pre post storage) <- getFuncSpec f <&> toFuncSpec
+    let pre' = suffixLogicalVariables lvarSuffix pre
+        post' = suffixLogicalVariables lvarSuffix post
+    removedStorage <- storageRemoval pre'
+    preparedPre <- prepare calleePc calleeFp removedStorage
+    preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp =<< storageRemoval pre'
+    dbgStrg <- traverseStorage (prepare nextPc calleeFp) storage
+    updateStorage dbgStrg
+    pop
+    preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
+    checkPoint preparedPreCheckPoint
+    assert (preparedPre .&& preparedPost)
+ where
+  lvarSuffix = "+" <> tShowLabel pc
+  calleePc = sf_pc f
+  stackFrame = (pc, calleePc)
 
 traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
@@ -379,17 +383,17 @@ mkApConstraints apEnd insts = do
   forM_ (zip (toList insts) (NonEmpty.tail insts)) $ \(lInst@(pc, inst), (pcNext, _)) -> do
     at1 <- getApTracking pc
     at2 <- getApTracking pcNext
-    canInline <- isInlinable $ uncheckedCallDestination lInst
     when (at_group at1 /= at_group at2) $ do
       ap1 <- getAp pc
-      if isCall inst && canInline
+      isNewStackframe <- if isCall inst then isInlinable =<< getCallee lInst else pure False
+      if isNewStackframe
         then push (pc, uncheckedCallDestination lInst)
         else when (isRet inst) pop
       ap2 <- getAp pcNext
       fp <- getFp
       getApIncrement fp lInst >>= \case
         Just apIncrement -> let res = assert (ap1 + apIncrement .== ap2) in res
-        Nothing | not canInline -> assert (ap1 .< ap2)
+        Nothing | not isNewStackframe -> assert (ap1 .< ap2)
         Nothing -> pure ()
   lastAp <- getAp lastPc
   when (isRet lastInst) pop
@@ -409,7 +413,7 @@ mkBuiltinConstraints apEnd insts = do
       Just bo -> do
         let (pre, post) = getBuiltinContract fp apEnd b bo
         assert pre *> expect post
-        for_ (zip (NonEmpty.toList insts) [0..]) $ \(inst, i) ->
+        for_ (zip (NonEmpty.toList insts) [0 ..]) $ \(inst, i) ->
           mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
       Nothing -> checkBuiltinNotRequired b (toList insts)
 
@@ -426,12 +430,11 @@ mkBuiltinConstraintsForInst :: Int -> [LabeledInst] -> Builtin -> LabeledInst ->
 mkBuiltinConstraintsForInst pos instrs b inst@(pc, Instruction{..}) =
   getFp >>= \fp -> do
     case i_opCode of
-      Call ->
-        let calleePc = uncheckedCallDestination inst
-            stackFrame = (pc, calleePc)
-         in do push stackFrame
-               canInline <- isInlinable calleePc
-               unless canInline $ mkBuiltinConstraintsForFunc False
+      Call -> do
+        callee <- getCallee inst
+        push (pc, sf_pc callee)
+        canInline <- isInlinable callee
+        unless canInline $ mkBuiltinConstraintsForFunc False
       AssertEqual -> do
         res <- getRes fp inst
         case res of

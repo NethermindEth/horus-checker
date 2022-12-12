@@ -6,14 +6,14 @@ from starkware.cairo.common.cairo_builtins import HashBuiltin
 func balance() -> (res: felt) {
 }
 
-func f{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}(x) -> (res: felt) {
+func f{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(x) -> (res: felt) {
     let (xx) = balance.read();
     return (res=xx);
 }
 
 // @post $Return.res == 43
 // @storage_update balance() := 42
-func main{syscall_ptr : felt*, pedersen_ptr : HashBuiltin*, range_check_ptr}() -> (res : felt) {
+func main{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (res: felt) {
     [ap] = [fp - 5], ap++;
     [ap] = [fp - 4], ap++;
     [ap] = [fp - 3], ap++;

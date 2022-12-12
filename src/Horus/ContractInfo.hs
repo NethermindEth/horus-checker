@@ -4,48 +4,47 @@ import Control.Monad.Except (MonadError (..))
 import Data.Foldable (asum)
 import Data.Function ((&))
 import Data.Functor ((<&>))
-import Data.Map (Map)
-import Data.Maybe (mapMaybe)
-import Data.Set ( Set, fromList )
 import Data.List (elemIndex)
+import Data.Map (Map)
 import Data.Map qualified as Map
+import Data.Maybe (mapMaybe)
+import Data.Set (Set, fromList)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (..))
 import Horus.Expr (Expr, Ty (..))
+import Horus.FunctionAnalysis (ScopedFunction (..), inlinableFuns, mkGeneratedNames, storageVarsOfCD)
 import Horus.Instruction (LabeledInst, callDestination, isRet, labelInstructions, readAllInstructions, toSemiAsmUnsafe)
 import Horus.Label (Label)
 import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..), sizeOfType)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
-import Horus.SW.FuncSpec
-    ( FuncSpec,
-      FuncSpec'(..),
-      emptyFuncSpec',
-      FuncSpec(..),
-      toFuncSpec )
-import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
-import Horus.SW.ScopedName ( ScopedName(..), fromText )
 import Horus.SW.CairoType (CairoType (..))
+import Horus.SW.FuncSpec
+  ( FuncSpec (..)
+  , FuncSpec' (..)
+  , emptyFuncSpec'
+  , toFuncSpec
+  )
+import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
+import Horus.SW.ScopedName (ScopedName (..), fromText)
 import Horus.SW.Std (mkReadSpec, mkWriteSpec)
 import Horus.Util (maybeToError, safeLast, tShow)
-import Horus.FunctionAnalysis (inlinableFuns, mkGeneratedNames, storageVarsOfCD)
 
 data ContractInfo = ContractInfo
   { ci_contractDef :: ContractDefinition
-  , ci_inlinable :: Set Label
-  , ci_instructions :: [LabeledInst]
+  , ci_inlinable :: Set ScopedFunction
   , ci_identifiers :: Identifiers
-  , ci_functionNames :: Map Label ScopedName
+  , ci_functions :: Map Label ScopedFunction
   , ci_program :: Program
-  , ci_sources :: [(Function, FuncSpec)]
+  , ci_sources :: [(Function, ScopedName, FuncSpec)]
   , ci_storageVars :: [ScopedName]
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
   , ci_getFunPc :: forall m. MonadError Text m => Label -> m Label
-  , ci_getFuncSpec :: ScopedName -> FuncSpec'
+  , ci_getFuncSpec :: ScopedFunction -> FuncSpec'
   , ci_getInvariant :: ScopedName -> Maybe (Expr TBool)
-  , ci_getCallee :: forall m. MonadError Text m => LabeledInst -> m ScopedName
+  , ci_getCallee :: forall m. MonadError Text m => LabeledInst -> m ScopedFunction
   , ci_getRets :: forall m. MonadError Text m => ScopedName -> m [Label]
   }
 
@@ -60,9 +59,8 @@ mkContractInfo cd = do
     ContractInfo
       { ci_contractDef = cd
       , ci_inlinable = inlinable
-      , ci_instructions = insts
       , ci_identifiers = identifiers
-      , ci_functionNames = pcToFun
+      , ci_functions = pcToFun
       , ci_program = program
       , ci_sources = sources
       , ci_storageVars = storageVarsNames
@@ -81,7 +79,7 @@ mkContractInfo cd = do
   instructionLocations = di_instructionLocations debugInfo
   pcToFun =
     Map.fromList
-      [ (pc, fun) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
+      [ (pc, ScopedFunction fun pc) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
       ]
   program = cd_program cd
   storageVarsNames = storageVarsOfCD cd
@@ -143,8 +141,11 @@ mkContractInfo cd = do
           ]
     getOutputOffset n returns implicits = getOutputOffset n (TypeTuple [(Nothing, Just returns)]) implicits
 
-  getCallee :: MonadError Text m => LabeledInst -> m ScopedName
-  getCallee inst = callDestination' inst >>= getFunName'
+  getCallee :: MonadError Text m => LabeledInst -> m ScopedFunction
+  getCallee inst = do
+    callee <- callDestination' inst
+    name <- getFunName' callee
+    pure $ ScopedFunction name callee
 
   getFunName :: Label -> Maybe ScopedName
   getFunName l = do
@@ -162,18 +163,18 @@ mkContractInfo cd = do
     getFunctionPc (identifiers Map.! name)
       & maybeToError ("'" <> tShow name <> "' isn't a function")
 
-  -- TODO: getFuncSpec and getInvariant should check that the name is
-  -- indeed a function or a label.
-  -- getFuncSpec :: ScopedName -> FuncSpec'
-  -- getFuncSpec name = Map.findWithDefault emptyFuncSpec' name allSpecs
-
-  getFuncSpec :: ScopedName -> FuncSpec'
-  getFuncSpec name = maybe emptyFuncSpec'
-                       (\ FuncSpec{..} -> FuncSpec'{
-                            fs'_pre = Just fs_pre,
-                            fs'_post = Just fs_post,
-                            fs'_storage = fs_storage
-                       }) $ allSpecs Map.!? name
+  getFuncSpec :: ScopedFunction -> FuncSpec'
+  getFuncSpec name =
+    maybe
+      emptyFuncSpec'
+      ( \FuncSpec{..} ->
+          FuncSpec'
+            { fs'_pre = Just fs_pre
+            , fs'_post = Just fs_post
+            , fs'_storage = fs_storage
+            }
+      )
+      $ allSpecs Map.!? sf_scopedName name
 
   allSpecs :: Map ScopedName FuncSpec
   allSpecs = Map.union (cd_specs cd) storageVarsSpecs
@@ -216,9 +217,9 @@ mkContractInfo cd = do
    where
     msg = "Can't find 'ret' instructions for " <> tShow name <> ". Is it a function?"
 
-  mkSources :: [ScopedName] -> [(Function, FuncSpec)]
+  mkSources :: [ScopedName] -> [(Function, ScopedName, FuncSpec)]
   mkSources generatedNames =
-    [ (f, toFuncSpec (getFuncSpec name))
+    [ (f, name, toFuncSpec . getFuncSpec . ScopedFunction name $ fu_pc f)
     | (name, IFunction f) <- Map.toList identifiers
     , name `notElem` generatedNames
     ]

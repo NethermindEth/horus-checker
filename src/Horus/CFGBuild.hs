@@ -10,47 +10,46 @@ module Horus.CFGBuild
   )
 where
 
+import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
-import Control.Monad (when)
 import Data.Coerce (coerce)
 import Data.Foldable (forM_, for_, toList)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
 import Data.Map ((!))
-import Data.Map qualified as Map (toList, toList)
+import Data.Map qualified as Map (toList)
+import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
-import Data.Maybe (fromMaybe)
 import Lens.Micro.GHC ()
 
+import Horus.Expr (Expr (), Ty (..))
+import Horus.Expr qualified as Expr
 import Horus.FunctionAnalysis
   ( FInfo
   , FuncOp (ArcCall, ArcRet)
+  , ScopedFunction (ScopedFunction, sf_pc)
   , callersOf
   , pcToFunOfProg
   , programLabels
   , sizeOfCall
   )
-import Horus.Expr (Expr (), Ty (..))
 import Horus.Instruction
   ( Instruction (..)
   , LabeledInst
   , OpCode (..)
   , PcUpdate (..)
   , getNextPc
-
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), moveLabel)
-import Horus.Program (Program (..), Identifiers)
-import Horus.SW.FuncSpec (FuncSpec' (fs'_pre, fs'_post))
-import Horus.SW.Identifier (Identifier (IFunction, ILabel), Function (fu_pc))
+import Horus.Program (Identifiers, Program (..))
+import Horus.SW.FuncSpec (FuncSpec' (fs'_post, fs'_pre))
+import Horus.SW.Identifier (Function (fu_pc), Identifier (IFunction, ILabel))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (appendList, whenJustM)
-import Horus.Expr qualified as Expr
-
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -60,9 +59,9 @@ data CFGBuildF a
   | AddArc Label Label [LabeledInst] ArcCondition FInfo a
   | AddAssertion Label (Expr TBool) a
   | AskIdentifiers (Identifiers -> a)
-  | AskInstructions ([LabeledInst] -> a)
-  | AskProgram (Program -> a)
-  | GetFuncSpec ScopedName (FuncSpec' -> a)
+  | -- | AskInstructions ([LabeledInst] -> a)
+    AskProgram (Program -> a)
+  | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetInvariant ScopedName (Maybe (Expr TBool) -> a)
   | GetRets ScopedName ([Label] -> a)
   | Throw Text
@@ -92,13 +91,13 @@ addAssertion l assertion = liftF' (AddAssertion l assertion ())
 askIdentifiers :: CFGBuildL Identifiers
 askIdentifiers = liftF' (AskIdentifiers id)
 
-askInstructions :: CFGBuildL [LabeledInst]
-askInstructions = liftF' (AskInstructions id)
+-- askInstructions :: CFGBuildL [LabeledInst]
+-- askInstructions = liftF' (AskInstructions id)
 
 askProgram :: CFGBuildL Program
 askProgram = liftF' (AskProgram id)
 
-getFuncSpec :: ScopedName -> CFGBuildL FuncSpec'
+getFuncSpec :: ScopedFunction -> CFGBuildL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
 
 getInvariant :: ScopedName -> CFGBuildL (Maybe (Expr TBool))
@@ -113,9 +112,8 @@ throw t = liftF' (Throw t)
 catch :: CFGBuildL a -> (Text -> CFGBuildL a) -> CFGBuildL a
 catch m h = liftF' (Catch m h id)
 
-buildCFG :: Set Label -> CFGBuildL ()
-buildCFG inlinable = do
-  labeledInsts <- askInstructions
+buildCFG :: [LabeledInst] -> Set ScopedFunction -> CFGBuildL ()
+buildCFG labeledInsts inlinable = do
   identifiers <- askIdentifiers
   prog <- askProgram
   buildFrame inlinable labeledInsts prog
@@ -133,7 +131,7 @@ nextSegmentLabel s = getNextPc (NonEmpty.last (coerce s))
 segmentInsts :: Segment -> [LabeledInst]
 segmentInsts (Segment ne) = toList ne
 
-buildFrame :: Set Label -> [LabeledInst] -> Program -> CFGBuildL ()
+buildFrame :: Set ScopedFunction -> [LabeledInst] -> Program -> CFGBuildL ()
 buildFrame inlinable rows prog = do
   let segments = breakIntoSegments (programLabels rows $ p_identifiers prog) rows
   for_ segments $ \s -> do
@@ -154,21 +152,21 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
 addArc' :: Label -> Label -> [LabeledInst] -> CFGBuildL ()
 addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
 
-addArcsFrom :: Set Label -> Program -> [LabeledInst] -> Segment -> CFGBuildL ()
+addArcsFrom :: Set ScopedFunction -> Program -> [LabeledInst] -> Segment -> CFGBuildL ()
 addArcsFrom inlinable prog rows s
   | Call <- i_opCode endInst =
       let calleePc = uncheckedCallDestination lIinst
-       in if calleePc `Set.member` inlinable
+       in if calleePc `Set.member` inlinableLabels
             then addArc lFrom calleePc insts ACNone . Just $ ArcCall endPc calleePc
             else addArc' lFrom (nextSegmentLabel s) insts
   | Ret <- i_opCode endInst =
-      let owner = pcToFunOfProg prog ! endPc in
-      if owner `Set.notMember` inlinable
-        then pure ()
-        else let
-          callers = callersOf rows owner
-          returnAddrs = map (`moveLabel` sizeOfCall) callers
-       in forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
+      let owner = sf_pc $ pcToFunOfProg prog ! endPc
+       in if owner `Set.notMember` inlinableLabels
+            then pure ()
+            else
+              let callers = callersOf rows owner
+                  returnAddrs = map (`moveLabel` sizeOfCall) callers
+               in forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
   | JumpAbs <- i_pcUpdate endInst =
       let lTo = Label (fromInteger (i_imm endInst))
        in addArc' lFrom lTo (init insts)
@@ -188,22 +186,25 @@ addArcsFrom inlinable prog rows s
   lFrom = segmentLabel s
   lIinst@(endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
+  inlinableLabels = Set.map sf_pc inlinable
 
 -- TODO(the conditions are silly with the new model)
-addAssertions :: Set Label -> Identifiers -> CFGBuildL ()
+addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
 addAssertions inlinable identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> case def of
-    IFunction f -> do
-      pre <- fs'_pre <$> getFuncSpec idName
-      post <- fs'_post <$> getFuncSpec idName
-      rets <- getRets idName
-      -- Handle functions that will end up with `True -> True` even with
-      -- inlining turned on, namely the ones that are (transitively) loopy.
-      case (pre, post) of
-        (Nothing, Nothing) ->
-          when (fu_pc f  `Set.notMember` inlinable) $
-            for_ rets (`addAssertion` Expr.True)
-        _ -> for_ rets (`addAssertion` fromMaybe Expr.True post)
+    IFunction f ->
+      let func = ScopedFunction idName (fu_pc f)
+       in do
+            pre <- fs'_pre <$> getFuncSpec func
+            post <- fs'_post <$> getFuncSpec func
+            rets <- getRets idName
+            -- Handle functions that will end up with `True -> True` even with
+            -- inlining turned on, namely the ones that are (transitively) loopy.
+            case (pre, post) of
+              (Nothing, Nothing) ->
+                when (fu_pc f `Set.notMember` Set.map sf_pc inlinable) $
+                  for_ rets (`addAssertion` Expr.True)
+              _ -> for_ rets (`addAssertion` fromMaybe Expr.True post)
     ILabel pc -> do
       whenJustM (getInvariant idName) $ \inv ->
         pc `addAssertion` inv

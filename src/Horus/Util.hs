@@ -24,9 +24,9 @@ import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map (Map, fromListWith, toList)
-import Data.Text (Text, pack)
 import Data.Maybe (isJust)
 import Data.Some (Some (..))
+import Data.Text (Text, pack)
 import Data.Text qualified as Text
 import Data.Typeable (Typeable, eqT)
 
