@@ -223,7 +223,7 @@ If the above command was executed without error, then you are finished with the 
 Let's verify a cairo program! First, we'll write a simple program that
 implements a stack data structure in Cairo. If you're unfamiliar with Cairo, or
 you need a refresher, check out the
-[documentation](https://www.cairo-lang.org/docs/)!
+[documentation](https://www.cairo-lang.org/docs/).
 
 #### Define a struct called `Stack`
 
@@ -584,6 +584,26 @@ Briefly, we are asserting that:
 * The `lit` function puts `i` on the top of the stack, and preserves the old stack underneath it.
 * The `top` function actually returns the top of the stack we pass as an argument.
 
+As an example, let's examine the annotations for the `_Stack.add()` function:
+
+```cairo
+// @post $Return.stack.value == stack.value + stack.next.value
+// @post $Return.stack.next == stack.next.next
+```
+
+Here's what's going on:
+* The `//` is just the syntax for comments in Cairo.
+* The `@post` declares a Horus postcondition annotation. This condition must
+  hold at the end of each function call.
+* The `$Return` syntax is a way of referring to the return values of the
+  function. So `$Return.stack` is the return value named `stack` of the `add()`
+  function. In general, the `$` syntax is how we reference
+  [logical variables](#spec-syntax).
+* Both annotations are boolean expressions asserting equality of a pair of
+  values, and we can use arithmetic operators like `+` in annotations for
+  supported datatypes. See the section on [spec syntax](#spec-syntax) for more
+  info on what operators and symbols are supported.
+
 Let's compile this annotated program with Horus and then check these properties:
 ```console
 horus-compile annotated.cairo --output compiled.json
@@ -591,8 +611,10 @@ horus-compile annotated.cairo --output compiled.json
 
 This should create a file called `compiled.json`. Now let's verify the compiled binary:
 ```console
-horus-check -s z3 compiled.json
+horus-check --solver z3 compiled.json
 ```
+
+> The `--solver z3` flag tells Horus which SMT solver to use (Z3, in this case). See also the [available solvers](#usage).
 
 <sub>Expected output:</sub>
 ```
@@ -647,14 +669,15 @@ The way it works is like this:
 
 1. You write a Cairo program.
 2. You add annotations that describe how the program should operate.
-3. You run Horus on your program, and Horus tells you if the program obeys the annotations.[^1]
+3. You run Horus on your program, and Horus tells you one of the following:
+    * The program obeys the annotations.
+    * The program does not obey the annotations (found a counterexample).
+    * Ran out of time (`Unknown`).
 
 > “Program testing can be used to show the presence of bugs, but never to show their absence!”
 > ― Edsger W. Dijkstra 
 
 Horus can be used to show the **absence** of bugs.
-
-[^1]: Since Horus uses SMT solvers, it may timeout, in which case it will output `Unknown`.
 
 <br>
 
@@ -719,6 +742,61 @@ function in question are true for all inputs. Then these queries are run, and
 the SMT solver magically tells us whether or not it was able to prove that the
 program is sound!
 
+<br>
+
+### What things can I assert/check about a program?
+
+You can assert things about function parameters, function return values,
+arbitrary labels/variables in a function body, and storage variables. Here are
+examples of things you can check about these values:
+  * Two values are equal (`==`)
+  * One value is less/greater than (or equal) to another (e.g. `<`, `<=`)
+  * A storage variable is updated with a particular value
+  * An invariant holds, e.g. in a loop
+
+You can check these conditions hold at the start and end of a function call
+with `@pre` and `@post`, respectively, and also in the middle of a function
+body with `@invariant` and `@assert`.
+
+### How can I refer to the address of the caller in an annotation?
+
+You can use `get_caller_address()`. Here's an example:
+
+```cairo
+%lang starknet
+from starkware.starknet.common.syscalls import get_caller_address
+
+// @post $Return.res == get_caller_address()
+func f{syscall_ptr: felt*}() -> (res: felt) {
+    let (res) = get_caller_address();
+    return (res=res);
+}
+```
+
+### How can I refer to the current block timestamp in an annotation?
+
+You can use `get_block_timestamp()`. Here's an example:
+
+```cairo
+%lang starknet
+from starkware.starknet.common.syscalls import get_block_timestamp
+
+// @post $Return.res == get_block_timestamp()
+func f{syscall_ptr: felt*}() -> (res: felt) {
+    let (res) = get_block_timestamp();
+    return (res=res);
+}
+```
+
+### Why do extra functions/things appear in the output even though I didn't give them annotations?
+
+Horus prints a judgement for every function it uses to verify your annotations.
+If an annotated function `f` calls an unannotated function `g` (perhaps a
+library function), the judgement for `g` may also be printed.
+
+Horus also adds a trivial annotation (equivalent to `@pre True` and `@post
+True`) which is **always** verifiable to all unannotated functions, and so
+judgements for these will also be printed.
 
 ## Usage
 
@@ -903,6 +981,17 @@ that must hold at any specific point in a function by adding an appropriately
 named label and attaching the annotation to it.  Note that this effectively
 splits the function in two, and that anything from before the invariant that is
 not mentioned within it cannot be used after.
+
+### Storage variable rules
+
+In a function that updates a storage variable `x`, it is ambiguous what the
+name `x` refers to in an annotation. It could be the **initial** value, before
+the update, or the **final** value, after the update.
+
+Here are the rules for figuring out which value is being referenced:
+* If a storage variable is referenced in a precondition (`@pre`), it is the **initial** value.
+* If a storage variable is referenced in a postcondition (`@post`), it is the **final** value.
+* Storage variables cannot be referenced in `@assert` annotations within function bodies.
 
 ### Spec syntax
 
