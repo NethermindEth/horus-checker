@@ -220,9 +220,9 @@ If the above command was executed without error, then you are finished with the 
 
 ## Tutorial: Your first verified Cairo program
 
-Let's verify the semantics of a cairo program! First, we'll write a simple
-program that implements a stack data structure in Cairo. If you're unfamiliar
-with Cairo, or you need a refresher, check out the
+Let's verify a cairo program! First, we'll write a simple program that
+implements a stack data structure in Cairo. If you're unfamiliar with Cairo, or
+you need a refresher, check out the
 [documentation](https://www.cairo-lang.org/docs/)!
 
 #### Define a struct called `Stack`
@@ -311,7 +311,8 @@ Our function will take two arguments, a pointer to a stack, and a literal value
 `i`, which has type
 [`felt`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#field-element).
 It will return a pointer to a stack to which the literal `i` has been pushed,
-and is now the top element.
+and is now the top element. Our function will leave the rest of the stack
+unmodified.
 
 ```cairo
 struct Stack {
@@ -523,7 +524,7 @@ And we see that it correctly added the two literal values we pushed, `5` and
 
 Now, let's add some annotations that describe how we expect our `_Stack`
 functions to behave, and then we'll prove that the implementations we wrote
-satisfy the specification of behavior given by the annotations.
+always do what the annotations say.
 
 
 Here's our program with the annotations:
@@ -620,8 +621,18 @@ Unsat
 The judgement `Unsat` means verified! The three functions `_Stack.add`,
 `_Stack.lit`, and `_Stack.top` that we annotated all say `Unsat`, which means
 our implementations are correct with respect to the specifications we wrote in
-our annotations. Congrats! You've just formally verified your first Cairo
-program!
+our annotations.
+
+> Note: The `cairo.lang.compiler.lib.registers.get_ap` appears here since we
+> have used the `new` keyword, and thus Horus must check its behavior in order
+> to verify the functions we wrote. You may similarly ignore the result for
+> `empty: ...`.
+
+> Note: `main` and `_Stack.empty` appear here since Horus implicitly gives all
+> unannotated functions a trivial (always true) specification.
+
+
+Congrats! You've just formally verified your first Cairo program!
 
 
 ## FAQ
@@ -636,12 +647,14 @@ The way it works is like this:
 
 1. You write a Cairo program.
 2. You add annotations that describe how the program should operate.
-3. You run Horus on your program, and Horus tells you if the program obeys the annotations.
+3. You run Horus on your program, and Horus tells you if the program obeys the annotations.[^1]
 
 > “Program testing can be used to show the presence of bugs, but never to show their absence!”
 > ― Edsger W. Dijkstra 
 
 Horus can be used to show the **absence** of bugs.
+
+[^1]: Since Horus uses SMT solvers, it may timeout, in which case it will output `Unknown`.
 
 <br>
 
@@ -655,11 +668,15 @@ program's behavior.
 
 ### What is Cairo/StarkNet?
 
+[**StarkNet**](https://starkware.co/starknet/) is a Layer 2 network over Ethereum. Specifically, it is a [ZK-Rollup (zero-knowledge rollup)](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-rollups/), which is basically a way of scaling up the number of transactions that a blockchain can process by bundling (rolling-up) many transactions into one.
+
 [**Cairo**](https://www.cairo-lang.org/) is a [Turing-complete](https://en.wikipedia.org/wiki/Turing_completeness) language for writing [dApps](https://ethereum.org/en/dapps/#what-are-dapps) using [STARKs](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-starks/). STARK stands for Scalable Transparent Argument of Knowledge.
 
-Basically, it's a programming language that runs on [Layer 2 Ethereum](https://ethereum.org/en/layer-2/) that lets you write programs where one party can prove to another that a certain computation was executed correctly. The syntax is a bit like [Rust](https://www.rust-lang.org/).
-
-[**StarkNet**](https://starkware.co/starknet/) is a Layer 2 network over Ethereum. Specifically, it is a [ZK-Rollup (zero-knowledge rollup)](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-rollups/), which is basically a way of scaling up the number of transactions that a blockchain can process by bundling (rolling-up) many transactions into one.
+Basically, it's a programming language for
+[verifiable computing](https://en.wikipedia.org/wiki/Verifiable_computing)
+that runs on StarkNet. It lets you write programs where one party can prove to
+another that a certain computation was executed correctly. The syntax is a
+bit like [Rust](https://www.rust-lang.org/).
 
 You can write StarkNet smart contracts in the Cairo language.
 
@@ -771,7 +788,11 @@ Flags for `stack exec horus-check`:
 - `-output-queries` = Stores the (unoptimized) SMT queries for each module in .smt2 files inside DIR.
 - `output-optimized-queries` = Stores the (optimized) SMT queries for each module in .smt2 files inside DIR.
 - `print-models` = Print models for SAT results.
-- `-t` (timeout) = Time limit (ms) for the smt solver.
+- `-t` (timeout) = Time limit (ms) for the smt solver (default is 2000ms).
+
+> Note: If verifying a function `f()` that calls a function `g()` whose Horus
+> annotations contain logical variables, the `mathsat` and `cvc5` solvers will
+> fail, and thus `z3` must be used.
 
 <br>
 
@@ -888,6 +909,6 @@ not mentioned within it cannot be used after.
 The following are allowed within logical formula:
 * `a`, `$a` cairo references and logical variables can be used by name
 * `$Return.a` the special logical variable `$Return` is defined to contain the values returned from the function
-* `a+b`, `a==b`, erc arithmetic operations and comparisons are supported for felts as in cairo
-* `a==b or c==d`, `a==b and c==d`, `! a==b`, `a==b -> c==d` propositional logic operators are written as such
+* `a+b`, `a==b`, arithmetic operations and comparisons are supported for felts as in Cairo
+* `a==b or c==d`, `a==b and c==d`, `! a==b`, `a==b -> c==d` (disjunctions, conjunctions, negations, and implications)
 * `True`, `False` are defined as keywords
