@@ -220,7 +220,7 @@ If the above command was executed without error, then you are finished with the 
 
 ## Tutorial: Your first verified Cairo program
 
-Let's verify a cairo program! First, we'll write a simple program that
+Let's verify a Cairo program! First, we'll write a simple program that
 implements a stack data structure in Cairo. If you're unfamiliar with Cairo, or
 you need a refresher, check out the
 [documentation](https://www.cairo-lang.org/docs/).
@@ -640,11 +640,6 @@ empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 
 Unsat
 ```
 
-The judgement `Unsat` means verified! The three functions `_Stack.add`,
-`_Stack.lit`, and `_Stack.top` that we annotated all say `Unsat`, which means
-our implementations are correct with respect to the specifications we wrote in
-our annotations.
-
 > Note: The `cairo.lang.compiler.lib.registers.get_ap` appears here since we
 > have used the `new` keyword, and thus Horus must check its behavior in order
 > to verify the functions we wrote. You may similarly ignore the result for
@@ -653,6 +648,10 @@ our annotations.
 > Note: `main` and `_Stack.empty` appear here since Horus implicitly gives all
 > unannotated functions a trivial (always true) specification.
 
+The judgement `Unsat` means verified! The three functions `_Stack.add`,
+`_Stack.lit`, and `_Stack.top` that we annotated all say `Unsat`, which means
+our implementations are correct with respect to the specifications we wrote in
+our annotations.
 
 Congrats! You've just formally verified your first Cairo program!
 
@@ -758,6 +757,8 @@ You can check these conditions hold at the start and end of a function call
 with `@pre` and `@post`, respectively, and also in the middle of a function
 body with `@invariant` and `@assert`.
 
+<br>
+
 ### How can I refer to the address of the caller in an annotation?
 
 You can use `get_caller_address()`. Here's an example:
@@ -773,6 +774,8 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
 }
 ```
 
+<br>
+
 ### How can I refer to the current block timestamp in an annotation?
 
 You can use `get_block_timestamp()`. Here's an example:
@@ -787,6 +790,8 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
     return (res=res);
 }
 ```
+
+<br>
 
 ### Why do extra functions/things appear in the output even though I didn't give them annotations?
 
@@ -825,6 +830,10 @@ horus-check --solver <solver_name> <compiled_file>
 ```
 
 The `<solver_name>` argument above is either `z3`, `cvc5`, or `mathsat`.
+
+> Note: If verifying a function `f()` that calls a function `g()` whose Horus
+> annotations contain logical variables, the `mathsat` and `cvc5` solvers will
+> fail, and thus `z3` must be used.
 
 The `<compiled_file>` is the output of a `horus-compile` call. This should be a
 JSON file. You can save the JSON emitted by `horus-compile` to a file using the
@@ -867,10 +876,6 @@ Flags for `stack exec horus-check`:
 - `output-optimized-queries` = Stores the (optimized) SMT queries for each module in .smt2 files inside DIR.
 - `print-models` = Print models for SAT results.
 - `-t` (timeout) = Time limit (ms) for the smt solver (default is 2000ms).
-
-> Note: If verifying a function `f()` that calls a function `g()` whose Horus
-> annotations contain logical variables, the `mathsat` and `cvc5` solvers will
-> fail, and thus `z3` must be used.
 
 <br>
 
