@@ -324,6 +324,10 @@ solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   lInstructions <- getLabelledInstructions
   inlinables <- getInlinables
+  -- We take a function that was inlined away, pretend it is *not* inlinable,
+  -- since want to do analysis on it in isolation, which we must do for every
+  -- function. And we do this because we want a judgement for each so that we
+  -- don't propagate errors upward when we inline stuff.
   cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
   verbosePrint cfg
 

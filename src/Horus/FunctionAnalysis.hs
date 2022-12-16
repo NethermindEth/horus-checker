@@ -239,6 +239,11 @@ isNotAnnotated cd = not . maybe False isAnnotated' . labelOfIdent
 wrapperScope :: Text
 wrapperScope = "__wrappers__"
 
+-- Identify decorator-generated wrapper functions.
+--
+-- If you write e.g. @extern, this means can be called externally, generates a
+-- wrapper function. We *don't* want to verify wrapper functions, so we want to
+-- be able to identify and exclude these.
 isWrapper :: ScopedFunction -> Bool
 isWrapper f = outerScope (sf_scopedName f) == wrapperScope
  where
@@ -302,9 +307,14 @@ inlinableFuns rows prog cd =
   idents = p_identifiers prog
   functions = functionsOf rows prog
   notIsAnnotated sf = maybe False (isNotAnnotated cd) . Map.lookup (sf_scopedName sf) $ idents
+
+  -- Annotated *later* by horus-checker because they come from e.g. the
+  -- standard library. These are things with default specs.
   notIsAnnotatedLater f = sf_scopedName f `notElem` map fst stdSpecsList
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls
+
+  -- The functions that contain neither global nor local cycles.
   inlinable =
     Map.keys . Map.filterWithKey (isAcylic . cyclicVerts $ callgraph (Map.mapKeys sf_pc functions)) $
       Map.mapKeys sf_pc (localCycles functions)
