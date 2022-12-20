@@ -678,7 +678,7 @@ The way it works is like this:
 
 Horus can be used to show the **absence** of bugs.
 
-<br>
+
 
 Horus consists of two command-line tools, called `horus-compile` and
 `horus-check`. The first, `horus-compile`, is a modified version of the Cairo
@@ -686,7 +686,7 @@ compiler that you can use to compile a program with [Horus annotations](#annotat
 You can then run `horus-check` on the compiled program to formally verify the
 program's behavior.
 
-<br>
+
 
 ### What is Cairo/StarkNet?
 
@@ -702,7 +702,7 @@ bit like [Rust](https://www.rust-lang.org/).
 
 You can write StarkNet smart contracts in the Cairo language.
 
-<br>
+
 
 ### When should I use Horus?
 
@@ -719,7 +719,7 @@ specification.
 You get the most mileage out of this when the expected behavior is simple, but
 the implementation is very complex.
 
-<br>
+
 
 ### Why should I use Horus?
 
@@ -729,7 +729,7 @@ Because you love formal verification and care about writing provably correct pro
 
 Alternatively, because you don't want your firm to be in the news.
 
-<br>
+
 
 ### What does Horus do?
 
@@ -741,7 +741,7 @@ function in question are true for all inputs. Then these queries are run, and
 the SMT solver magically tells us whether or not it was able to prove that the
 program is sound!
 
-<br>
+
 
 ### What things can I assert/check about a program?
 
@@ -757,7 +757,7 @@ You can check these conditions hold at the start and end of a function call
 with `@pre` and `@post`, respectively, and also in the middle of a function
 body with `@invariant` and `@assert`.
 
-<br>
+
 
 ### How can I refer to the address of the caller in an annotation?
 
@@ -774,7 +774,7 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
 }
 ```
 
-<br>
+
 
 ### How can I refer to the current block timestamp in an annotation?
 
@@ -791,7 +791,7 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
 }
 ```
 
-<br>
+
 
 ### Why do extra functions/things appear in the output even though I didn't give them annotations?
 
@@ -802,6 +802,8 @@ library function), the judgement for `g` may also be printed.
 Horus also adds a trivial annotation (equivalent to `@pre True` and `@post
 True`) which is **always** verifiable to all unannotated functions, and so
 judgements for these will also be printed.
+
+
 
 ## Usage
 
