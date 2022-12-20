@@ -674,7 +674,7 @@ The way it works is like this:
     * Ran out of time (`Unknown`).
 
 > “Program testing can be used to show the presence of bugs, but never to show their absence!”
-> ― Edsger W. Dijkstra 
+> ― Edsger W. Dijkstra
 
 Horus can be used to show the **absence** of bugs.
 
@@ -807,21 +807,110 @@ judgements for these will also be printed.
 
 Horus consists of two command-line tools, `horus-compile` and `horus-check`.
 
-<br>
-
 ### `horus-compile`
 ```console
-horus-compile [options] <file>
+horus-compile [-h] [--abi ABI] [--disable-hint-validation]
+              [--account-contract] [--dont-filter-identifiers]
+              [--prime PRIME] [--cairo_path CAIRO_PATH] [--preprocess]
+              [--output OUTPUT] [--no_debug_info]
+              [--debug_info_with_source]
+              [--cairo_dependencies CAIRO_DEPENDENCIES]
+              [--no_opt_unused_functions] [-v]
+              file [file ...]
 ```
+A tool to compile checked StarkNet contracts.
 
-The `[options]` are described in the [`horus-compile`](#horus-compile) section
-below.
+Emits a compiled Cairo program in the form of JSON, printed to `stdout` by default.
 
-The `<file>` argument is a Horus-annotated Cairo program, usually with a
-filename of the form `<program>.cairo`.
+#### Positional arguments
 
-The `horus-compile` tool emits a compiled Cairo program in the form of JSON.
-The JSON output of `horus-compile` is printed to `stdout` by default.
+`file`
+
+One or more Cairo programs to compile.
+
+#### Flags
+`-h, --help`
+
+Show a help message and exit
+
+`--abi ABI`
+
+Dump the contract's ABI (application binary interface)
+to a file. This is a JSON list containing metadata
+(like type signatures and members) on functions,
+structs, and other things within the program.
+
+`--disable-hint-validation`
+
+Disable the hint validation, which ordinarily checks
+program hints against a whitelist.
+
+`--account-contract`
+
+Compile as account contract, which means the ABI will
+be checked for expected builtin entry points.
+
+`--dont-filter-identifiers`
+
+Disable the filter-identifiers-optimization. If True,
+all the identifiers will be kept, instead of just the
+ones mentioned in hints or `with_attr` statements.
+
+`--prime PRIME`
+
+The positive integer size of the finite field. This is
+a (usually large) prime power over which basic
+arithmetic within the program is carried out.
+
+`--cairo_path CAIRO_PATH`
+
+A list of directories, separated by ":" to resolve
+import paths. The full list will consist of
+directories defined by this argument, followed by the
+environment variable `CAIRO_PATH`, the working directory
+and the standard library path.
+
+`--preprocess`
+
+Stop after the preprocessor step and output the
+preprocessed program, which consists only of low-level
+Cairo (e.g. frame pointer and allocation pointer
+manipulations) along with annotations indicating
+relevant source code locations.
+
+`--output OUTPUT`
+
+The output file name (default: stdout).
+
+`--no_debug_info`
+
+Don't include debug information in the compiled file.
+Removes the 'debug_info' field from the JSON output,
+which by default contains an 'instruction_locations'
+map with information on flow tracking data, hints,
+accessible scopes, and source code location.
+
+`--debug_info_with_source`
+
+Dump the source code of all relevant .cairo files into
+a 'file_contents' field in the 'debug_info' of the
+JSON output.
+
+`--cairo_dependencies CAIRO_DEPENDENCIES`
+
+Path to dump a list of the Cairo source files used
+during the compilation as a CMake file.
+
+`--no_opt_unused_functions`
+
+Disable unused function optimization, which ordinarily
+only compiles functions reachable from the main scope
+in the dependency graph, i.e. functions that are
+actually called.
+
+`-v, --version`
+
+Show program's version number and exit
 
 <br>
 
