@@ -51,7 +51,7 @@ import Data.Map qualified as Map
   , toList
   , (!)
   )
-import Data.Maybe (fromJust, fromMaybe, isNothing, mapMaybe)
+import Data.Maybe (fromJust, fromMaybe, isNothing, listToMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_program, cd_specs, cd_storageVars))
@@ -73,7 +73,7 @@ import Horus.Program
 import Horus.SW.Identifier (Function (..), Identifier (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (ScopedName))
 import Horus.SW.Std (stdSpecsList)
-import Horus.Util (invert, safeHead, safeLast)
+import Horus.Util (invert, safeLast)
 
 data CG = CG
   { cg_vertices :: [Label]
@@ -144,7 +144,7 @@ pcToFunOfProg prog = Map.mapMaybe (go <=< ilInfoToFun) ilInfoOfLabel
   go label = ScopedFunction <$> fNameOfPc idents label <*> Just label
 
 fNameOfPc :: Identifiers -> Label -> Maybe ScopedName
-fNameOfPc idents lblpc = safeHead fLblsAtPc
+fNameOfPc idents lblpc = listToMaybe fLblsAtPc
  where
   fLblsAtPc = [name | (name, ident) <- Map.toList idents, Just lblpc == getFunctionPc ident]
 
@@ -217,7 +217,7 @@ scopedFOfPc :: Identifiers -> Label -> Maybe ScopedFunction
 scopedFOfPc idents label = ScopedFunction <$> scopedName <*> Just label
  where
   scopedName =
-    safeHead $
+    listToMaybe $
       [ name
       | (name, ident) <- Map.toList idents
       , Just pc <- [getFunctionPc ident]
@@ -244,7 +244,7 @@ isAnnotated cd = maybe False isAnnotated' . labelOfIdent
   isAnnotated' :: Label -> Bool
   isAnnotated' = any (liftM2 (||) isSpec isInvariant) . labelNamesOfPc idents
   identToName :: Identifier -> Maybe ScopedName
-  identToName ident = safeHead [name | (name, i) <- Map.toList idents, i == ident]
+  identToName ident = listToMaybe [name | (name, i) <- Map.toList idents, i == ident]
 
   isSpec :: Identifier -> Bool
   isSpec ident = maybe False (`Map.member` cd_specs cd) $ identToName ident
