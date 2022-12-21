@@ -15,8 +15,9 @@ import Options.Applicative
   , header
   , helper
   , info
-  , progDesc
+  , progDescDoc
   )
+import Options.Applicative.Help.Pretty (text, vsep)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (ContractDefinition (cd_program), cdSpecs)
@@ -60,10 +61,19 @@ main = do
     info
       (argParser <**> helper)
       ( fullDesc
-          <> progDesc
-            ( "Verifies "
-                <> unpack fileArgument
-                <> " (a contract compiled with horus-compile)"
+          <> progDescDoc
+            ( Just
+                ( ( vsep $
+                      map
+                        text
+                        [ "Verifies " <> unpack fileArgument <> ", a JSON contract compiled with 'horus-compile'."
+                        , ""
+                        , "Example:"
+                        , "$ horus-check -s z3 program.json"
+                        , ""
+                        ]
+                  )
+                )
             )
-          <> header "horus-check: SMT-based checker for Cairo language"
+          <> header "horus-check: an SMT-based checker for the Cairo language"
       )
