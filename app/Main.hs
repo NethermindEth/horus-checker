@@ -129,7 +129,7 @@ main = do
             ( Just $
                 text "Verifies "
                   <> text (T.unpack fileArgument)
-                  <> text " (a contract compiled with horus-compile)\n\n"
+                  <> text " (a JSON contract compiled with horus-compile)\n\n"
                   <> text "Example using solver cvc5 (default):\n"
                   <> text "  $ horus-check a.json\n\n"
                   <> text "Example using solver mathsat:\n"
@@ -137,5 +137,5 @@ main = do
                   <> text "Example using solvers z3, mathsat:\n"
                   <> text "  $ horus-check -s z3 -s mathsat a.json\n"
             )
-          <> header "horus-check: SMT-based checker for Cairo language"
+          <> header "horus-check: an SMT-based checker for the Cairo language"
       )
