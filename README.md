@@ -24,7 +24,6 @@ solvers.
 
 ### Our documentation
 
-Our documentation is organized as follows:
 * [**Installation**](#installation) - Get the `horus-compile` and
   `horus-check` executables setup for your development environment.
 * [Tutorial: Your first verified Cairo program](#tutorial-your-first-verified-cairo-program) - Try this if you're
@@ -33,8 +32,7 @@ Our documentation is organized as follows:
 * [FAQ](#faq) - What is Cairo? What is Horus? When should I use Horus? Why should
   I use Horus? All these answered and more!
 * [Usage](#usage) - Exhastive reference information on the CLI options, among
-  other things. No explanation or context here. Look here if you just need to
-  look something up super quick.
+  other things.
 * [Developer reference](#developer-reference) - In which we explain why things
   are implemented the way they are, and discuss details relevant to the
   development of Horus. This is prose to aid contributors and onboard new team
@@ -51,9 +49,6 @@ Horus is supported on Linux and MacOS (including AArch64 Macs)!
 - [Poetry](https://python-poetry.org/) (Python package and dependency manager)
 - [Z3](https://github.com/Z3Prover/z3) (version 4.10.2)
 - [MathSAT](https://mathsat.fbk.eu/) (version 5.6.8)
-
-
-<br>
 
 ### Installing Python 3.7
 
@@ -653,7 +648,7 @@ Congrats! You've just formally verified your first Cairo program!
 
 ## FAQ
 
-### What is Horus?
+#### What is Horus?
 
 Horus is a command-line tool for the [Cairo ecosystem](https://www.cairo-lang.org/).
 It helps you [formally verify](https://en.wikipedia.org/wiki/Formal_verification)
@@ -683,7 +678,7 @@ program's behavior.
 
 
 
-### What is Cairo/StarkNet?
+#### What is Cairo/StarkNet?
 
 [**StarkNet**](https://starkware.co/starknet/) is a Layer 2 network over Ethereum. Specifically, it is a [ZK-Rollup (zero-knowledge rollup)](https://docs.ethhub.io/ethereum-roadmap/layer-2-scaling/zk-rollups/), which is basically a way of scaling up the number of transactions that a blockchain can process by bundling (rolling-up) many transactions into one.
 
@@ -699,7 +694,7 @@ You can write StarkNet smart contracts in the Cairo language.
 
 
 
-### When should I use Horus?
+#### When should I use Horus?
 
 Use Horus when you need to be absolutely sure that a Cairo program or StarkNet
 contract executes correctly according to some specification. Horus is good for
@@ -716,7 +711,7 @@ the implementation is very complex.
 
 
 
-### Why should I use Horus?
+#### Why should I use Horus?
 
 Because you love formal verification and care about writing provably correct programs!
 
@@ -726,7 +721,7 @@ Alternatively, because you don't want your firm to be in the news.
 
 
 
-### What does Horus do?
+#### What does Horus do?
 
 It uses a modified version of the Cairo compiler to translate your
 [function specification annotations](#annotations) into
@@ -738,7 +733,7 @@ program is sound!
 
 
 
-### What things can I assert/check about a program?
+#### What things can I assert/check about a program?
 
 You can assert things about function parameters, function return values,
 arbitrary labels/variables in a function body, and storage variables. Here are
@@ -754,7 +749,7 @@ body with `@invariant` and `@assert`.
 
 
 
-### How can I refer to the address of the caller in an annotation?
+#### How can I refer to the address of the caller in an annotation?
 
 You can use `get_caller_address()`. Here's an example:
 
@@ -771,7 +766,7 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
 
 
 
-### How can I refer to the current block timestamp in an annotation?
+#### How can I refer to the current block timestamp in an annotation?
 
 You can use `get_block_timestamp()`. Here's an example:
 
@@ -788,7 +783,7 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
 
 
 
-### Why do extra functions/things appear in the output even though I didn't give them annotations?
+#### Why do extra functions/things appear in the output even though I didn't give them annotations?
 
 Horus prints a judgement for every function it uses to verify your annotations.
 If an annotated function `f` calls an unannotated function `g` (perhaps a
@@ -899,8 +894,8 @@ Show program's version number and exit
 ### `horus-check`
 ```console
 horus-check COMPILED_FILE [-v|--verbose] [--output-queries DIR]
-					  [--output-optimized-queries DIR] (-s|--solver SOLVER)
-					  [--print-models] [-t|--timeout TIMEOUT]
+            [--output-optimized-queries DIR] (-s|--solver SOLVER)
+            [--print-models] [-t|--timeout TIMEOUT]
 ```
 
 #### Positional arguments
@@ -933,12 +928,12 @@ Stores the (optimized) SMT queries for each module in .smt2 files inside DIR.
 
 Solver to check the resulting SMT queries (options: `z3`, `cvc5`, `mathsat`).
 
-> Note: If verifying a function `f()` that calls a function `g()` whose Horus
-> annotations contain logical variables, the `mathsat` and `cvc5` solvers will
-> fail, and thus `z3` must be used.
+> **Note:** If verifying a function `f()` that calls a function `g()` whose
+> Horus annotations contain logical variables, the `mathsat` and `cvc5` solvers
+> will fail, and thus `z3` must be used.
 
 You can also pass multiple solvers, which will be tried in the order they are
-passed as flags.
+passed as flags. In the example below, we run `z3` followed by `mathsat`:
 
 ```console
 horus-check example.json -s z3 mathsat cvc5
@@ -960,7 +955,7 @@ Time limit (ms) per-module, per-SMT solver.
 
 Show this help text
 
-### Annotations
+## Annotations
 
 Horus annotations are written in comments. For example:
 
@@ -978,52 +973,59 @@ The annotation in the example above is the line:
 
 It asserts that the `res` return value must always be `3`.
 
-#### Annotation types
+### Annotation types
 
 ### `@post`
-Specifies conditions that must be true when the function returns.
+Specifies conditions that must be true when the function returns. The name
+`post` is short for "postcondition".
 
-Example:
-```cairo
-// @post $Return.res < 100 && $Return.res >= 50
-```
-No claim is made about whether the function completes or reverts, but that if it completes then the postcondition holds.
+No claim is made about whether the function completes or reverts. We only
+assert that _if it completes_, then the postcondition holds.
 
-<br/>
+> **Example**
+> ```cairo
+> // @post $Return.res < 100 && $Return.res >= 50
+> ```
+> The annotation above asserts that the return value with name `res` of the
+> function (not pictured here) is less than 100 and greater than or equal to
+> 50.
 
 ### `@pre`
-Restricts the initial state, value of [logical variables](#declare), or set of possible inputs.
+Specifies conditions that must be true immediately before a function is called.
+The name `pre` is short for "precondition". This annotation type allows us to:
+* Place constraints on the values of function parameters
+* Assign values to [logical variables](#declare)
 
-Example:
-```cairo
-// @pre flag * (flag - 1) == 0
-```
-
-<br/>
+> **Example**
+> ```cairo
+> // @pre flag * (flag - 1) == 0
+> ```
+> The annotation above asserts that the function parameter with name `flag`
+> satisfies the equation $x(x - 1) = 0$, which implies that $x = 0$ or $x = 1$.
 
 ### `@declare`
 Allows the introduction of logical variables.
 
-Example:
-```cairo
-// @declare $x : felt
-```
 A **logical variable** is a variable defined and used within a function spec
 (i.e.  a set of annotations for a function, i.e. a set of lines starting with
 `// @`) for conveniently referring to subexpressions. They play the same role
 that ordinary variables do in any programming language, but they can only be
 used within `horus` annotations.
 
-In the above example, `$x` is the logical variable being declared.
-
 Logical variable names must begin with a `$`. Note that if a logical variable
 is not mentioned in the precondition, then the spec must hold for all possible
 values of that variable.
 
-<br/>
+> **Example**
+> ```cairo
+> // @declare $x : felt
+> ```
+> In the above example, `$x` is the logical variable being declared.
 
 ### `@storage_update`
-Allows claims to be made about the state of a storage variable before and after the function.
+Allows claims to be made about the state of a storage variable before and after
+the function. A storage update **must be included for all storage variables
+modified by a function** otherwise it will not meet the spec.
 
 > The first new primitive that we see in the code is `@storage_var`. Unlike a
 > Cairo program, which is stateless, StarkNet contracts have a state, called
@@ -1040,39 +1042,39 @@ Allows claims to be made about the state of a storage variable before and after 
 >
 > *From the Cairo documentation on [writing Starknet contracts](https://www.cairo-lang.org/docs/hello_starknet/intro.html?highlight=storage%20variable)*
 
-Example:
-```cairo
-// @storage_update x() := x() + 1
-```
-A storage update must be included for all storage variables modified by a
-function otherwise it will not meet the spec.
+> **Example**
+> ```cairo
+> // @storage_update x() := x() + 1
+> ```
+> In the above example, only the top-level storage variable reference on the left
+hand side refers to the state after the function. As such, if `x` took one
+input and we specified the update as such `x(y()) := x(y()) + 1`, both
+instances of `y()` refer to the state before the function was called.
 
-Only the top-level storage variable reference on the left hand side refers to
-the state after the function. As such, if `x` took one input and we specified
-the update as such `x(y()) := x(y()) + 1`, both instances of `y()` refer to the
-state before the function was called. If you would like to make claims about
-the relationship between multiple storage variables after the function is
-complete, this can be achieved via the use of logical variables. To do so,
-equate your 'before' logical variable to the storage variable in the
-precondition. Then, also in the precondition, relate the 'after' and 'before'
-logical variables. Finally assign the 'after' logical variable to the storage
-variable in a storage update annotation.
-
-<br/>
+**Note:** If you would like to make claims about the relationship between
+multiple storage variables after the function is complete, this can be achieved
+via the use of logical variables. To do so, equate your 'before' logical
+variable to the storage variable in the precondition. Then, also in the
+precondition, relate the 'after' and 'before' logical variables. Finally assign
+the 'after' logical variable to the storage variable in a storage update
+annotation.
 
 ### `@invariant`
 Introduces a constraint attached to a label, typically used for loop invariants.
 
-Example:
-```cairo
-// @invariant i <= 10
-```
 The invariant annotation is only required in the case of low level loops
 implemented with jump instructions, however it can also be used to make claims
 that must hold at any specific point in a function by adding an appropriately
 named label and attaching the annotation to it.  Note that this effectively
 splits the function in two, and that anything from before the invariant that is
 not mentioned within it cannot be used after.
+
+> **Example**
+> ```cairo
+> // @invariant i <= 10
+> ```
+> In the above example, we assert that a local variable `i` (perhaps a loop
+> variable) is always less than or equal to 10.
 
 ### Storage variable rules
 
