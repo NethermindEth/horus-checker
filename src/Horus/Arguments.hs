@@ -50,7 +50,7 @@ singleSolverParser =
     ( long "solver"
         <> short 's'
         <> metavar "SOLVER"
-        <> help "Solver to check the resulting smt queries."
+        <> help ("Solver to check the resulting smt queries (options: " <> intercalate ", " singleSolverNames <> ").")
         <> completeWith singleSolverNames
     )
 
@@ -69,7 +69,7 @@ configParser =
     <$> switch
       ( long "verbose"
           <> short 'v'
-          <> help "If the flag is set all the intermediate steps are printed out."
+          <> help "Print all intermediate steps (control flow graph, SMT2 queries, metadata for each module)."
       )
     <*> optional
       ( strOption
@@ -104,6 +104,6 @@ configParser =
                   <> short 't'
                   <> metavar "TIMEOUT"
                   <> value defaultTimeoutMs
-                  <> help "Time limit (ms) for the smt solver."
+                  <> help "Time limit (ms) per-module for the SMT solver."
               )
         )
