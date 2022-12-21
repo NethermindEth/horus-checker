@@ -806,11 +806,10 @@ Horus consists of two command-line tools, `horus-compile` and `horus-check`.
 
 ### `horus-compile`
 ```console
-horus-compile [-h] [--abi ABI] [--disable-hint-validation]
-              [--account-contract] [--dont-filter-identifiers]
-              [--prime PRIME] [--cairo_path CAIRO_PATH] [--preprocess]
+horus-compile [-h] [--abi ABI] [--disable_hint_validation]
+              [--account_contract] [--prime PRIME]
+              [--cairo_path CAIRO_PATH] [--preprocess]
               [--output OUTPUT] [--no_debug_info]
-              [--debug_info_with_source]
               [--cairo_dependencies CAIRO_DEPENDENCIES]
               [--no_opt_unused_functions] [-v]
               file [file ...]
@@ -847,12 +846,6 @@ program hints against a whitelist.
 Compile as account contract, which means the ABI will
 be checked for expected builtin entry points.
 
-`--dont-filter-identifiers`
-
-Disable the filter-identifiers-optimization. If True,
-all the identifiers will be kept, instead of just the
-ones mentioned in hints or `with_attr` statements.
-
 `--prime PRIME`
 
 The positive integer size of the finite field. This is
@@ -887,12 +880,6 @@ which by default contains an 'instruction_locations'
 map with information on flow tracking data, hints,
 accessible scopes, and source code location.
 
-`--debug_info_with_source`
-
-Dump the source code of all relevant .cairo files into
-a 'file_contents' field in the 'debug_info' of the
-JSON output.
-
 `--cairo_dependencies CAIRO_DEPENDENCIES`
 
 Path to dump a list of the Cairo source files used
@@ -909,75 +896,89 @@ actually called.
 
 Show program's version number and exit
 
-<br>
-
+### `horus-check`
 ```console
-horus-check --solver <solver_name> <compiled_file>
+horus-check COMPILED_FILE [-v|--verbose] [--output-queries DIR]
+					  [--output-optimized-queries DIR] (-s|--solver SOLVER)
+					  [--print-models] [-t|--timeout TIMEOUT]
 ```
 
-The `<solver_name>` argument above is either `z3`, `cvc5`, or `mathsat`.
+#### Positional arguments
+
+`COMPILED_FILE`
+
+A JSON contract compiled with 'horus-compile'. This can be generated from a
+'.cairo' file as follows (for an example contract called `program.cairo`):
+
+```console
+horus-compile --output program.json program.cairo
+```
+
+#### Flags
+
+`-v,--verbose`
+
+Print all intermediate steps (control flow graph, SMT2 queries, metadata for
+each module).
+
+`--output-queries DIR`
+
+Stores the (unoptimized) SMT queries for each module in .smt2 files inside DIR.
+
+`--output-optimized-queries DIR`
+
+Stores the (optimized) SMT queries for each module in .smt2 files inside DIR.
+
+`-s,--solver SOLVER`
+
+Solver to check the resulting SMT queries (options: `z3`, `cvc5`, `mathsat`).
 
 > Note: If verifying a function `f()` that calls a function `g()` whose Horus
 > annotations contain logical variables, the `mathsat` and `cvc5` solvers will
 > fail, and thus `z3` must be used.
 
-The `<compiled_file>` is the output of a `horus-compile` call. This should be a
-JSON file. You can save the JSON emitted by `horus-compile` to a file using the
-`--output FILE` flag.
-
-<br>
-
-#### Using `horus-check`
-
-In the `horus-checker` directory, you should now be able to use the Horus checker after installing the Haskell dependencies using `stack`.
-
-In order to use the Horus checker you would need to have used `horus-compile` to generate a JSON file including the compiled code and other attributes required by the checker.
-
-<br>
-
-Thereafter you can point to the specific JSON file that you would like to run the Horus checker over, you will also need to use the `-s` flag to specify which SMT solvers you would like to use for the testing:
-
-<br>
+You can also pass multiple solvers, which will be tried in the order they are
+passed as flags.
 
 ```console
-stack exec horus-check -- ./<path-to-file>/example.json -s z3
+horus-check example.json -s z3 mathsat cvc5
 ```
 
-<br>
+The timeout will apply to each solver individually, meaning that running two
+solvers doubles the maximum time the `horus-check` command will run before
+terminating.
 
-> You can also call the Horus checker with multiple SMT solvers, below you can see the same example but with all the solver options added after the `-s` flag:
+`--print-models`
 
-```console
-stack exec horus-check -- ./<path-to-file>/example.json -s z3 mathsat cvc5
-```
+Print models for SAT results (**highly experimental**).
 
-<br>
+`-t,--timeout TIMEOUT`
 
-#### Horus Checker options
+Time limit (ms) per-module, per-SMT solver.
 
-Flags for `stack exec horus-check`:
+`-h,--help`
 
-- `-v` (verbose) = If the flag is set all the intermediate steps are printed out.
-- `-output-queries` = Stores the (unoptimized) SMT queries for each module in .smt2 files inside DIR.
-- `output-optimized-queries` = Stores the (optimized) SMT queries for each module in .smt2 files inside DIR.
-- `print-models` = Print models for SAT results.
-- `-t` (timeout) = Time limit (ms) for the smt solver (default is 2000ms).
+Show this help text
 
-<br>
+### Annotations
 
-#### Annotations
+Horus annotations are written in comments. For example:
 
-Horus works using an annotation system similar to Cairo itself, however Horus annotations are written in comments. For example:
-
-```
-// @post $Result.res == 3
+```cairo
+// @post $Return.res == 3
 func example() -> (res):
 	return (3)
 end
 ```
-The following annotations are supported.
 
-<br/>
+The annotation in the example above is the line:
+```cairo
+// @post $Return.res == 3
+```
+
+It asserts that the `res` return value must always be `3`.
+
+#### Annotation types
 
 ### `@post`
 Specifies conditions that must be true when the function returns.
