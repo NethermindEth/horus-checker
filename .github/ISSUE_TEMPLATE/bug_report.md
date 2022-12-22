@@ -20,7 +20,7 @@ A clear and concise description of what you expected to happen.
 **To Reproduce**
 If you have time, please include the following to make it easier for the maintainers to reproduce the bug:
 * Full source-code of original program with relevant annotations
-* Version of SMT solvers used (`z3 --version`, `mathsat --version`, `cvc5 --version`).
+* Versions of SMT solvers used (`z3 --version`, `mathsat -version`, `cvc5 --version`).
 * Your operating system, CPU architecture, and Horus version.
 
 **Operating system**
