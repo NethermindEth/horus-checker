@@ -957,7 +957,12 @@ Show this help text
 
 ## Annotations
 
-Horus annotations are written in comments. For example:
+To formally verify a program, we must prove that it behaves as expected. In
+order to do this, we must tell Horus what the expected behavior of the program
+is. The way that we do this is with the **annotation language**. Annotations
+are comments that contain special syntax that Horus can understand. The set of
+all of a function's annotations is sometimes referred to as its _specification_
+or _spec_. Here's an example:
 
 ```cairo
 // @post $Return.res == 3
@@ -972,6 +977,19 @@ The annotation in the example above is the line:
 ```
 
 It asserts that the `res` return value must always be `3`.
+
+### Annotation syntax
+
+In order to describe the expected behavior of a function, we need to be able to
+talk about the function's inputs, outputs, and effects. This means, we need to
+be able to reference the function's parameters and return values in
+annotations. Below, we describe the syntax for references, [logical
+variables](#declare), boolean expressions, and implications:
+* `a`, `$a` cairo references and logical variables can be used by name
+* `$Return.a` the special logical variable `$Return` is defined to contain the values returned from the function
+* `a+b`, `a==b`, arithmetic operations and comparisons are supported for felts as in Cairo
+* `a==b or c==d`, `a==b and c==d`, `! a==b`, `a==b -> c==d` (disjunctions, conjunctions, negations, and implications)
+* `True`, `False` are defined as keywords
 
 ### Annotation types
 
@@ -1019,13 +1037,16 @@ values of that variable.
 > **Example**
 > ```cairo
 > // @declare $x : felt
+> // @pre $x == 5
 > ```
-> In the above example, `$x` is the logical variable being declared.
+> In the above example, `$x` is the logical variable being declared, and we
+> assign it a value using a precondition.
 
 ### `@storage_update`
-Allows claims to be made about the state of a storage variable before and after
-the function. A storage update **must be included for all storage variables
-modified by a function** otherwise it will not meet the spec.
+Allows claims to be made about the state of a
+[storage variable](https://docs.starknet.io/documentation/architecture_and_concepts/Contracts/contract-storage/#storage_variables)
+before and after the function. A storage update **must be included for all
+storage variables modified by a function**, or verification will fail.
 
 > The first new primitive that we see in the code is `@storage_var`. Unlike a
 > Cairo program, which is stateless, StarkNet contracts have a state, called
@@ -1065,7 +1086,7 @@ Introduces a constraint attached to a label, typically used for loop invariants.
 The invariant annotation is only required in the case of low level loops
 implemented with jump instructions, however it can also be used to make claims
 that must hold at any specific point in a function by adding an appropriately
-named label and attaching the annotation to it.  Note that this effectively
+named label and attaching the annotation to it. Note that this effectively
 splits the function in two, and that anything from before the invariant that is
 not mentioned within it cannot be used after.
 
@@ -1086,12 +1107,3 @@ Here are the rules for figuring out which value is being referenced:
 * If a storage variable is referenced in a precondition (`@pre`), it is the **initial** value.
 * If a storage variable is referenced in a postcondition (`@post`), it is the **final** value.
 * Storage variables cannot be referenced in `@assert` annotations within function bodies.
-
-### Spec syntax
-
-The following are allowed within logical formula:
-* `a`, `$a` cairo references and logical variables can be used by name
-* `$Return.a` the special logical variable `$Return` is defined to contain the values returned from the function
-* `a+b`, `a==b`, arithmetic operations and comparisons are supported for felts as in Cairo
-* `a==b or c==d`, `a==b and c==d`, `! a==b`, `a==b -> c==d` (disjunctions, conjunctions, negations, and implications)
-* `True`, `False` are defined as keywords
