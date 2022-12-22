@@ -60,16 +60,15 @@ main = do
       ( fullDesc
           <> progDescDoc
             ( Just
-                ( ( vsep $
-                      map
-                        text
-                        [ "Verifies " <> unpack fileArgument <> ", a JSON contract compiled with 'horus-compile'."
-                        , ""
-                        , "Example:"
-                        , "$ horus-check -s z3 program.json"
-                        , ""
-                        ]
-                  )
+                ( vsep $
+                    map
+                      text
+                      [ "Verifies " <> unpack fileArgument <> ", a JSON contract compiled with 'horus-compile'."
+                      , ""
+                      , "Example:"
+                      , "$ horus-check -s z3 program.json"
+                      , ""
+                      ]
                 )
             )
           <> header "horus-check: an SMT-based checker for the Cairo language"
