@@ -7,32 +7,32 @@ assignees: ''
 
 ---
 
+> **Note:** If you do not have time to write full reproduction details, please
+> still open an issue! Even if your report is as simple as "there's a typo in
+> the output", this is still helpful to us!
+
 **Describe the bug**
 A clear and concise description of what the bug is.
-
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**To Reproduce**
+If you have time, please include the following to make it easier for the maintainers to reproduce the bug:
+* Full source-code of original program with relevant annotations
+* Version of SMT solvers used (`z3 --version`, `mathsat --version`, `cvc5 --version`).
+* Your operating system, CPU architecture, and Horus version.
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
+**Operating system**
+[ ] Linux
+[ ] MacOS
+[ ] Windows
+[ ] Other (please write)
 
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
+**CPU architecture**
+[ ] x86-64
+[ ] AArch64
+[ ] Other (please write)
 
 **Additional context**
 Add any other context about the problem here.
