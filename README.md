@@ -33,10 +33,9 @@ solvers.
   I use Horus? All these answered and more!
 * [Usage](#usage) - Exhastive reference information on the CLI options, among
   other things.
-* [Developer reference](#developer-reference) - In which we explain why things
-  are implemented the way they are, and discuss details relevant to the
-  development of Horus. This is prose to aid contributors and onboard new team
-  members.
+* [Internals](#internals) - In which we explain why things are implemented the
+  way they are, and discuss details relevant to the development of Horus. This
+  is prose to aid contributors and onboard new team members.
 
 ## Installation
 
@@ -1107,3 +1106,81 @@ Here are the rules for figuring out which value is being referenced:
 * If a storage variable is referenced in a precondition (`@pre`), it is the **initial** value.
 * If a storage variable is referenced in a postcondition (`@post`), it is the **final** value.
 * Storage variables cannot be referenced in `@assert` annotations within function bodies.
+
+## Internals
+
+The purpose of this section is to give a brief high-level overview of the
+architecture of Horus. Hopefully this can serve as a minimal guide to
+understanding the source code and contributing to the project.
+
+The entrypoint source file is `app/Main.hs`. When we run `horus-check` on a
+compiled JSON file:
+```console
+horus-check -s z3 a.json
+```
+the first thing that happens is that we deserialize the JSON into a value of
+type `ContractDefinition`, which is defined in `ContractDefinition.hs`. This
+contract is then preprocessed into a richer value of type called
+`ContractInfo`, which contains information on the instructions, storage
+variables, identifiers, etc.
+
+A mutable configuration record and the immutable `ContractInfo` data are
+carried around in an `Env` throughout the program, accessible from within a
+`ReaderT` stack.
+
+The implementation makes use of several eDSLs (embedded domain-specific
+languages), the most important of which is `GlobalL`, defined in `Global.hs`.
+Each DSL is separated into two source files: one containing functions written
+_in_ the DSL, like `Global.hs`, and one containing the implementation of the
+interpreter for the DSL, as well as a runner, like `Global/Runner.hs`. Each DSL
+contains a record type defining the 'instructions' that constitute the
+language, which is named something like `GlobalL`, where the `L` suffix stands
+for "Language".
+
+There is an `Impl` type defined in the `Runner.hs` file for each DSL, which is
+the monad stack in which the interpreter is run. For example, the `Impl` type
+for `GlobalL` looks like this:
+```haskell
+type Impl = ReaderT Env (ExceptT Text IO)
+```
+
+The DSLs are written in a continuation-passing style. For example, the
+constructor `GetConfig` within the `GlobalL` DSL looks like this:
+```haskell
+data GlobalF a
+  ...
+  | GetConfig (Config -> a)
+  ...
+```
+This constructor can be thought of as an "instruction" within the DSL, which,
+when run by the interpreter, returns a value of type `Config`. The reason why
+we see `(Config -> a)` is because `a` is the continuation of the "program"
+within the DSL, i.e. more instructions for the interpreter to process.
+
+The `Global` DSL, and in particular the `solveContract` routine within
+`Global.hs`, serves as the entrypoint to the rest of the program, and its
+runner is called from within `Main.hs`.
+
+Apart from `GlobalL`, there are several other sub-DSLs, which include:
+* `CFGBuildL` -- builds the control flow graph.
+* `ModuleL` -- constructs a list of `Module`s from the control flow graph.
+* `CairoSemanticsL` -- constructs the set of memory variables, assertions, etc.
+  for a given module.
+* `PreprocessorL` -- preprocesses and runs SMT queries.
+
+### Glossary
+
+* **contract** - a Starknet smart contract.
+* **control flow** - refers to things like `if-else` blocks, `while`, `for`,
+  function calls, etc.
+* **control flow graph** - consists of a list of labels, which are our
+  vertices, along with the code between these labels, which is represented as
+  edges between those vertices.
+* **label** - a construct within the Cairo language implementation that
+  identifies instructions which may be jumped-to.
+* **module** - a set of contiguous Cairo instructions between control flow
+  primitives. A function may contain multiple modules. For example, a function
+  with `if` branching will include a module for when the branching condition is
+  `True`, and another module for when it is `False`.
+* **SMT query** - a symbolic proposition which may be passed to an SMT solver,
+  which will attempt to prove it or give a counterexample.
