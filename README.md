@@ -632,7 +632,7 @@ Unsat
 > Note: The `cairo.lang.compiler.lib.registers.get_ap` appears here since we
 > have used the `new` keyword, and thus Horus must check its behavior in order
 > to verify the functions we wrote. You may similarly ignore the result for
-> `empty: ...`.
+> `empty: ...`, which indicates an empty segment.
 
 > Note: `main` and `_Stack.empty` appear here since Horus implicitly gives all
 > unannotated functions a trivial (always true) specification.
@@ -792,6 +792,8 @@ Horus also adds a trivial annotation (equivalent to `@pre True` and `@post
 True`) which is **always** verifiable to all unannotated functions, and so
 judgements for these will also be printed.
 
+An `empty: (...)` module and judgement is sometimes added to the output of a
+run. This indicates an empty segment.
 
 
 ## Usage
