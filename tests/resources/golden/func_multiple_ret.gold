@@ -1,8 +1,6 @@
 main
 Unsat
-succpred+T
+succpred
 Unsat
 succpred.add
-Unsat
-succpred+F
 Unsat

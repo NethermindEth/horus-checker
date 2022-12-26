@@ -20,7 +20,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, cons, intercalate, length)
+import Data.Text qualified as Text (concat, intercalate, length)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
@@ -91,10 +91,10 @@ descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
   if Map.null oracle
     then ""
-    else Text.cons '+' . Text.concat . map descrOfBool . Map.elems $ oracle
+    else (<>) "++" . Text.concat . map descrOfBool . Map.elems $ oracle
 
--- While we do have the name of the called function in Module, it does not contain
--- the rest of the labels.
+-- While we do have the name of the called function in Module, it does not
+-- contain the rest of the labels.
 nameOfModule :: Identifiers -> Module -> Text
 nameOfModule idents (Module spec prog oracle _ _) =
   case beginOfModule prog of

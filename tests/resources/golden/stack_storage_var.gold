@@ -10,11 +10,7 @@ cairo.common.hash.hash2
 Unsat
 cairo.common.math.assert_250_bit
 Unsat
-starknet.common.storage.normalize_address+TT
-Unsat
-starknet.common.storage.normalize_address+TF
-Unsat
-starknet.common.storage.normalize_address+F
+starknet.common.storage.normalize_address
 Unsat
 starknet.common.syscalls.storage_read
 Unsat
