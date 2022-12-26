@@ -2,7 +2,7 @@ f
 Unsat
 main
 Unsat
-main.loop+T
+main.loop++T
 Unsat
-main.loop+F
+main.loop++F
 Sat

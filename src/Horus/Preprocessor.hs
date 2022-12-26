@@ -117,12 +117,13 @@ interpConst model name = do
       mbValue
   runZ3 $ Z3.getInt value
 
-data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text)
+data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text) deriving (Eq)
 data Model = Model
   { m_regs :: Map Text Integer
   , m_mem :: Map Integer Integer
   , m_lvars :: Map LVar Integer
   }
+  deriving (Eq)
 
 instance Show SolverResult where
   show Unsat = "Unsat"

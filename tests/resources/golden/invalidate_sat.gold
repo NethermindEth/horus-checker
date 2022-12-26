@@ -2,7 +2,7 @@ id
 Unsat
 test1
 Unsat
-test1.lab+T
+test1.lab++T
 Unsat
-test1.lab+F
+test1.lab++F
 Sat
