@@ -22,6 +22,8 @@ Horus is a command-line formal verification tool for annotating
 verifying that they hold using one or more SMT (satisfiability modulo theory)
 solvers.
 
+> **Note.** Horus is currently in alpha, and thus should not be fully trusted yet!
+
 ### Our documentation
 
 * [**Installation**](#installation) - Get the `horus-compile` and
@@ -558,6 +560,8 @@ func main{output_ptr : felt*}() -> () {
   let (stack) = _Stack.lit(stack, 6);
   let (stack) = _Stack.add(stack);
   let (top) = _Stack.top(stack);
+
+  // @assert top == 11
   serialize_word(top);
   return ();
 }
@@ -569,9 +573,15 @@ function call**, when the function returns. It is called `@post` because it is
 a "postcondition".
 
 Briefly, we are asserting that:
-* The `add()` function returns a pointer to a stack with the sum of the first two elements on top, and the remainder of the original stack (the third element and so on) after that.
-* The `lit` function puts `i` on the top of the stack, and preserves the old stack underneath it.
-* The `top` function actually returns the top of the stack we pass as an argument.
+* The `add()` function returns a pointer to a stack with the sum of the first
+  two elements on top, and the remainder of the original stack (the third
+  element and so on) after that.
+* The `lit` function puts `i` on the top of the stack, and preserves the old
+  stack underneath it.
+* The `top` function actually returns the top of the stack we pass as an
+  argument.
+* The `top` value on the stack in `main()` is actually `11` (the sum of pushed
+  values `5` and `6`).
 
 As an example, let's examine the annotations for the `_Stack.add()` function:
 
@@ -667,7 +677,9 @@ The way it works is like this:
 
 Horus can be used to show the **absence** of bugs.
 
-
+> **Note.** Horus is currently in **alpha**, and thus should not be fully
+> trusted yet. Both Horus and SMT solvers may have bugs themselves, and so a
+> given judgement is never a "certainty".
 
 Horus consists of two command-line tools, called `horus-compile` and
 `horus-check`. The first, `horus-compile`, is a modified version of the Cairo
@@ -742,6 +754,10 @@ examples of things you can check about these values:
   * A storage variable is updated with a particular value
   * An invariant holds, e.g. in a loop
 
+Note that arithmetic operations are, in general, defined for finite field
+elements (felts) with respect to the obvious embedding of felts into the
+naturals ($[x] \mapsto x \in \mathbb{N}$).
+
 You can check these conditions hold at the start and end of a function call
 with `@pre` and `@post`, respectively, and also in the middle of a function
 body with `@invariant` and `@assert`.
@@ -763,7 +779,20 @@ func f{syscall_ptr: felt*}() -> (res: felt) {
 }
 ```
 
+#### How can I refer to the address of the contract itself in an annotation?
 
+You can use `get_contract_address()`. Here's an example:
+
+```cairo
+%lang starknet
+from starkware.starknet.common.syscalls import get_contract_address
+
+// @post $Return.res == get_contract_address()
+func f{syscall_ptr: felt*}() -> (res: felt) {
+    let (res) = get_contract_address();
+    return (res=res);
+}
+```
 
 #### How can I refer to the current block timestamp in an annotation?
 
@@ -1097,6 +1126,17 @@ not mentioned within it cannot be used after.
 > ```
 > In the above example, we assert that a local variable `i` (perhaps a loop
 > variable) is always less than or equal to 10.
+
+### `@assert`
+Introduces a boolean constraint at an arbitrary point in a function body.
+
+This works like an `assert` call in many popular programming languages.
+
+> **Example**
+> ```cairo
+> // @assert j >= 10
+> ```
+> In the above example, we assert that a local variable `j` is at least 10.
 
 ### Storage variable rules
 
