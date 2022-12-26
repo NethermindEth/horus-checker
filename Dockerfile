@@ -10,7 +10,7 @@ WORKDIR /home
 RUN curl -sSL https://get.haskellstack.org/ | sh
 
 # Install horus-checker
-COPY horus-checker/ horus-checker/
+COPY ./ horus-checker/
 RUN apt-get update \
     && apt-get install sudo \
     && sh horus-checker/scripts/ci/install-mathsat-linux.sh \
