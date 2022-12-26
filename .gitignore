@@ -7,3 +7,4 @@ tests/resources/golden/**.out
 tests/resources/*.bats
 tests/resources/golden/*.json
 tests/resources/golden/*.temp
+horus-compile/
