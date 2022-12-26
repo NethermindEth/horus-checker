@@ -1,4 +1,3 @@
-%builtins output
 from starkware.cairo.common.serialize import serialize_word
 
 struct Stack {
