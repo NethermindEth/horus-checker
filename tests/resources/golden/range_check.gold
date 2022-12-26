@@ -1,12 +1,6 @@
-max+T
-Unsat
-max+F
+max
 Unsat
 cairo.common.math_cmp.is_le
 Unsat
-cairo.common.math_cmp.is_nn+TT
-Unsat
-cairo.common.math_cmp.is_nn+TF
-Unsat
-cairo.common.math_cmp.is_nn+F
+cairo.common.math_cmp.is_nn
 Unsat
