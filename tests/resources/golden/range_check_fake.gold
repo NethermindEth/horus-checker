@@ -1,14 +1,10 @@
-max+T
+max++T
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
-max+F
+max++F
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
 cairo.common.math_cmp.is_le
 Unsat
-cairo.common.math_cmp.is_nn+TT
-Unsat
-cairo.common.math_cmp.is_nn+TF
-Unsat
-cairo.common.math_cmp.is_nn+F
+cairo.common.math_cmp.is_nn
 Unsat
