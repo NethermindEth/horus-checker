@@ -995,10 +995,10 @@ all of a function's annotations is sometimes referred to as its _specification_
 or _spec_. Here's an example:
 
 ```cairo
-// @post $Return.res == 3
-func example() -> (res):
-	return (3)
-end
+/ @post $Return.res == 3
+func example() -> (res: felt) {
+	return (3,);
+}
 ```
 
 The annotation in the example above is the line:
@@ -1018,7 +1018,7 @@ variables](#declare), boolean expressions, and implications:
 * `a`, `$a` cairo references and logical variables can be used by name
 * `$Return.a` the special logical variable `$Return` is defined to contain the values returned from the function
 * `a+b`, `a==b`, arithmetic operations and comparisons are supported for felts as in Cairo
-* `a==b or c==d`, `a==b and c==d`, `! a==b`, `a==b -> c==d` (disjunctions, conjunctions, negations, and implications)
+* `a==b or c==d`, `a==b and c==d`, `not a==b`, `a==b -> c==d` (disjunctions, conjunctions, negations, and implications)
 * `True`, `False` are defined as keywords
 
 ### Annotation types
@@ -1130,7 +1130,8 @@ not mentioned within it cannot be used after.
 ### `@assert`
 Introduces a boolean constraint at an arbitrary point in a function body.
 
-This works like an `assert` call in many popular programming languages.
+You write a boolean expression after `@assert`, and Horus will try to prove
+that the expression will always evaluate to `True`.
 
 > **Example**
 > ```cairo
@@ -1213,8 +1214,8 @@ Apart from `GlobalL`, there are several other sub-DSLs, which include:
 ### Glossary
 
 * **contract** - a Starknet smart contract.
-* **control flow** - refers to things like `if-else` blocks, `while`, `for`,
-  function calls, etc.
+* **control flow** - refers to things like `if-else` blocks, loops, function
+  calls, etc.
 * **control flow graph** - consists of a list of labels, which are our
   vertices, along with the code between these labels, which is represented as
   edges between those vertices.
