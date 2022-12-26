@@ -14,7 +14,8 @@ COPY ./ horus-checker/
 RUN apt-get update \
     && apt-get install sudo \
     && sh horus-checker/scripts/ci/install-mathsat-linux.sh \
-    && sh horus-checker/scripts/ci/install-z3-linux.sh
+    && sh horus-checker/scripts/ci/install-z3-linux.sh \
+    && sh horus-checker/scripts/ci/install-cvc5-linux.sh
 RUN cd horus-checker/ \
     && stack install --local-bin-path /usr/local/bin/
 
