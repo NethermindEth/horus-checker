@@ -39,96 +39,13 @@ solvers.
   way they are, and discuss details relevant to the development of Horus. This
   is prose to aid contributors and onboard new team members.
 
-## Quick installation using Docker
-
-#### 1. Clone repositories
-
-Clone the `horus-compile` and `horus-checker` repositories to your machine.
-
-```console
-git clone git@github.com:NethermindEth/horus-compile.git
-git clone git@github.com:NethermindEth/horus-checker.git
-```
-
-#### 2. Put `Dockerfile` in place
-
-```console
-cp horus-checker/Dockerfile .
-```
-
-If you execute `ls` you should see the following output:
-
-```console
-Dockerfile  horus-checker/  horus-compile/
-```
-
-#### 3. Build docker image
-
-```console
-docker build . -t horus
-```
-
-This process might take several minutes. 
-At the end you should see a message like this:
-
-```console
-Successfully built e48336cb10ae
-Successfully tagged horus:latest
-```
-
-#### 4. Create your project directory (or go to an existing project directory)
-
-Example (create a project directory using an existing test file)
-```console
-mkdir my-cairo-project/
-cp horus-checker/tests/resources/golden/balance_storage_var.cairo my-cairo-project/
-```
-
-#### 5. Start docker container with access to your project directory
-```console
-docker run -v $(pwd)/my-cairo-project/:/home/ -it horus:latest /bin/bash
-```
-
-You should now have access to a terminal inside the docker container. This container
-has read and write access to all the files in `my-cairo-project/`.
-
-#### 6. Check `horus-compile` and `horus-check` installation.
-
-Inside the docker container execute:
-
-```console
-horus-compile --help
-```
-
-```console
-horus-check --help
-```
-
-#### 7. Run `horus` over your annotated cairo program.
-
-Inside the docker container execute:
-
-```console
-horus-compile balance_storage_var.cairo > balance_storage_var.json
-horus-check balance_storage_var.json -s z3 -s mathsat
-```
-
-You should get the following output:
-
-```console 
-get_balance
-Unsat
-increase_balance
-Unsat
-starknet.common.syscalls.storage_read
-Unsat
-starknet.common.syscalls.storage_write
-Unsat
-```
-
-## Manual installation
+## Installation
 
 Horus is supported on Linux and MacOS (including AArch64 Macs)!
+
+We also have instructions for [installing with
+Docker](#quick-installation-with-docker) if you want to run Horus in a
+container.
 
 ### Prerequisites
 
@@ -284,15 +201,71 @@ CFLAGS=-I`brew --prefix gmp`/include LDFLAGS=-L`brew --prefix gmp`/lib pip insta
 
 Navigate to the `horus-checker` repository root and run:
 ```console
-stack build
+stack install
 ```
+
+> **Note.** Stack installs executables to `~/.local/bin` by default. Make sure
+> this directory is on your `PATH` or pass a different install directory with
+> `stack install --local-bin-path <dir>`.
 
 You can check that the install was successful with:
 ```console
-stack exec check -- --help
+horus-check --help
 ```
 
-If the above command was executed without error, then you are finished with the initial setup and are now ready to work with Horus!
+If the above command executed without error, you are ready to use Horus!
+
+### Quick installation using Docker
+
+Follow these instructions if you prefer to install Horus in a docker container.
+Refer to the [Docker documentation](https://docs.docker.com/) for more
+information on working with containers.
+
+#### 1. Clone repositories
+
+Clone the `horus-compile` and `horus-checker` repositories to your machine.
+
+```console
+git clone git@github.com:NethermindEth/horus-checker.git
+cd horus-checker
+git clone git@github.com:NethermindEth/horus-compile.git
+```
+
+#### 2. Build docker image
+
+```console
+docker build . -t horus
+```
+
+This process might take several minutes.
+At the end you should see a message like this:
+
+```console
+Successfully built e48336cb10ae
+Successfully tagged horus:latest
+```
+
+#### 3. Start docker container
+```console
+docker run -it horus:latest /bin/bash
+```
+
+You should now have access to a root shell inside the docker container.
+
+#### 4. Check `horus-compile` and `horus-check` installation.
+
+Inside the docker container, run the following commands:
+
+```console
+horus-compile --help
+```
+
+```console
+horus-check --help
+```
+
+If these commands execute without error, you're ready to use Horus!
+
 
 <br>
 
