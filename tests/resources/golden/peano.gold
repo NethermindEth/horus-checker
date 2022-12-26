@@ -1,8 +1,6 @@
 dec
 Unsat
-peano_sum+T
-Unsat
-peano_sum+F
+peano_sum
 Unsat
 succ
 Unsat

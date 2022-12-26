@@ -15,10 +15,11 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
+import Data.List (groupBy, sort)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Text (Text, unpack)
-import Data.Text as Text (splitOn)
+import Data.Text qualified as Text (isPrefixOf, splitOn)
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
@@ -37,7 +38,7 @@ import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
+import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (p_prime))
@@ -110,8 +111,8 @@ getConfig = liftF' (GetConfig id)
 getFuncSpec :: ScopedFunction -> GlobalL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
 
-getInlinable :: GlobalL (Set ScopedFunction)
-getInlinable = liftF' (GetInlinable id)
+getInlinables :: GlobalL (Set ScopedFunction)
+getInlinables = liftF' (GetInlinable id)
 
 getLabelledInstructions :: GlobalL [LabeledInst]
 getLabelledInstructions = liftF' (GetLabelledInstrs id)
@@ -159,16 +160,53 @@ extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (e
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
+  , si_funcName :: Text
   , si_result :: SolverResult
   }
+  deriving (Eq)
+
+{- | Define an ordering on `SolvingInfo`s to group modules from the same function.
+
+ This is only necessary for cases like `func_multiple_ret.cairo`, where without
+ sorting, we get two results whose name is `succpred`, but since they are
+ separated by a function with a different name (`succpred.add`), they are not
+ grouped, and so we get what looks like a "duplicate" result:
+
+  main
+  Unsat
+  +
+  +succpred
+  +Unsat
+  +
+  succpred.add
+  Unsat
+  +
+  succpred
+  Unsat
+
+ To fix this issue, we sort by `si_funcName` only in the case where one
+ function name is a prefix of the other. This leaves the output order the same
+ as the order in which the functions appear in the source code in all cases
+ except when there is a potential duplication as in the above.
+-}
+instance Ord SolvingInfo where
+  (SolvingInfo _ funcNameA _) <= (SolvingInfo _ funcNameB _) =
+    not (Text.isPrefixOf funcNameA funcNameB || Text.isPrefixOf funcNameB funcNameA) || funcNameA <= funcNameB
+
+getModuleFuncName :: Identifiers -> Module -> Text
+getModuleFuncName identifiers m =
+  case Text.splitOn "++" (nameOfModule identifiers m) of
+    (name : _) -> name
+    [] -> ""
 
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   checkMathsat m
   identifiers <- getIdentifiers
   let moduleName = nameOfModule identifiers m
+      funcName = getModuleFuncName identifiers m
   result <- mkResult moduleName
-  pure SolvingInfo{si_moduleName = moduleName, si_result = result}
+  pure SolvingInfo{si_moduleName = moduleName, si_funcName = funcName, si_result = result}
  where
   mkResult moduleName = printingErrors $ do
     constraints <- extractConstraints m
@@ -239,10 +277,25 @@ solveSMT cs = do
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
+{- |  Collapse a list of modules for the same function if they are all `Unsat`.
+
+ Given a list of `SolvingInfo`s, each associated with a module, under the
+ assumption that they all have the same `si_funcName`, if they are all `Unsat`,
+ we collapse them into a singleton list of one `SolvingInfo`, where we
+ hot-patch the `moduleName`, replacing it with the `funcName`. Otherwise, we
+ leave the input invariant.
+-}
+collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
+collapseAllUnsats [] = []
+collapseAllUnsats infos@((SolvingInfo _ funcName result) : _) =
+  if all ((== Unsat) . si_result) infos
+    then [SolvingInfo funcName funcName result]
+    else infos
+
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   lInstructions <- getLabelledInstructions
-  inlinables <- getInlinable
+  inlinables <- getInlinables
   cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
 
   -- For every inlinable function `f`, build the CFG for all functions excluding `f`.
@@ -250,15 +303,18 @@ solveContract = do
   cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
   for_ cfgs verbosePrint
   modules <- concat <$> for ((cfg, isStandardSource inlinables) : zip cfgs (map (==) fs)) makeModules
+
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
-      isUntrusted m =
-        case Text.splitOn "+" (nameOfModule identifiers m) of
-          [] -> True
-          (name : _) -> name `notElem` trustedStdFuncs
-   in for (filter isUntrusted modules) solveModule
+      isUntrusted = (`notElem` trustedStdFuncs) . getModuleFuncName identifiers
+  infos <- for (filter isUntrusted modules) solveModule
+  pure $ (concatMap collapseAllUnsats . groupBy sameFuncName . sort) infos
  where
+  isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
+
+  sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
+  sameFuncName (SolvingInfo _ nameA _) (SolvingInfo _ nameB _) = nameA == nameB
 
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =

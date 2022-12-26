@@ -1,8 +1,6 @@
 gauss
 Unsat
-gauss.loop+T
-Unsat
-gauss.loop+F
+gauss.loop
 Unsat
 main
 Unsat
