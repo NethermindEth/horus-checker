@@ -161,6 +161,7 @@ cd horus-checker/
 # Inside the `horus-checker/` repository root.
 sh ./scripts/ci/install-z3-linux.sh
 sh ./scripts/ci/install-mathsat-linux.sh
+sh ./scripts/ci/install-cvc5-linux.sh
 ```
 
 ###### On macOS:
@@ -168,6 +169,15 @@ sh ./scripts/ci/install-mathsat-linux.sh
 # Inside the `horus-checker/` repository root.
 sh ./scripts/ci/install-z3-macos.sh
 sh ./scripts/ci/install-mathsat-macos.sh
+sh ./scripts/ci/install-cvc5-macos.sh
+```
+
+###### On macOS (`aarch64`):
+```console
+# Inside the `horus-checker/` repository root.
+sh ./scripts/ci/install-z3-macos.sh
+sh ./scripts/ci/install-mathsat-macos.sh
+sh ./scripts/ci/install-cvc5-macos-aarch64.sh
 ```
 
 ### Create a python virtual environment
