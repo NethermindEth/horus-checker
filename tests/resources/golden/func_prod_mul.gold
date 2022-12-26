@@ -4,7 +4,5 @@ mul
 Unsat
 prod
 Unsat
-prod.loop+T
-Unsat
-prod.loop+F
+prod.loop
 Unsat
