@@ -1,14 +1,20 @@
 _Stack.add
-Unsat
+Verified
+
 _Stack.lit
-Unsat
+Verified
+
 _Stack.top
-Unsat
+Verified
+
 main_
-Unsat
+Verified
+
 cairo.lang.compiler.lib.registers.get_ap
-Unsat
+Verified
+
 empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))
-Unsat
+Verified
+
 _Stack.empty
-Unsat
+Verified
