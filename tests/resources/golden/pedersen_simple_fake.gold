@@ -1,4 +1,5 @@
 apply_pedersen
-Unsat
+Verified
+
 main
-Sat
+False

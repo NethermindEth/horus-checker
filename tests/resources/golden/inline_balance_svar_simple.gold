@@ -1,8 +1,11 @@
 main
-Sat
+False
+
 starknet.common.syscalls.storage_read
-Unsat
+Verified
+
 starknet.common.syscalls.storage_write
-Unsat
+Verified
+
 f
-Unsat
+Verified

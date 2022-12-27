@@ -126,8 +126,8 @@ data Model = Model
   deriving (Eq)
 
 instance Show SolverResult where
-  show Unsat = "Unsat"
-  show (Sat mbModel) = "Sat" <> maybe "" (\m -> "\n" <> show m) mbModel
+  show Unsat = "Verified"
+  show (Sat mbModel) = "False" <> maybe "" (\m -> "\n" <> show m) mbModel
   show (Unknown reason) = "Unknown" <> maybe "" (\r -> "\n" <> unpack r) reason
 
 instance Show Model where

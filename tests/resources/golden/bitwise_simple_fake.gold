@@ -1,4 +1,5 @@
 apply_bitwise
-Unsat
+Verified
+
 main
-Sat
+False
