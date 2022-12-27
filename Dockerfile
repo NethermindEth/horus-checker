@@ -1,8 +1,3 @@
-# To build this image, Dockerfile needs to be place in
-# the same directory as horus-checker/ and horus-compile/ directories.
-# i.e.: ls command should output:
-# Dockerfile horus-checker/ horus-compile/
-
 FROM python:3.7-bullseye
 
 WORKDIR /home
