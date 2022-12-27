@@ -1,6 +1,8 @@
 max
-Unsat
+Verified
+
 cairo.common.math_cmp.is_le
-Unsat
+Verified
+
 cairo.common.math_cmp.is_nn
-Unsat
+Verified

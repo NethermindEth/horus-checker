@@ -1,8 +1,11 @@
 f
-Unsat
+Verified
+
 main
-Unsat
+Verified
+
 main.loop++T
-Unsat
+Verified
+
 main.loop++F
-Sat
+False
