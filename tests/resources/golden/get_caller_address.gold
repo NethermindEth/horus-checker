@@ -1,6 +1,8 @@
 test_invalid_1
-Sat
+False
+
 test_invalid_2
-Sat
+False
+
 test_valid
-Unsat
+Verified
