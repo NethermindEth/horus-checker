@@ -44,7 +44,7 @@ solvers.
 Horus is supported on Linux and MacOS (including AArch64 Macs)!
 
 We also have instructions for [installing with
-Docker](#quick-installation-with-docker) if you want to run Horus in a
+Docker](#quick-installation-using-docker) if you want to run Horus in a
 container.
 
 ### Prerequisites
@@ -255,14 +255,33 @@ Successfully built e48336cb10ae
 Successfully tagged horus:latest
 ```
 
-#### 3. Start docker container
+#### 3. Prepare a project directory
+
+To access files on the host (your machine) from inside a docker container, you
+must mount some extant directory. This makes the directory readable and
+writable from both the host and the container.
+
+Here, we'll create an example project directory named `my-cairo-project` for
+this purpose.
 ```console
-docker run -it horus:latest /bin/bash
+mkdir my-cairo-project/
 ```
 
-You should now have access to a root shell inside the docker container.
+See the docker documentation section on [bind
+mounts](https://docs.docker.com/storage/bind-mounts/) for more information.
 
-#### 4. Check `horus-compile` and `horus-check` installation.
+#### 4. Start docker container
+
+The following command will:
+1. Run the container
+2. Mount the directory `my-cairo-project/` on your filesystem to the location
+   `/home/` on the container's filesystem
+3. Drop you into a root shell inside the container
+```console
+docker run -v $(pwd)/my-cairo-project/:/home/ -it horus:latest /bin/bash
+```
+
+#### 5. Check `horus-compile` and `horus-check` installation.
 
 Inside the docker container, run the following commands:
 
