@@ -1,8 +1,11 @@
 stupid_is_zero
-Unsat
+Verified
+
 cairo.common.math.assert_le
-Unsat
+Verified
+
 cairo.common.math.assert_nn
-Unsat
+Verified
+
 cairo.common.math.unsigned_div_rem
-Unsat
+Verified
