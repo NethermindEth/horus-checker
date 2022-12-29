@@ -4,7 +4,7 @@ set -eu
 
 version="4.10.2"
 
-sudo apt-get remove libz3-dev
+sudo apt-get remove -y libz3-dev
 TEMP=$(mktemp)
 curl -L -o "${TEMP}" https://github.com/Z3Prover/z3/releases/download/z3-$version/z3-$version-x64-glibc-2.31.zip
 unzip "${TEMP}"
