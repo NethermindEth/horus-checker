@@ -244,7 +244,7 @@ git clone git@github.com:NethermindEth/horus-compile.git
 #### 2. Build docker image
 
 ```console
-docker build . -t horus
+sudo docker build . -t horus
 ```
 
 This process might take several minutes.
@@ -278,7 +278,7 @@ The following command will:
    `/home/` on the container's filesystem
 3. Drop you into a root shell inside the container
 ```console
-docker run -v $(pwd)/my-cairo-project/:/home/ -it horus:latest /bin/bash
+sudo docker run -v $(pwd)/my-cairo-project/:/home/ -it horus:latest /bin/bash
 ```
 
 #### 5. Check `horus-compile` and `horus-check` installation.
