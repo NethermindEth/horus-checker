@@ -708,25 +708,25 @@ horus-check --solver z3 compiled.json
 <sub>Expected output:</sub>
 ```
 _Stack.add
-Unsat
+Verified
 
 _Stack.empty
-Unsat
+Verified
 
 _Stack.lit
-Unsat
+Verified
 
 _Stack.top
-Unsat
+Verified
 
 main
-Unsat
+Verified
 
 cairo.lang.compiler.lib.registers.get_ap
-Unsat
+Verified
 
 empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))
-Unsat
+Verified
 ```
 
 > Note: The `cairo.lang.compiler.lib.registers.get_ap` appears here since we
@@ -737,10 +737,9 @@ Unsat
 > Note: `main` and `_Stack.empty` appear here since Horus implicitly gives all
 > unannotated functions a trivial (always true) specification.
 
-The judgement `Unsat` means verified! The three functions `_Stack.add`,
-`_Stack.lit`, and `_Stack.top` that we annotated all say `Unsat`, which means
-our implementations are correct with respect to the specifications we wrote in
-our annotations.
+The three functions `_Stack.add`, `_Stack.lit`, and `_Stack.top` that we
+annotated all say `Verified`, which means our implementations are correct with
+respect to the specifications we wrote in our annotations.
 
 Congrats! You've just formally verified your first Cairo program!
 
