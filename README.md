@@ -852,6 +852,22 @@ with `@pre` and `@post`, respectively, and also in the middle of a function
 body with `@invariant` and `@assert`.
 
 
+#### What SMT solvers are available?
+
+The `-s`/`--solver` flag is used to tell Horus which SMT solver to use.
+
+> **Example**
+> ```console
+> horus-check -s cvc5 program.json
+> ```
+> In the above example, we use the solver named `cvc5`.
+
+Horus supports the following solvers:
+* `cvc5`
+* `mathsat`
+* `z3`
+
+
 #### How can I refer to return values in an annotation?
 
 You can use the `$Return` syntax to refer to elements of the return tuple by
