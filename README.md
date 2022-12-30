@@ -868,7 +868,6 @@ func f() -> (a: felt, b: felt) {
 }
 ```
 
-
 #### How can I refer to the address of the caller in an annotation?
 
 You can use `get_caller_address()`. Here's an example:
@@ -934,9 +933,9 @@ run. This indicates an empty segment.
 
 One common reason this happens is contradictions in the `@pre` condition. If
 you have constraints that cannot ever be true, i.e. are impossible, and you ask
-Horus, 'if you assume my `@pre` conditions, are my `@post` conditions always
-true?', what you are asking is really, 'if you assume an impossible situation,
-are my `@post` conditions always true?'
+Horus, _"if you assume my `@pre` conditions, are my `@post` conditions always
+true?"_, what you are asking is really, _"if you assume an impossible situation,
+are my `@post` conditions always true?"_
 
 In first-order logic, anything can be proved, i.e. anything is possible, if you
 start from an impossible state.
@@ -952,8 +951,8 @@ func f() -> (a: felt) {
 The above program has a postcondition which is obviously `False`, since we
 return a literal `a=0`, and we assert that `$Return.a == 1`. *However*, since
 the `@pre` condition assumes `9 == 10`, which is impossible, we will get
-`Verified`, because we are asking Horus to prove that 'if `9 == 10`, does `f`
-return `a=1`?', and this is indeed true in a vacuous sort of way, because it
+`Verified`, because we are asking Horus to prove that _"if `9 == 10`, does `f`
+return `a=1`?"_, and this is indeed true in a vacuous sort of way, because it
 will never be the case that `9 == 10`.
 
 
@@ -969,7 +968,7 @@ func f(x: felt) -> (a: felt) {
 We may expect to get `False` for the above, since, obviously, `x` is not always
 going to be `2`, in general. However, Horus will tell us that `f` has judgement
 `Verified`. This is because what Horus checks is that **if** `x == 2`, **then**
-the function returns `a=1`. It never checks **whether** `x == 2`, it only
+the function returns `a=1`. It never checks **whether** `x == 2`. It only
 **assumes** `x == 2` to then check other things.
 
 Instead, we only get a failure when we **call** `f` from some other place where
