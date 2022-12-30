@@ -305,6 +305,9 @@ implements a stack data structure in Cairo. If you're unfamiliar with Cairo, or
 you need a refresher, check out the
 [documentation](https://www.cairo-lang.org/docs/).
 
+To follow along, the full example program without annotations is provided in
+[`example.cairo`](https://github.com/NethermindEth/horus-checker/blob/langfield/documentation/example.cairo).
+
 #### Define a struct called `Stack`
 
 Let's define a [`struct`](https://www.cairo-lang.org/docs/reference/syntax.html#structs)
@@ -486,9 +489,7 @@ Great! Now we'll just add a short `main()` function to test that our stack
 functions as we expect.
 
 ```cairo
-// Declare that our program will produce output, and import a function to
-// perform this IO.
-%builtins output
+// Import a function to perform output.
 from starkware.cairo.common.serialize import serialize_word
 
 struct Stack {
@@ -852,6 +853,21 @@ with `@pre` and `@post`, respectively, and also in the middle of a function
 body with `@invariant` and `@assert`.
 
 
+#### How can I refer to return values in an annotation?
+
+You can use the `$Return` syntax to refer to elements of the return tuple by
+name. This can only be done in a postcondition, i.e. a `@post` annotation. The
+names must be declared in the type signature of the function, after the `->`
+notation. Example:
+
+```cairo
+// @post $Return.a == 1
+// @post $Return.b == 2
+func f() -> (a: felt, b: felt) {
+    return (a=1, b=2);
+}
+```
+
 
 #### How can I refer to the address of the caller in an annotation?
 
@@ -913,6 +929,79 @@ judgements for these will also be printed.
 An `empty: (...)` module and judgement is sometimes added to the output of a
 run. This indicates an empty segment.
 
+
+#### Why am I getting `Verified` when I expect `False`?
+
+One common reason this happens is contradictions in the `@pre` condition. If
+you have constraints that cannot ever be true, i.e. are impossible, and you ask
+Horus, 'if you assume my `@pre` conditions, are my `@post` conditions always
+true?', what you are asking is really, 'if you assume an impossible situation,
+are my `@post` conditions always true?'
+
+In first-order logic, anything can be proved, i.e. anything is possible, if you
+start from an impossible state.
+
+As an example:
+```cairo
+// @pre 9 == 10
+// @post $Return.a == 1
+func f() -> (a: felt) {
+  return (a=0);
+}
+```
+The above program has a postcondition which is obviously `False`, since we
+return a literal `a=0`, and we assert that `$Return.a == 1`. *However*, since
+the `@pre` condition assumes `9 == 10`, which is impossible, we will get
+`Verified`, because we are asking Horus to prove that 'if `9 == 10`, does `f`
+return `a=1`?', and this is indeed true in a vacuous sort of way, because it
+will never be the case that `9 == 10`.
+
+
+More generally, you may also expect `False` when you use a `@pre` condition
+which is obviously not always satisfied. For example:
+```cairo
+// @pre x == 2
+// @post $Return.a == 1
+func f(x: felt) -> (a: felt) {
+  return (a=1);
+}
+```
+We may expect to get `False` for the above, since, obviously, `x` is not always
+going to be `2`, in general. However, Horus will tell us that `f` has judgement
+`Verified`. This is because what Horus checks is that **if** `x == 2`, **then**
+the function returns `a=1`. It never checks **whether** `x == 2`, it only
+**assumes** `x == 2` to then check other things.
+
+Instead, we only get a failure when we **call** `f` from some other place where
+Horus is unable to prove that `x` is always `2`. For example:
+```cairo
+// @pre x == 2
+// @post $Return.a == 1
+func f(x: felt) -> (a: felt) {
+  return (a=1);
+}
+
+// @pre x > 0
+func g(x: felt) -> (b: felt) {
+  let (b,) = f(x);
+  return (b=b);
+}
+```
+When we run Horus on the above program, we get:
+```console
+user@computer:~/pkgs/horus-checker$ horus-check -s cvc5 a.json
+f
+Verified
+
+g
+False
+
+```
+So we see that the `False` is given for the caller `g`, and not `f`, since in
+order for the call to `f` to satisfy `f`'s precondition, we must have that `x
+== 2`, but all we know is that `x > 0`, from the precondition of `g`. So it is
+easy for Horus to find a counterexample that breaks our specification. In
+particular, we could pick `x == 1`.
 
 ## Usage
 
