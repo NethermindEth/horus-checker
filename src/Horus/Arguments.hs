@@ -54,7 +54,7 @@ singleSolverParser =
     )
 
 multiSolverParser :: Parser MultiSolver
-multiSolverParser = MultiSolver <$> some singleSolverParser
+multiSolverParser = MultiSolver <$> (some singleSolverParser <|> pure [cvc5])
 
 argParser :: Parser Arguments
 argParser =
