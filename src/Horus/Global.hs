@@ -8,6 +8,7 @@ module Horus.Global
   , logInfo
   , logError
   , logWarning
+  , SolverResult (..)
   )
 where
 
