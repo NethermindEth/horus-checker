@@ -35,11 +35,12 @@ singleSolverReader = eitherReader $ \s -> case lookup s singleSolverOptions of
   Just solver -> pure solver
   _ ->
     throwError
-      ( "Incorrect solver: "
+      ( "Invalid solver name: '"
           <> s
-          <> ". Available options are "
-          <> intercalate ", " singleSolverNames
-          <> "."
+          <> "'.\n"
+          <> "Available options are '"
+          <> intercalate "', '" singleSolverNames
+          <> "'."
       )
 
 singleSolverParser :: Parser SingleSolver
