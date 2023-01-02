@@ -692,6 +692,10 @@ Here's what's going on:
   values, and we can use arithmetic operators like `+` in annotations for
   supported datatypes. See the section on [spec syntax](#spec-syntax) for more
   info on what operators and symbols are supported.
+* It is notable that we **cannot reference locals** within preconditions or
+  postconditions. So if we tried to say `@pre x == 0` for the `add` function,
+  the compiler would print an error message telling us it cannot find the
+  identifier `x`.
 
 Let's compile this annotated program with Horus and then check these properties:
 ```console
@@ -1017,6 +1021,35 @@ order for the call to `f` to satisfy `f`'s precondition, we must have that `x
 easy for Horus to find a counterexample that breaks our specification. In
 particular, we could pick `x == 1`.
 
+#### Why am I seeing `Cannot obtain identifier "y". Expected a reference but got "future"`?
+
+You may see this error message when you try to reference a variable that is
+out-of-scope in an annotation.
+
+Consider the following program:
+```cairo
+// @pre y == 3
+// @post $Return.a == 1
+func f(x: felt) -> (a: felt) {
+    let y = 4;
+    return (a=x + 2);
+}
+```
+
+When we compile this, we see:
+
+```console
+(horus37) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo > a.json
+contra.cairo:1:6: Cannot obtain identifier "y". Expected a reference but got "future"
+@pre y == 3
+     ^
+```
+
+This is becuase `y` is a local variable. It is not present in the function's
+type signature, it is defined _within_ the function body. We see this error
+because **local variables cannot be referenced in preconditions or
+postconditions**.
+
 ## Usage
 
 Horus consists of two command-line tools, `horus-compile` and `horus-check`.
@@ -1222,6 +1255,7 @@ Specifies conditions that must be true when the function returns. The name
 No claim is made about whether the function completes or reverts. We only
 assert that _if it completes_, then the postcondition holds.
 
+
 > **Example**
 > ```cairo
 > // @post $Return.res < 100 && $Return.res >= 50
@@ -1230,11 +1264,14 @@ assert that _if it completes_, then the postcondition holds.
 > function (not pictured here) is less than 100 and greater than or equal to
 > 50.
 
+Local variables cannot be referenced in postconditions.
+
 ### `@pre`
 Specifies conditions that must be true immediately before a function is called.
 The name `pre` is short for "precondition". This annotation type allows us to:
 * Place constraints on the values of function parameters
 * Assign values to [logical variables](#declare)
+
 
 > **Example**
 > ```cairo
@@ -1242,6 +1279,8 @@ The name `pre` is short for "precondition". This annotation type allows us to:
 > ```
 > The annotation above asserts that the function parameter with name `flag`
 > satisfies the equation $x(x - 1) = 0$, which implies that $x = 0$ or $x = 1$.
+
+Local variables cannot be referenced in preconditions.
 
 ### `@declare`
 Allows the introduction of logical variables.
