@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+compare() {
+    gold_file="$1"
+    temp_file="$2"
+    ansii="\x1B\[[0-9;]\{1,\}[A-Za-z]"
+    sed -i "/^hint:/d" $temp_file
+    sed -i "/^$ansii[h]int:/d" $temp_file
+    diff "$gold_file" "$temp_file" \
+         --unified \
+         --ignore-trailing-space \
+         --ignore-blank-lines \
+         --new-file # treat absent files as empty
+    rm "$temp_file"
+}
+
 test_case() {
     base="$1"
     test_file="${base}.cairo"
@@ -10,69 +24,22 @@ test_case() {
 
     horus-compile "$test_file" > "$compiled_file"
     stack run horus-check "$compiled_file" -- -s cvc5 -s mathsat -s z3 -t 100000 &> "$temp_file" || true
-    diff "$gold_file" "$temp_file" \
-         --unified \
-         --ignore-trailing-space \
-         --ignore-blank-lines \
-         --new-file # treat absent files as empty
+    compare "${gold_file}" "${temp_file}"
     rm "$compiled_file"
-    rm "$temp_file"
     rm "$base.out" -rf
 }
 
-test_case_z3() {
+single_solver_test_case() {
     base="$1"
+    solver="$2"
     test_file="${base}.cairo"
     gold_file="${base}.gold"
-    compiled_file="${base}.z3.json"
-    temp_file="${base}.z3.temp"
+    compiled_file="${base}.${solver}.json"
+    temp_file="${base}.${solver}.temp"
 
     horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s z3 -t 360000 &> "$temp_file" || true
-    diff "$gold_file" "$temp_file" \
-         --unified \
-         --ignore-trailing-space \
-         --ignore-blank-lines \
-         --new-file # treat absent files as empty
+    stack run horus-check "$compiled_file" -- -s ${solver} -t 360000 &> "$temp_file" || true
+    compare "${gold_file}" "${temp_file}"
     rm "$compiled_file"
-    rm "$temp_file"
-    rm "$base.out" -rf
-}
-
-test_case_mathsat() {
-    base="$1"
-    test_file="${base}.cairo"
-    gold_file="${base}.gold"
-    compiled_file="${base}.mathsat.json"
-    temp_file="${base}.mathsat.temp"
-
-    horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s mathsat -t 360000 &> "$temp_file" || true
-    diff "$gold_file" "$temp_file" \
-         --unified \
-         --ignore-trailing-space \
-         --ignore-blank-lines \
-         --new-file # treat absent files as empty
-    rm "$compiled_file"
-    rm "$temp_file"
-    rm "$base.out" -rf
-}
-
-test_case_cvc5() {
-    base="$1"
-    test_file="${base}.cairo"
-    gold_file="${base}.gold"
-    compiled_file="${base}.cvc5.json"
-    temp_file="${base}.cvc5.temp"
-
-    horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s cvc5 -t 360000 &> "$temp_file" || true
-    diff "$gold_file" "$temp_file" \
-         --unified \
-         --ignore-trailing-space \
-         --ignore-blank-lines \
-         --new-file # treat absent files as empty
-    rm "$compiled_file"
-    rm "$temp_file"
     rm "$base.out" -rf
 }
