@@ -15,8 +15,9 @@ import Options.Applicative
   , header
   , helper
   , info
-  , progDesc
+  , progDescDoc
   )
+import Options.Applicative.Help.Pretty (text)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdSpecs)
@@ -57,10 +58,17 @@ main = do
     info
       (argParser <**> helper)
       ( fullDesc
-          <> progDesc
-            ( "Verifies "
-                <> unpack fileArgument
-                <> " (a contract compiled with horus-compile)"
+          <> progDescDoc
+            ( Just $
+                text "Verifies "
+                  <> text (unpack fileArgument)
+                  <> text " (a contract compiled with horus-compile)\n\n"
+                  <> text "Example using solver cvc5 (default):\n"
+                  <> text "  $ horus-check a.json\n\n"
+                  <> text "Example using solver mathsat:\n"
+                  <> text "  $ horus-check -s mathsat a.json\n\n"
+                  <> text "Example using solvers z3, mathsat:\n"
+                  <> text "  $ horus-check -s z3 -s mathsat a.json\n"
             )
           <> header "horus-check: SMT-based checker for Cairo language"
       )
