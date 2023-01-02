@@ -53,6 +53,6 @@ jobs:
 
       - name: Test
         run: |
-          bash ./tests/entrypoint-profiling.sh
+          bash ./tests/profiling-entrypoint.sh
           echo "-----Profiling results-----"
           python3 ./scripts/ci/test_data_extraction.py
