@@ -11,9 +11,8 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
-import Data.Functor ((<&>))
 import Data.Maybe (fromMaybe)
-import Data.Set (Set, difference, singleton, toAscList)
+import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Text (Text, unpack)
 import Data.Text as Text (splitOn)
 import Data.Traversable (for)
@@ -24,7 +23,6 @@ import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
-  , ExecutionState
   , MemoryVariable (..)
   , debugFriendlyModel
   , makeModel
@@ -54,7 +52,7 @@ data Config = Config
 
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
-  | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ExecutionState -> a)
+  | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ConstraintsState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
   | GetCallee LabeledInst (ScopedFunction -> a)
@@ -84,7 +82,7 @@ liftF' = GlobalL . liftF
 runCFGBuildL :: CFGBuildL a -> GlobalL CFG
 runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 
-runCairoSemanticsL :: CallStack -> CairoSemanticsL a -> GlobalL ExecutionState
+runCairoSemanticsL :: CallStack -> CairoSemanticsL a -> GlobalL ConstraintsState
 runCairoSemanticsL initStack smt2Builder = liftF' (RunCairoSemanticsL initStack smt2Builder id)
 
 runModuleL :: ModuleL a -> GlobalL [Module]
@@ -135,15 +133,13 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalL ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeModules :: (ScopedFunction -> Bool) -> CFG -> GlobalL [Module]
-makeModules allow cfg =
+makeModules :: (CFG, ScopedFunction -> Bool) -> GlobalL [Module]
+makeModules (cfg, allow) =
   (runModuleL . gatherModules cfg)
-    . filter
-      ( \(Function fpc _, name, _) -> allow $ ScopedFunction name fpc
-      )
+    . filter (\(Function fpc _, name, _) -> allow $ ScopedFunction name fpc)
     =<< getSources
 
-extractConstraints :: Module -> GlobalL ExecutionState
+extractConstraints :: Module -> GlobalL ConstraintsState
 extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (encodeModule mdl)
 
 data SolvingInfo = SolvingInfo
@@ -167,13 +163,13 @@ solveModule m = do
     solveSMT constraints
   printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
 
-outputSmtQueries :: Text -> ExecutionState -> GlobalL ()
-outputSmtQueries moduleName es@(_, constraints) = do
+outputSmtQueries :: Text -> ConstraintsState -> GlobalL ()
+outputSmtQueries moduleName constraints = do
   Config{..} <- getConfig
   whenJust cfg_outputQueries writeSmtFile
   whenJust cfg_outputOptimizedQueries writeSmtFileOptimized
  where
-  query = makeModel es
+  query = makeModel constraints
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
   writeSmtFile dir = do
@@ -215,32 +211,30 @@ checkMathsat m = do
 
   falseIfError a = a `catchError` const (pure False)
 
-solveSMT :: ExecutionState -> GlobalL SolverResult
-solveSMT es@(_, cs) = do
+solveSMT :: ConstraintsState -> GlobalL SolverResult
+solveSMT cs = do
   Config{..} <- getConfig
   runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
  where
-  query = makeModel es
+  query = makeModel cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
 solveContract :: [LabeledInst] -> GlobalL [SolvingInfo]
 solveContract lInstructions = do
-  inlinable <- getInlinable
-  cfg <- runCFGBuildL $ buildCFG lInstructions inlinable
-  cfgs <- for (toAscList inlinable) $ \f ->
-    runCFGBuildL (buildCFG lInstructions $ difference inlinable (singleton f)) <&> (,(== f))
-  for_ cfgs $ verbosePrint . fst
-  modules <-
-    concat
-      <$> for ((cfg, isStandardSource inlinable) : cfgs) (uncurry (flip makeModules))
+  inlinables <- getInlinable
+  cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
+
+  -- For every inlinable function `f`, build the CFG for all functions excluding `f`.
+  let fs = toAscList inlinables
+  cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
+  for_ cfgs verbosePrint
+  modules <- concat <$> for ((cfg, isStandardSource inlinables) : zip cfgs (map (==) fs)) makeModules
   identifiers <- getIdentifiers
-  let moduleName = nameOfModule identifiers
-      removeTrusted =
-        filter
-          ( \m -> case Text.splitOn "+" (moduleName m) of
-              (name : _) -> name `notElem` trustedStdFuncs
-              [] -> True
-          )
-  for (removeTrusted modules) solveModule
+  let isUntrusted :: Module -> Bool
+      isUntrusted m =
+        case Text.splitOn "+" (nameOfModule identifiers m) of
+          [] -> True
+          (name : _) -> name `notElem` trustedStdFuncs
+   in for (filter isUntrusted modules) solveModule
  where
-  isStandardSource inlinable f = f `notElem` inlinable && not (isWrapper f)
+  isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
