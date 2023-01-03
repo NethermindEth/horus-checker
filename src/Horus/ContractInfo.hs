@@ -33,7 +33,7 @@ import Horus.Util (maybeToError, safeLast, tShow)
 
 data ContractInfo = ContractInfo
   { ci_contractDef :: ContractDefinition
-  , ci_inlinable :: Set ScopedFunction
+  , ci_inlinables :: Set ScopedFunction
   , ci_identifiers :: Identifiers
   , ci_functions :: Map Label ScopedFunction
   , ci_program :: Program
@@ -54,11 +54,11 @@ mkContractInfo cd = do
   retsByFun <- mkRetsByFun insts
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
-  let inlinable = fromList $ Map.keys $ inlinableFuns insts program cd
+  let inlinables = fromList $ Map.keys $ inlinableFuns insts program cd
   pure
     ContractInfo
       { ci_contractDef = cd
-      , ci_inlinable = inlinable
+      , ci_inlinables = inlinables
       , ci_identifiers = identifiers
       , ci_functions = pcToFun
       , ci_program = program
@@ -205,12 +205,6 @@ mkContractInfo cd = do
     -- endless loop.
     let insertFunWithNoRets fun = Map.insertWith (\_new old -> old) fun []
     pure (foldr (insertFunWithNoRets . fst) preliminaryRes functions)
-
-  --- Data producers that depend on non-plain data, expressed as parameters.
-  -- mkGeneratedNames :: [ScopedName] -> [ScopedName]
-  -- mkGeneratedNames = concatMap svNames
-  --  where
-  --   svNames sv = [sv <> "addr", sv <> "read", sv <> "write"]
 
   mkGetRets :: MonadError Text m => Map ScopedName [Label] -> ScopedName -> m [Label]
   mkGetRets retsByFun name = maybeToError msg (retsByFun Map.!? name)

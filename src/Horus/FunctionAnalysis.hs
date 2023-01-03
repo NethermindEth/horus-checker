@@ -3,25 +3,19 @@ module Horus.FunctionAnalysis
   , callersOf
   , programLabels
   , inlinableFuns
-  , fNameOfPc
-  , uncheckedFNameOfPc
-  , fMain
   , FInfo
   , FuncOp (ArcCall, ArcRet)
   , ScopedFunction (..)
   , isCallArc
   , isRetArc
   , isWrapper
-  , allFuns
   , isNormalArc
   , uninlinableFuns
   , sizeOfCall
   , mkGeneratedNames
   , storageVarsOfCD
   , isAuxFunc
-  , hasStorage
   , scopedFOfPc
-  , uncheckedScopedFOfPc
   )
 where
 
@@ -51,7 +45,7 @@ import Data.Map qualified as Map
   , toList
   , (!)
   )
-import Data.Maybe (fromJust, fromMaybe, isNothing, listToMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, isNothing, listToMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_program, cd_specs, cd_storageVars))
@@ -148,9 +142,6 @@ fNameOfPc idents lblpc = listToMaybe fLblsAtPc
  where
   fLblsAtPc = [name | (name, ident) <- Map.toList idents, Just lblpc == getFunctionPc ident]
 
-uncheckedFNameOfPc :: Identifiers -> Label -> ScopedName
-uncheckedFNameOfPc idents = fromJust . fNameOfPc idents
-
 outerScope :: ScopedName -> Text
 outerScope (ScopedName []) = ""
 outerScope (ScopedName (scope : _)) = scope
@@ -224,11 +215,8 @@ scopedFOfPc idents label = ScopedFunction <$> scopedName <*> Just label
       , pc == label
       ]
 
-uncheckedScopedFOfPc :: Identifiers -> Label -> ScopedFunction
-uncheckedScopedFOfPc idents = fromJust . scopedFOfPc idents
-
-labelNamesOfPc :: Identifiers -> Label -> [Identifier]
-labelNamesOfPc idents lblpc =
+labelIdentifiersOfPc :: Identifiers -> Label -> [Identifier]
+labelIdentifiersOfPc idents lblpc =
   [ ident
   | (_, ident) <- Map.toList idents
   , Just pc <- [getFunctionPc ident <|> getLabelPc ident]
@@ -237,12 +225,12 @@ labelNamesOfPc idents lblpc =
 
 -- Checks if there exists an annotation associated with the given identifier
 -- (last parameter).
-isAnnotated :: ContractDefinition -> Identifier -> Bool
-isAnnotated cd = maybe False isAnnotated' . labelOfIdent
+isNotAnnotated :: ContractDefinition -> Identifier -> Bool
+isNotAnnotated cd = not . maybe False isAnnotated' . labelOfIdent
  where
   idents = (p_identifiers . cd_program) cd
   isAnnotated' :: Label -> Bool
-  isAnnotated' = any (liftM2 (||) isSpec isInvariant) . labelNamesOfPc idents
+  isAnnotated' = any (liftM2 (||) isSpec isInvariant) . labelIdentifiersOfPc idents
   identToName :: Identifier -> Maybe ScopedName
   identToName ident = listToMaybe [name | (name, i) <- Map.toList idents, i == ident]
 
@@ -251,12 +239,6 @@ isAnnotated cd = maybe False isAnnotated' . labelOfIdent
 
   isInvariant :: Identifier -> Bool
   isInvariant ident = maybe False (`Map.member` cd_invariants cd) $ identToName ident
-
-hasStorage :: ScopedFunction -> ContractDefinition -> Bool
-hasStorage (ScopedFunction name _) cd = Just 0 == Map.lookup name (cd_storageVars cd)
-
-fMain :: ScopedName
-fMain = ScopedName ["__main__", "main"]
 
 wrapperScope :: Text
 wrapperScope = "__wrappers__"
@@ -302,6 +284,9 @@ isAuxFunc (ScopedFunction fname _) cd =
 sizeOfCall :: Int
 sizeOfCall = 2
 
+hasStorage :: ScopedFunction -> ContractDefinition -> Bool
+hasStorage (ScopedFunction name _) cd = Just 0 == Map.lookup name (cd_storageVars cd)
+
 inlinableFuns :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
 inlinableFuns rows prog cd =
   Map.filterWithKey
@@ -317,7 +302,7 @@ inlinableFuns rows prog cd =
  where
   idents = p_identifiers prog
   functions = functionsOf rows prog
-  notIsAnnotated sf = maybe False (not . isAnnotated cd) . Map.lookup (sf_scopedName sf) $ idents
+  notIsAnnotated sf = maybe False (isNotAnnotated cd) . Map.lookup (sf_scopedName sf) $ idents
   notIsAnnotatedLater f = sf_scopedName f `notElem` map fst stdSpecsList
   localCycles = Map.map (cyclicVerts . jumpgraph)
   isAcylic cyclicFuns f cyclicLbls = f `notElem` cyclicFuns && null cyclicLbls
@@ -325,12 +310,9 @@ inlinableFuns rows prog cd =
     Map.keys . Map.filterWithKey (isAcylic . cyclicVerts $ callgraph (Map.mapKeys sf_pc functions)) $
       Map.mapKeys sf_pc (localCycles functions)
 
-allFuns :: [LabeledInst] -> Program -> Map.Map ScopedFunction [LabeledInst]
-allFuns = functionsOf
-
 uninlinableFuns :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
 uninlinableFuns rows prog cd =
-  Map.difference (allFuns rows prog) (inlinableFuns rows prog cd)
+  Map.difference (functionsOf rows prog) (inlinableFuns rows prog cd)
 
 callersOf :: [LabeledInst] -> Label -> [Label]
 callersOf rows l = [pc | i@(pc, _) <- rows, Just dst <- [callDestination i], dst == l]
