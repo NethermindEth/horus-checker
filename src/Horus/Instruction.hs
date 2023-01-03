@@ -20,7 +20,6 @@ module Horus.Instruction
   , toSemiAsm
   , isCall
   , toSemiAsmUnsafe
-  , getNextPcInlined
   , getNextPcInlinedWithFallback
   )
 where
@@ -96,12 +95,9 @@ instructionSize _ = 1
 getNextPc :: LabeledInst -> Label
 getNextPc (pc, i) = moveLabel pc (instructionSize i)
 
-getNextPcInlined :: [LabeledInst] -> Int -> Maybe Label
-getNextPcInlined instrs pos = fst <$> atMay instrs (pos + 1)
-
 getNextPcInlinedWithFallback :: [LabeledInst] -> Int -> Label
 getNextPcInlinedWithFallback instrs pos =
-  let nextPcInlined = getNextPcInlined instrs pos
+  let nextPcInlined = fst <$> atMay instrs (pos + 1)
       def = getNextPc (instrs !! pos)
    in fromMaybe def nextPcInlined
 
