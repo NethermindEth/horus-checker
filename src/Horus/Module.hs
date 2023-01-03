@@ -204,6 +204,12 @@ gatherFromSource cfg function fSpec =
     emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
     emitRich = emitModule (Module (MSRich fSpec) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
 
+    -- Visit all arcs from the current node.
+    --
+    -- This is here because a ret from a function adds a graph arc to
+    -- everything that ever calls it, and then we filter which one we want
+    -- during module generation, thus ignoring some outgoing edges.
+    visitArcs :: Map (NonEmpty Label, Label) Bool -> [LabeledInst] -> SpecBuilder -> Label -> ModuleL ()
     visitArcs newOracle acc' pre l' = do
       let outArcs = cfg_arcs cfg ^. ix l'
       unless (null outArcs) $
