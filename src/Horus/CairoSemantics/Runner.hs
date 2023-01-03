@@ -2,7 +2,6 @@ module Horus.CairoSemantics.Runner
   ( run
   , MemoryVariable (..)
   , ConstraintsState (..)
-  , ExecutionState
   , makeModel
   , debugFriendlyModel
   )
@@ -28,7 +27,7 @@ import Data.Singletons (sing)
 import Data.Some (foldSome)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
-import Lens.Micro (Lens', (%~), (<&>))
+import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
@@ -57,49 +56,49 @@ builderToAss :: [MemoryVariable] -> AssertionBuilder -> Expr TBool
 builderToAss _ (QFAss e) = e
 builderToAss mv (ExistentialAss f) = f mv
 
+-- CallStack is necessary for functions are no longer uniquely identified by
+-- the PC they reside on, as multiple instances of a single function can be
+-- inlined.
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [MemoryVariable]
   , cs_asserts :: [AssertionBuilder]
   , cs_expects :: [Expr TBool]
   , cs_nameCounter :: Int
+  , cs_callStack :: CallStack
   }
 
-type ExecutionState = (CallStack, ConstraintsState)
+csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
+csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
-csMemoryVariables :: Lens' ExecutionState [MemoryVariable]
-csMemoryVariables lMod (st, g) = fmap (\x -> (st, g{cs_memoryVariables = x})) (lMod (cs_memoryVariables g))
+csAsserts :: Lens' ConstraintsState [AssertionBuilder]
+csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
 
-csAsserts :: Lens' ExecutionState [AssertionBuilder]
-csAsserts lMod (st, g) = fmap (\x -> (st, g{cs_asserts = x})) (lMod (cs_asserts g))
+csExpects :: Lens' ConstraintsState [Expr TBool]
+csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
 
-csExpects :: Lens' ExecutionState [Expr TBool]
-csExpects lMod (st, g) = fmap (\x -> (st, g{cs_expects = x})) (lMod (cs_expects g))
+csNameCounter :: Lens' ConstraintsState Int
+csNameCounter lMod g = fmap (\x -> g{cs_nameCounter = x}) (lMod (cs_nameCounter g))
 
-csNameCounter :: Lens' ExecutionState Int
-csNameCounter lMod (st, g) = fmap (\x -> (st, g{cs_nameCounter = x})) (lMod (cs_nameCounter g))
+csCallStack :: Lens' ConstraintsState CallStack
+csCallStack lMod g = fmap (\x -> g{cs_callStack = x}) (lMod (cs_callStack g))
 
-csCallStack :: Lens' ExecutionState CallStack
-csCallStack lMod (st, g) = fmap (,g) (lMod st)
-
-emptyConstraintsState :: ConstraintsState
-emptyConstraintsState =
+emptyConstraintsState :: CallStack -> ConstraintsState
+emptyConstraintsState initStack =
   ConstraintsState
     { cs_memoryVariables = []
     , cs_asserts = []
     , cs_expects = []
     , cs_nameCounter = 0
+    , cs_callStack = initStack
     }
 
-emptyExecutionState :: CallStack -> ExecutionState
-emptyExecutionState initStack = (initStack, emptyConstraintsState)
-
 data Env = Env
-  { e_constraints :: ExecutionState
+  { e_constraints :: ConstraintsState
   , e_storageEnabled :: Bool
   , e_storage :: Storage
   }
 
-eConstraints :: Lens' Env ExecutionState
+eConstraints :: Lens' Env ConstraintsState
 eConstraints lMod g = fmap (\x -> g{e_constraints = x}) (lMod (e_constraints g))
 
 eStorageEnabled :: Lens' Env Bool
@@ -111,7 +110,7 @@ eStorage lMod g = fmap (\x -> g{e_storage = x}) (lMod (e_storage g))
 emptyEnv :: CallStack -> Env
 emptyEnv initStack =
   Env
-    { e_constraints = emptyExecutionState initStack
+    { e_constraints = emptyConstraintsState initStack
     , e_storageEnabled = False
     , e_storage = mempty
     }
@@ -179,21 +178,21 @@ interpret = iterM exec
     ci <- ask
     ci_getFunPc ci label >>= cont
   exec (GetInlinable cont) = do
-    ask >>= cont . ci_inlinable
+    ask >>= cont . ci_inlinables
   exec (GetStackTraceDescr callstack cont) = do
     fNames <- asks (Map.map sf_scopedName . ci_functions)
     case callstack of
-      Nothing -> get >>= cont . digestOfCallStack fNames . fst . e_constraints
+      Nothing -> get >>= cont . digestOfCallStack fNames . (^. csCallStack) . e_constraints
       Just stack -> cont $ digestOfCallStack fNames stack
   exec (GetOracle cont) = do
-    get >>= cont . stackTrace . fst . e_constraints
+    get >>= cont . stackTrace . (^. csCallStack) . e_constraints
   exec (IsInlinable label cont) = do
-    inlinableFs <- asks ci_inlinable
+    inlinableFs <- asks ci_inlinables
     cont (label `elem` inlinableFs)
   exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
   exec (Pop cont) = eConstraints . csCallStack %= (snd . pop) >> cont
   exec (Top cont) = do
-    get >>= cont . top . fst . e_constraints
+    get >>= cont . top . (^. csCallStack) . e_constraints
   exec (EnableStorage cont) = eStorageEnabled .= True >> cont
   exec (ReadStorage name args cont) = do
     unlessM (use eStorageEnabled) $
@@ -216,8 +215,8 @@ interpret = iterM exec
   plainSpecStorageAccessErr :: Text
   plainSpecStorageAccessErr = "Storage access isn't allowed in a plain spec."
 
-debugFriendlyModel :: ExecutionState -> Text
-debugFriendlyModel (_, ConstraintsState{..}) =
+debugFriendlyModel :: ConstraintsState -> Text
+debugFriendlyModel ConstraintsState{..} =
   Text.intercalate "\n" $
     concat
       [ ["# Memory"]
@@ -236,8 +235,8 @@ debugFriendlyModel (_, ConstraintsState{..}) =
 constants :: [(Text, Integer)]
 constants = [(pprExpr prime, fieldPrime), (pprExpr rcBound, Builtin.rcBound)]
 
-makeModel :: ExecutionState -> Text
-makeModel (_, ConstraintsState{..}) =
+makeModel :: ConstraintsState -> Text
+makeModel ConstraintsState{..} =
   Text.intercalate "\n" (decls <> map Command.assert restrictions)
  where
   functions =
@@ -274,7 +273,7 @@ makeModel (_, ConstraintsState{..}) =
     mem0 = Expr.const (mv_varName mv0)
     addr0 = Expr.const (mv_addrName mv0)
 
-runImpl :: CallStack -> ContractInfo -> Impl a -> Either Text ExecutionState
+runImpl :: CallStack -> ContractInfo -> Impl a -> Either Text ConstraintsState
 runImpl initStack contractInfo m = v $> e_constraints env
  where
   (v, env) =
@@ -282,7 +281,7 @@ runImpl initStack contractInfo m = v $> e_constraints env
       & runExceptT
       & flip runState (emptyEnv initStack)
 
-run :: CallStack -> ContractInfo -> CairoSemanticsL a -> Either Text ExecutionState
+run :: CallStack -> ContractInfo -> CairoSemanticsL a -> Either Text ConstraintsState
 run initStack contractInfo a =
   runImpl initStack contractInfo (interpret a)
     <&> csMemoryVariables %~ reverse
