@@ -17,8 +17,7 @@ import Data.Coerce (coerce)
 import Data.Foldable (forM_, for_, toList)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
-import Data.Map ((!))
-import Data.Map qualified as Map (toList)
+import Data.Map qualified as Map (lookup, toList)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -59,8 +58,7 @@ data CFGBuildF a
   | AddArc Label Label [LabeledInst] ArcCondition FInfo a
   | AddAssertion Label (Expr TBool) a
   | AskIdentifiers (Identifiers -> a)
-  | -- | AskInstructions ([LabeledInst] -> a)
-    AskProgram (Program -> a)
+  | AskProgram (Program -> a)
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetInvariant ScopedName (Maybe (Expr TBool) -> a)
   | GetRets ScopedName ([Label] -> a)
@@ -113,11 +111,11 @@ catch :: CFGBuildL a -> (Text -> CFGBuildL a) -> CFGBuildL a
 catch m h = liftF' (Catch m h id)
 
 buildCFG :: [LabeledInst] -> Set ScopedFunction -> CFGBuildL ()
-buildCFG labeledInsts inlinable = do
+buildCFG labeledInsts inlinables = do
   identifiers <- askIdentifiers
   prog <- askProgram
-  buildFrame inlinable labeledInsts prog
-  addAssertions inlinable identifiers
+  buildFrame inlinables labeledInsts prog
+  addAssertions inlinables identifiers
 
 newtype Segment = Segment (NonEmpty LabeledInst)
   deriving (Show)
@@ -132,11 +130,11 @@ segmentInsts :: Segment -> [LabeledInst]
 segmentInsts (Segment ne) = toList ne
 
 buildFrame :: Set ScopedFunction -> [LabeledInst] -> Program -> CFGBuildL ()
-buildFrame inlinable rows prog = do
+buildFrame inlinables rows prog = do
   let segments = breakIntoSegments (programLabels rows $ p_identifiers prog) rows
   for_ segments $ \s -> do
     addVertex (segmentLabel s)
-    addArcsFrom inlinable prog rows s
+    addArcsFrom inlinables prog rows s
 
 breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
@@ -153,20 +151,17 @@ addArc' :: Label -> Label -> [LabeledInst] -> CFGBuildL ()
 addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
 
 addArcsFrom :: Set ScopedFunction -> Program -> [LabeledInst] -> Segment -> CFGBuildL ()
-addArcsFrom inlinable prog rows s
+addArcsFrom inlinables prog rows s
   | Call <- i_opCode endInst =
       let calleePc = uncheckedCallDestination lIinst
        in if calleePc `Set.member` inlinableLabels
             then addArc lFrom calleePc insts ACNone . Just $ ArcCall endPc calleePc
             else addArc' lFrom (nextSegmentLabel s) insts
   | Ret <- i_opCode endInst =
-      let owner = sf_pc $ pcToFunOfProg prog ! endPc
-       in if owner `Set.notMember` inlinableLabels
-            then pure ()
-            else
-              let callers = callersOf rows owner
-                  returnAddrs = map (`moveLabel` sizeOfCall) callers
-               in forM_ returnAddrs $ \pc -> addArc endPc pc [lIinst] ACNone $ Just ArcRet
+      -- Find the function corresponding to `endPc` and lookup its label. If we
+      -- found the label, add arcs for each caller.
+      let mbOwnerPc = sf_pc <$> Map.lookup endPc (pcToFunOfProg prog)
+       in forM_ mbOwnerPc addRetArcs
   | JumpAbs <- i_pcUpdate endInst =
       let lTo = Label (fromInteger (i_imm endInst))
        in addArc' lFrom lTo (init insts)
@@ -177,6 +172,9 @@ addArcsFrom inlinable prog rows s
       let lTo1 = nextSegmentLabel s
           lTo2 = moveLabel endPc (fromInteger (i_imm endInst))
        in do
+            -- These are the destinations of the two outgoing edges from a
+            -- conditional jump: one to the next instruction and the other to
+            -- the target of the jump.
             addArc lFrom lTo1 insts (ACJnz endPc False) Nothing
             addArc lFrom lTo2 insts (ACJnz endPc True) Nothing
   | otherwise = do
@@ -186,11 +184,20 @@ addArcsFrom inlinable prog rows s
   lFrom = segmentLabel s
   lIinst@(endPc, endInst) = NonEmpty.last (coerce s)
   insts = segmentInsts s
-  inlinableLabels = Set.map sf_pc inlinable
+  inlinableLabels = Set.map sf_pc inlinables
 
--- TODO(the conditions are silly with the new model)
+  addRetArc :: Label -> CFGBuildL ()
+  addRetArc pc = addArc endPc pc [(endPc, endInst)] ACNone $ Just ArcRet
+
+  addRetArcs :: Label -> CFGBuildL ()
+  addRetArcs owner
+    | owner `Set.notMember` inlinableLabels = pure ()
+    | otherwise = forM_ returnAddrs addRetArc
+   where
+    returnAddrs = map (`moveLabel` sizeOfCall) (callersOf rows owner)
+
 addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
-addAssertions inlinable identifiers = do
+addAssertions inlinables identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> case def of
     IFunction f ->
       let func = ScopedFunction idName (fu_pc f)
@@ -202,7 +209,7 @@ addAssertions inlinable identifiers = do
             -- inlining turned on, namely the ones that are (transitively) loopy.
             case (pre, post) of
               (Nothing, Nothing) ->
-                when (fu_pc f `Set.notMember` Set.map sf_pc inlinable) $
+                when (fu_pc f `Set.notMember` Set.map sf_pc inlinables) $
                   for_ rets (`addAssertion` Expr.True)
               _ -> for_ rets (`addAssertion` fromMaybe Expr.True post)
     ILabel pc -> do
