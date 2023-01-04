@@ -91,7 +91,7 @@ descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
   if Map.null oracle
     then ""
-    else (<>) "++" . Text.concat . map descrOfBool . Map.elems $ oracle
+    else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ oracle
 
 -- While we do have the name of the called function in Module, it does not
 -- contain the rest of the labels.
