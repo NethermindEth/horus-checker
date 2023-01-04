@@ -1,19 +1,19 @@
-main++TTT
+main:::TTT
 Verified
 
-main++TTF
+main:::TTF
 Verified
 
-main++TFT
+main:::TFT
 Verified
 
-main++TFF
+main:::TFF
 Verified
 
-main++FT
+main:::FT
 Verified
 
-main++FF
+main:::FF
 False
 
 f
