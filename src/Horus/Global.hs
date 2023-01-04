@@ -196,7 +196,7 @@ instance Ord SolvingInfo where
 
 getModuleFuncName :: Identifiers -> Module -> Text
 getModuleFuncName identifiers m =
-  case Text.splitOn "++" (nameOfModule identifiers m) of
+  case Text.splitOn ":::" (nameOfModule identifiers m) of
     (name : _) -> name
     [] -> ""
 
