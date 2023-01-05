@@ -4,11 +4,5 @@ Verified
 increase_balance
 Verified
 
-starknet.common.syscalls.storage_read
-Verified
-
-starknet.common.syscalls.storage_write
-Verified
-
 add_two
 Verified
