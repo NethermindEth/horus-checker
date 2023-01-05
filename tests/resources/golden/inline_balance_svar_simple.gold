@@ -1,11 +1,5 @@
 main
 False
 
-starknet.common.syscalls.storage_read
-Verified
-
-starknet.common.syscalls.storage_write
-Verified
-
 f
 Verified

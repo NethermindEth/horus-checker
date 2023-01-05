@@ -4,12 +4,6 @@ False
 thisunsat
 Verified
 
-starknet.common.syscalls.storage_read
-Verified
-
-starknet.common.syscalls.storage_write
-Verified
-
 read_svar
 Verified
 
