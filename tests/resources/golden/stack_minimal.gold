@@ -10,11 +10,5 @@ Verified
 main_
 Verified
 
-cairo.lang.compiler.lib.registers.get_ap
-Verified
-
-empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))
-Verified
-
 _Stack.empty
 Verified
