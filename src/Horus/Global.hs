@@ -324,7 +324,7 @@ solveContract = do
   sameFuncName (SolvingInfo _ nameA _) (SolvingInfo _ nameB _) = nameA == nameB
 
   ignorableFuncPrefixes :: [Text]
-  ignorableFuncPrefixes = ["empty: ", "cairo.lang"]
+  ignorableFuncPrefixes = ["empty: ", "cairo.lang", "cairo.common", "starknet.common"]
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
   isVerifiedIgnorable (SolvingInfo name _ res) =
