@@ -309,7 +309,13 @@ solveContract = do
   let isUntrusted :: Module -> Bool
       isUntrusted = (`notElem` trustedStdFuncs) . getModuleFuncName identifiers
   infos <- for (filter isUntrusted modules) solveModule
-  pure $ (concatMap collapseAllUnsats . groupBy sameFuncName . sort) infos
+  pure $
+    ( concatMap collapseAllUnsats
+        . groupBy sameFuncName
+        . sort
+        . filter (not . isVerifiedIgnorable)
+    )
+      infos
  where
   isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
@@ -317,6 +323,12 @@ solveContract = do
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
   sameFuncName (SolvingInfo _ nameA _) (SolvingInfo _ nameB _) = nameA == nameB
 
+  ignorableFuncPrefixes :: [Text]
+  ignorableFuncPrefixes = ["empty: ", "cairo.lang"]
+
+  isVerifiedIgnorable :: SolvingInfo -> Bool
+  isVerifiedIgnorable (SolvingInfo name _ res) =
+    res == Unsat && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =
   do
