@@ -24,7 +24,7 @@ import Options.Applicative.Help.Pretty (text)
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (ContractDefinition, cdSpecs, cd_version)
 import Horus.ContractInfo (mkContractInfo)
-import Horus.Global (SolverResult (..), SolvingInfo (..), cfg_version, solveContract)
+import Horus.Global (HorusResult (..), SolvingInfo (..), cfg_version, solveContract)
 import Horus.Global.Runner qualified as Global (Env (..), run)
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
@@ -71,7 +71,7 @@ main' Arguments{..} filename = do
   infos <- liftIO (Global.run env solveContract) >>= liftEither
   for_ infos $ \si -> liftIO $ do
     TextIO.putStrLn (ppSolvingInfo si)
-  let unknowns = [res | res@(Unknown{}) <- map si_result infos]
+  let unknowns = [res | res@(Timeout{}) <- map si_result infos]
   unless (null unknowns) $ liftIO (TextIO.putStrLn hint')
  where
   hint' = "\ESC[33m" <> (T.strip . T.unlines . map ("hint: " <>) . T.lines) hint <> "\ESC[0m"

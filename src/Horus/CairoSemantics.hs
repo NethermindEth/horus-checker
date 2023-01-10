@@ -73,6 +73,7 @@ data MemoryVariable = MemoryVariable
 
 data CairoSemanticsF a
   = Assert' (Expr TBool) a
+  | AssertPre' (Expr TBool) a
   | Expect' (Expr TBool) a
   | CheckPoint ([MemoryVariable] -> Expr TBool) a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
@@ -100,6 +101,9 @@ type CairoSemanticsL = F CairoSemanticsF
 
 assert' :: Expr TBool -> CairoSemanticsL ()
 assert' a = liftF (Assert' a ())
+
+assertPre' :: Expr TBool -> CairoSemanticsL ()
+assertPre' a = liftF (AssertPre' a ())
 
 expect' :: Expr TBool -> CairoSemanticsL ()
 expect' a = liftF (Expect' a ())
@@ -145,6 +149,11 @@ getStorage = liftF (GetStorage id)
 
 assert :: Expr TBool -> CairoSemanticsL ()
 assert a = assert' =<< memoryRemoval a
+
+-- Together with `assertPre'`, this is used solely to gather precondition
+-- assertions for contradiction-detection.
+assertPre :: Expr TBool -> CairoSemanticsL ()
+assertPre a = assertPre' =<< memoryRemoval a
 
 expect :: Expr TBool -> CairoSemanticsL ()
 expect a = expect' =<< memoryRemoval a
@@ -258,6 +267,14 @@ encodePlainSpec mdl PlainSpec{..} = do
 
   assert (fp .<= apStart)
   assert =<< prepare' apStart fp ps_pre
+
+  -- We gather a secondary set of assertions that contains only the
+  -- preconditions, since unlike `assert`, `assertPre` is *only* used here.
+  --
+  -- These precondition-specific assertions have their very own field in the
+  -- `ConstraintsState`, and are ultimately used to run a secondary solver
+  -- query used to check the preconditions for contradictions.
+  assertPre =<< prepare' apStart fp ps_pre
 
   let instrs = m_prog mdl
   for_ (zip [0 ..] instrs) $ \(idx, instr) ->
