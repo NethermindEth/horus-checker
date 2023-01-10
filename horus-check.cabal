@@ -33,7 +33,7 @@ common deps
       TypeOperators
       ViewPatterns
     ghc-options:
-      -Weverything -Werror
+      -Weverything
       -Wno-safe -Wno-unsafe -Wno-implicit-prelude
       -Wno-all-missed-specializations
       -Wno-missing-deriving-strategies
