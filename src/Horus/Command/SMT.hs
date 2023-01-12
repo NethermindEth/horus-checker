@@ -18,5 +18,5 @@ declare (Function name) = pack (printf "(declare-fun %s (%s) %s)" name args res)
   res = SMT.showsSExpr resTy ""
   (resTy :| argTys) = Ty.toSMT @ty
 
-assert :: Expr TBool -> Text
-assert e = pack (printf "(assert %s)" (SMT.showsSExpr (Expr.toSMT e) ""))
+assert :: Integer -> Expr TBool -> Text
+assert fPrime e = pack (printf "(assert %s)" (SMT.showsSExpr (Expr.toSMT fPrime e) ""))

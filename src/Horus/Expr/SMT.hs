@@ -44,8 +44,8 @@ import Horus.Expr.Util (fieldToInt)
 
 -- converting to unsafe syntax
 
-toSMT :: Expr a -> SMT.SExpr
-toSMT = toSMT' . fieldToInt
+toSMT :: Integer -> Expr a -> SMT.SExpr
+toSMT fPrime = toSMT' . fieldToInt fPrime
 
 toSMT' :: Expr a -> SMT.SExpr
 toSMT' True = SMT.bool Prelude.True
