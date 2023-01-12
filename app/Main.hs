@@ -19,12 +19,10 @@ import Options.Applicative
   )
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
-import Horus.ContractDefinition (ContractDefinition (cd_program), cdSpecs)
+import Horus.ContractDefinition (cdSpecs)
 import Horus.ContractInfo (mkContractInfo)
 import Horus.Global (SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (Env (..), run)
-import Horus.Instruction (labelInstructions, readAllInstructions)
-import Horus.Program (p_code)
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
 
@@ -33,11 +31,10 @@ type EIO = ExceptT Text IO
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdSpecs %~ (<> stdSpecs)
-  lInstrs <- labelInstructions <$> readAllInstructions (p_code (cd_program contract))
   contractInfo <- mkContractInfo contract
   configRef <- liftIO (newIORef arg_config)
   let env = Global.Env{e_config = configRef, e_contractInfo = contractInfo}
-  infos <- liftIO (Global.run env $ solveContract lInstrs) >>= liftEither
+  infos <- liftIO (Global.run env solveContract) >>= liftEither
   for_ infos $ \si -> liftIO $ do
     Text.putStrLn (ppSolvingInfo si)
 

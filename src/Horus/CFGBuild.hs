@@ -89,9 +89,6 @@ addAssertion l assertion = liftF' (AddAssertion l assertion ())
 askIdentifiers :: CFGBuildL Identifiers
 askIdentifiers = liftF' (AskIdentifiers id)
 
--- askInstructions :: CFGBuildL [LabeledInst]
--- askInstructions = liftF' (AskInstructions id)
-
 askProgram :: CFGBuildL Program
 askProgram = liftF' (AskProgram id)
 

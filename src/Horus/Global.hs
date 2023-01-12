@@ -60,6 +60,7 @@ data GlobalF a
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetIdentifiers (Identifiers -> a)
   | GetInlinable (Set ScopedFunction -> a)
+  | GetLabelledInstrs ([LabeledInst] -> a)
   | GetSources ([(Function, ScopedName, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
@@ -103,6 +104,9 @@ getFuncSpec name = liftF' (GetFuncSpec name id)
 
 getInlinable :: GlobalL (Set ScopedFunction)
 getInlinable = liftF' (GetInlinable id)
+
+getLabelledInstructions :: GlobalL [LabeledInst]
+getLabelledInstructions = liftF' (GetLabelledInstrs id)
 
 getSources :: GlobalL [(Function, ScopedName, FuncSpec)]
 getSources = liftF' (GetSources id)
@@ -219,8 +223,9 @@ solveSMT cs = do
   query = makeModel cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
-solveContract :: [LabeledInst] -> GlobalL [SolvingInfo]
-solveContract lInstructions = do
+solveContract :: GlobalL [SolvingInfo]
+solveContract = do
+  lInstructions <- getLabelledInstructions
   inlinables <- getInlinable
   cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
 
