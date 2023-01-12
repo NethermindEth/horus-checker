@@ -36,6 +36,7 @@ data ContractInfo = ContractInfo
   , ci_inlinables :: Set ScopedFunction
   , ci_identifiers :: Identifiers
   , ci_functions :: Map Label ScopedFunction
+  , ci_labelledInstrs :: [LabeledInst]
   , ci_program :: Program
   , ci_sources :: [(Function, ScopedName, FuncSpec)]
   , ci_storageVars :: [ScopedName]
@@ -52,6 +53,7 @@ mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' Cont
 mkContractInfo cd = do
   insts <- mkInstructions
   retsByFun <- mkRetsByFun insts
+  lInstrs <- labelInstructions <$> readAllInstructions (p_code (cd_program cd))
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
   let inlinables = fromList $ Map.keys $ inlinableFuns insts program cd
@@ -61,6 +63,7 @@ mkContractInfo cd = do
       , ci_inlinables = inlinables
       , ci_identifiers = identifiers
       , ci_functions = pcToFun
+      , ci_labelledInstrs = lInstrs
       , ci_program = program
       , ci_sources = sources
       , ci_storageVars = storageVarsNames
