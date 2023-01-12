@@ -21,7 +21,6 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Std (Function (..), stdNames)
 import Horus.Expr.Type (Ty (TFelt))
 import Horus.Expr.Vars (prime)
-import Horus.Util (fieldPrime)
 
 gatherNonStdFunctions :: Expr a -> Set (Some Function)
 gatherNonStdFunctions = execWriter . transform_ step
@@ -46,30 +45,30 @@ suffixLogicalVariables suffix = Expr.transformId step
   step (Expr.FeltConst name) | "$" `Text.isPrefixOf` name = Expr.FeltConst (name <> suffix)
   step e = e
 
-fieldToInt :: Expr a -> Expr a
-fieldToInt e = runReader (fieldToInt' e) UCNo
+fieldToInt :: Integer -> Expr a -> Expr a
+fieldToInt fPrime e = runReader (fieldToInt' fPrime e) UCNo
 
 data UseCongruence = UCYes | UCNo
 
-fieldToInt' :: Expr a -> Reader UseCongruence (Expr a)
-fieldToInt' e =
-  maybeMod =<< case e of
-    x :+ y -> local (const UCYes) ((:+) <$> fieldToInt' x <*> fieldToInt' y)
-    x :* y -> local (const UCYes) ((:*) <$> fieldToInt' x <*> fieldToInt' y)
-    Negate x -> local (const UCYes) (Negate <$> fieldToInt' x)
-    f :*: x -> local (const UCNo) ((:*:) <$> fieldToInt' f <*> fieldToInt' x)
+fieldToInt' :: Integer -> Expr a -> Reader UseCongruence (Expr a)
+fieldToInt' fPrime e =
+  maybeMod fPrime =<< case e of
+    x :+ y -> local (const UCYes) ((:+) <$> fieldToInt' fPrime x <*> fieldToInt' fPrime y)
+    x :* y -> local (const UCYes) ((:*) <$> fieldToInt' fPrime x <*> fieldToInt' fPrime y)
+    Negate x -> local (const UCYes) (Negate <$> fieldToInt' fPrime x)
+    f :*: x -> local (const UCNo) ((:*:) <$> fieldToInt' fPrime f <*> fieldToInt' fPrime x)
     ExistsFelt name inner -> do
-      inner' <- fieldToInt' inner
+      inner' <- fieldToInt' fPrime inner
       let var = Expr.const name
       pure (ExistsFelt name (0 .<= var .&& var .< prime .&& inner'))
     _ -> pure e
 
-maybeMod :: forall ty. Expr ty -> Reader UseCongruence (Expr ty)
-maybeMod e = do
+maybeMod :: forall ty. Integer -> Expr ty -> Reader UseCongruence (Expr ty)
+maybeMod fPrime e = do
   useCongruence <- ask
   case (useCongruence, eqT @ty @TFelt \\ isProper e) of
     (UCNo, Just Refl)
-      | Felt v <- e -> pure (fromInteger (v `mod` fieldPrime))
+      | Felt v <- e -> pure (fromInteger (v `mod` fPrime))
       | Fun{} <- e -> pure e
       | otherwise -> pure (e `Expr.mod` prime)
     _ -> pure e
