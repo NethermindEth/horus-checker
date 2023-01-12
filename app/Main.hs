@@ -24,7 +24,7 @@ import Horus.ContractInfo (mkContractInfo)
 import Horus.Global (SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (Env (..), run)
 import Horus.Instruction (labelInstructions, readAllInstructions)
-import Horus.Program (p_code)
+import Horus.Program (p_code, p_prime)
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
 
@@ -33,7 +33,8 @@ type EIO = ExceptT Text IO
 main' :: Arguments -> EIO ()
 main' Arguments{..} = do
   contract <- eioDecodeFileStrict arg_fileName <&> cdSpecs %~ (<> stdSpecs)
-  lInstrs <- labelInstructions <$> readAllInstructions (p_code (cd_program contract))
+  let program = cd_program contract
+  lInstrs <- labelInstructions <$> readAllInstructions (p_prime program) (p_code program)
   contractInfo <- mkContractInfo contract
   configRef <- liftIO (newIORef arg_config)
   let env = Global.Env{e_config = configRef, e_contractInfo = contractInfo}

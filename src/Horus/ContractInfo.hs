@@ -50,7 +50,7 @@ data ContractInfo = ContractInfo
 
 mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' ContractInfo
 mkContractInfo cd = do
-  insts <- mkInstructions
+  insts <- mkInstructions (p_prime program)
   retsByFun <- mkRetsByFun insts
   let generatedNames = mkGeneratedNames storageVarsNames
   let sources = mkSources generatedNames
@@ -193,8 +193,8 @@ mkContractInfo cd = do
   getInvariant name = Map.lookup name (cd_invariants cd)
 
   ---- non-plain data producers that depend on the outer monad (likely, for errors)
-  mkInstructions :: m' [LabeledInst]
-  mkInstructions = fmap labelInstructions (readAllInstructions (p_code (cd_program cd)))
+  mkInstructions :: Integer -> m' [LabeledInst]
+  mkInstructions fPrime = fmap labelInstructions (readAllInstructions fPrime (p_code (cd_program cd)))
 
   mkRetsByFun :: [LabeledInst] -> m' (Map ScopedName [Label])
   mkRetsByFun insts = do
