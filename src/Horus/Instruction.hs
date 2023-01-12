@@ -124,14 +124,14 @@ jumpDestination _ = Nothing
 n15, n16 :: Int
 (n15, n16) = (15, 16)
 
-readAllInstructions :: MonadError Text m => [Integer] -> m [Instruction]
-readAllInstructions [] = pure []
-readAllInstructions (i : is) = do
-  (instr, is') <- readInstruction (i :| is)
-  (instr :) <$> readAllInstructions is'
+readAllInstructions :: MonadError Text m => Integer -> [Integer] -> m [Instruction]
+readAllInstructions _ [] = pure []
+readAllInstructions fPrime (i : is) = do
+  (instr, is') <- readInstruction fPrime (i :| is)
+  (instr :) <$> readAllInstructions fPrime is'
 
-readInstruction :: forall m. MonadError Text m => NonEmpty Integer -> m (Instruction, [Integer])
-readInstruction (i :| is) = do
+readInstruction :: forall m. MonadError Text m => Integer -> NonEmpty Integer -> m (Instruction, [Integer])
+readInstruction fPrime (i :| is) = do
   let flags = i `shiftR` (3 * 16)
   let dstEnc = i .&. (2 ^ n16 - 1)
   let op0Enc = (i `shiftR` 16) .&. (2 ^ n16 - 1)
@@ -188,7 +188,7 @@ readInstruction (i :| is) = do
             Ret -> Dst
             _ -> KeepFp
         )
-      <*> return (toSignedFelt imm)
+      <*> return (toSignedFelt fPrime imm)
   pure (instruction, is')
  where
   op1Map :: Bool -> Bool -> Bool -> m Op1Source
