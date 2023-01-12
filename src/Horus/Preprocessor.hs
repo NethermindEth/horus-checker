@@ -86,8 +86,8 @@ parseZ3Model tModel = runZ3 $ do
     model <- Z3.solverGetModel
     Z3.modelTranslate model realContext
 
-getConsts :: Z3.Model -> PreprocessorL [(Text, Integer)]
-getConsts model = do
+getConsts :: Integer -> Z3.Model -> PreprocessorL [(Text, Integer)]
+getConsts fPrime model = do
   constDecls <- runZ3 $ Z3.getConsts model
   for constDecls $ \constDecl -> do
     name <- runZ3 $ Z3.getSymbolString =<< Z3.getDeclName constDecl
@@ -100,7 +100,7 @@ getConsts model = do
         )
         mbValue
     intValue <- runZ3 $ Z3.getInt value
-    pure (pack name, toSignedFelt intValue)
+    pure (pack name, toSignedFelt fPrime intValue)
 
 interpConst :: Z3.Model -> Text -> PreprocessorL Integer
 interpConst model name = do
@@ -134,8 +134,8 @@ instance Show Model where
     showAp (reg, value) = printf "%8s\t=\t%d\n" reg value
     showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
 
-solve :: Text -> PreprocessorL SolverResult
-solve smtQuery = do
+solve :: Integer -> Text -> PreprocessorL SolverResult
+solve fPrime smtQuery = do
   optimizeQuery smtQuery >>= foldlM combineResult (Unknown Nothing)
  where
   combineResult (Sat mbModel) _ = pure (Sat mbModel)
@@ -149,7 +149,7 @@ solve smtQuery = do
   computeResult subgoal = do
     result <- runSolver =<< runZ3 (goalToSExpr subgoal)
     case result of
-      (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (processModel subgoal) mbModel
+      (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (processModel fPrime subgoal) mbModel
       (SMT.Unsat, _mbCore) -> pure Unsat
       (SMT.Unknown, mbReason) -> pure (Unknown mbReason)
 
@@ -170,18 +170,18 @@ goalListToTextList :: [Goal] -> PreprocessorL [Text]
 goalListToTextList goalList = do
   runZ3 $ mapM goalToSExpr goalList
 
-processModel :: Goal -> Text -> PreprocessorL SolverResult
-processModel goal tModel = do
+processModel :: Integer -> Goal -> Text -> PreprocessorL SolverResult
+processModel fPrime goal tModel = do
   z3Model <- parseZ3Model tModel
   z3FullModel <- runZ3 $ Z3.convertModel goal z3Model
-  model <- z3ModelToHorusModel z3FullModel
+  model <- z3ModelToHorusModel fPrime z3FullModel
   pure $ Sat (Just model)
 
-z3ModelToHorusModel :: Z3.Model -> PreprocessorL Model
-z3ModelToHorusModel model =
+z3ModelToHorusModel :: Integer -> Z3.Model -> PreprocessorL Model
+z3ModelToHorusModel fPrime model =
   Model
     <$> do
-      consts <- getConsts model
+      consts <- getConsts fPrime model
       mbRegs <- for consts (pure . parseRegVar)
       pure $
         catMaybes mbRegs
@@ -192,9 +192,9 @@ z3ModelToHorusModel model =
       addrValueList <- for memAndAddrs $ \(memName, addrName) -> do
         value <- interpConst model memName
         addr <- interpConst model addrName
-        pure (toSignedFelt addr, toSignedFelt value)
+        pure (toSignedFelt fPrime addr, toSignedFelt fPrime value)
       pure $ fromList addrValueList
  where
   parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
   parseRegVar (name, value) =
-    parseRegKind name <&> (,name,toSignedFelt value)
+    parseRegKind name <&> (,name,toSignedFelt fPrime value)

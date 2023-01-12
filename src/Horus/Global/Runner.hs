@@ -47,6 +47,7 @@ interpret = iterM exec . runGlobalL
   exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont
   exec (GetInlinable cont) = asks (ci_inlinables . e_contractInfo) >>= cont
   exec (GetLabelledInstrs cont) = asks (ci_labelledInstrs . e_contractInfo) >>= cont
+  exec (GetProgram cont) = asks (ci_program . e_contractInfo) >>= cont
   exec (GetSources cont) = asks (ci_sources . e_contractInfo) >>= cont
   exec (SetConfig conf cont) = do
     configRef <- asks e_config

@@ -46,7 +46,7 @@ import Horus.FunctionAnalysis (ScopedFunction (sf_scopedName))
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
-import Horus.Util (fieldPrime, tShow, unlessM)
+import Horus.Util (tShow, unlessM)
 
 data AssertionBuilder
   = QFAss (Expr TBool)
@@ -232,12 +232,9 @@ debugFriendlyModel ConstraintsState{..} =
     | MemoryVariable{..} <- cs_memoryVariables
     ]
 
-constants :: [(Text, Integer)]
-constants = [(pprExpr prime, fieldPrime), (pprExpr rcBound, Builtin.rcBound)]
-
-makeModel :: ConstraintsState -> Text
-makeModel ConstraintsState{..} =
-  Text.intercalate "\n" (decls <> map Command.assert restrictions)
+makeModel :: ConstraintsState -> Integer -> Text
+makeModel ConstraintsState{..} fPrime =
+  Text.intercalate "\n" (decls <> map (Command.assert fPrime) restrictions)
  where
   functions =
     toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
@@ -262,6 +259,8 @@ makeModel ConstraintsState{..} =
       | otherwise -> Just (0 .<= var .&& var .< prime)
      where
       var = Fun name
+      constants :: [(Text, Integer)]
+      constants = [(pprExpr prime, fPrime), (pprExpr rcBound, Builtin.rcBound)]
     _ -> Nothing
 
   restrictMemTail [] = []
