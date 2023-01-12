@@ -142,10 +142,6 @@ fNameOfPc idents lblpc = listToMaybe fLblsAtPc
  where
   fLblsAtPc = [name | (name, ident) <- Map.toList idents, Just lblpc == getFunctionPc ident]
 
-outerScope :: ScopedName -> Text
-outerScope (ScopedName []) = ""
-outerScope (ScopedName (scope : _)) = scope
-
 functionsOf :: [LabeledInst] -> Program -> Map.Map ScopedFunction [LabeledInst]
 functionsOf rows prog =
   Map.map (map (\pc -> (pc, Map.fromList rows Map.! pc))) . Map.map sort . invert $
@@ -245,6 +241,9 @@ wrapperScope = "__wrappers__"
 
 isWrapper :: ScopedFunction -> Bool
 isWrapper f = outerScope (sf_scopedName f) == wrapperScope
+ where
+  outerScope (ScopedName []) = ""
+  outerScope (ScopedName (scope : _)) = scope
 
 fStorageRead :: ScopedName
 fStorageRead = ScopedName ["starkware", "starknet", "common", "syscalls", "storage_read"]
