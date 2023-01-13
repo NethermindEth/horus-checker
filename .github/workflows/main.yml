@@ -60,7 +60,8 @@ jobs:
           find tests/resources/golden -name *.cairo -exec cairo-format -c {} +
 
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: ubuntu-latest-16-cores
 
     env:
       horus_compile_version: 0.0.6.2
@@ -72,6 +73,7 @@ jobs:
         run: |
           sh ./scripts/ci/install-z3.sh
           sh ./scripts/ci/install-mathsat.sh
+          sh ./scripts/ci/install-cvc5-linux.sh
 
       - uses: actions/setup-python@v4
         with:
@@ -79,6 +81,8 @@ jobs:
 
       - name: Setup BATS
         uses: mig4/setup-bats@v1
+        with:
+          bats-version: 1.8.2
 
       - uses: freckle/stack-cache-action@main
 

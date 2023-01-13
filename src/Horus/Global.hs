@@ -11,13 +11,14 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
+import Data.Maybe (fromMaybe)
+import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Text (Text, unpack)
 import Data.Text as Text (splitOn)
 import Data.Traversable (for)
-import Lens.Micro.GHC ()
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildL, buildCFG)
+import Horus.CFGBuild (CFGBuildL, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
@@ -26,16 +27,18 @@ import Horus.CairoSemantics.Runner
   , debugFriendlyModel
   , makeModel
   )
+import Horus.CallStack (CallStack, initialWithFunc)
+import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.Instruction (LabeledInst)
+import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
 import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers)
-import Horus.SW.FuncSpec (FuncSpec, fs_pre)
+import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.Identifier (Function (..))
-import Horus.SW.ScopedName (ScopedName)
+import Horus.SW.ScopedName (ScopedName ())
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 
@@ -49,14 +52,16 @@ data Config = Config
 
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
-  | forall b. RunCairoSemanticsL (CairoSemanticsL b) (ConstraintsState -> a)
+  | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ConstraintsState -> a)
   | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
-  | GetCallee LabeledInst (ScopedName -> a)
+  | GetCallee LabeledInst (ScopedFunction -> a)
   | GetConfig (Config -> a)
-  | GetFuncSpec ScopedName (FuncSpec -> a)
+  | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetIdentifiers (Identifiers -> a)
-  | GetSources ([(Function, FuncSpec)] -> a)
+  | GetInlinable (Set ScopedFunction -> a)
+  | GetLabelledInstrs ([LabeledInst] -> a)
+  | GetSources ([(Function, ScopedName, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
   | WriteFile' FilePath Text a
@@ -78,8 +83,8 @@ liftF' = GlobalL . liftF
 runCFGBuildL :: CFGBuildL a -> GlobalL CFG
 runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 
-runCairoSemanticsL :: CairoSemanticsL a -> GlobalL ConstraintsState
-runCairoSemanticsL smt2Builder = liftF' (RunCairoSemanticsL smt2Builder id)
+runCairoSemanticsL :: CallStack -> CairoSemanticsL a -> GlobalL ConstraintsState
+runCairoSemanticsL initStack smt2Builder = liftF' (RunCairoSemanticsL initStack smt2Builder id)
 
 runModuleL :: ModuleL a -> GlobalL [Module]
 runModuleL builder = liftF' (RunModuleL builder id)
@@ -88,16 +93,22 @@ runPreprocessorL :: PreprocessorEnv -> PreprocessorL a -> GlobalL a
 runPreprocessorL penv preprocessor =
   liftF' (RunPreprocessorL penv preprocessor id)
 
-getCallee :: LabeledInst -> GlobalL ScopedName
+getCallee :: LabeledInst -> GlobalL ScopedFunction
 getCallee inst = liftF' (GetCallee inst id)
 
 getConfig :: GlobalL Config
 getConfig = liftF' (GetConfig id)
 
-getFuncSpec :: ScopedName -> GlobalL FuncSpec
+getFuncSpec :: ScopedFunction -> GlobalL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
 
-getSources :: GlobalL [(Function, FuncSpec)]
+getInlinable :: GlobalL (Set ScopedFunction)
+getInlinable = liftF' (GetInlinable id)
+
+getLabelledInstructions :: GlobalL [LabeledInst]
+getLabelledInstructions = liftF' (GetLabelledInstrs id)
+
+getSources :: GlobalL [(Function, ScopedName, FuncSpec)]
 getSources = liftF' (GetSources id)
 
 getIdentifiers :: GlobalL Identifiers
@@ -126,10 +137,14 @@ verbosePutStrLn what = do
 verbosePrint :: Show a => a -> GlobalL ()
 verbosePrint what = verbosePutStrLn (tShow what)
 
-makeModules :: CFG -> GlobalL [Module]
-makeModules cfg = do
-  sources <- getSources
-  runModuleL (gatherModules cfg sources)
+makeModules :: (CFG, ScopedFunction -> Bool) -> GlobalL [Module]
+makeModules (cfg, allow) =
+  (runModuleL . gatherModules cfg)
+    . filter (\(Function fpc _, name, _) -> allow $ ScopedFunction name fpc)
+    =<< getSources
+
+extractConstraints :: Module -> GlobalL ConstraintsState
+extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (encodeModule mdl)
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
@@ -145,7 +160,7 @@ solveModule m = do
   pure SolvingInfo{si_moduleName = moduleName, si_result = result}
  where
   mkResult moduleName = printingErrors $ do
-    constraints <- runCairoSemanticsL (encodeModule m)
+    constraints <- extractConstraints m
     outputSmtQueries moduleName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
@@ -195,7 +210,7 @@ checkMathsat m = do
   instUsesLvars i = falseIfError $ do
     callee <- getCallee i
     spec <- getFuncSpec callee
-    let lvars = gatherLogicalVariables (fs_pre spec)
+    let lvars = gatherLogicalVariables (fromMaybe Expr.True (fs'_pre spec))
     pure (not (null lvars))
 
   falseIfError a = a `catchError` const (pure False)
@@ -210,15 +225,21 @@ solveSMT cs = do
 
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
-  cfg <- runCFGBuildL buildCFG
-  verbosePrint cfg
-  modules <- makeModules cfg
+  lInstructions <- getLabelledInstructions
+  inlinables <- getInlinable
+  cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
+
+  -- For every inlinable function `f`, build the CFG for all functions excluding `f`.
+  let fs = toAscList inlinables
+  cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
+  for_ cfgs verbosePrint
+  modules <- concat <$> for ((cfg, isStandardSource inlinables) : zip cfgs (map (==) fs)) makeModules
   identifiers <- getIdentifiers
-  let moduleName = nameOfModule identifiers
-      removeTrusted =
-        filter
-          ( \m -> case Text.splitOn "+" (moduleName m) of
-              (name : _) -> name `notElem` trustedStdFuncs
-              [] -> True
-          )
-  for (removeTrusted modules) solveModule
+  let isUntrusted :: Module -> Bool
+      isUntrusted m =
+        case Text.splitOn "+" (nameOfModule identifiers m) of
+          [] -> True
+          (name : _) -> name `notElem` trustedStdFuncs
+   in for (filter isUntrusted modules) solveModule
+ where
+  isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)

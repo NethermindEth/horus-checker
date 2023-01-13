@@ -21,12 +21,13 @@ import Lens.Micro.Mtl ((%=))
 import Horus.CFGBuild (ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst)
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr, Ty (..))
+import Horus.FunctionAnalysis (FInfo)
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State CFG))
 
 data CFG = CFG
   { cfg_vertices :: [Label]
-  , cfg_arcs :: Map Label [(Label, [LabeledInst], ArcCondition)]
+  , cfg_arcs :: Map Label [(Label, [LabeledInst], ArcCondition, FInfo)]
   , cfg_assertions :: Map Label [Expr TBool]
   }
   deriving (Show)
@@ -37,7 +38,7 @@ emptyCFG = CFG [] Map.empty Map.empty
 cfgVertices :: Lens' CFG [Label]
 cfgVertices lMod g = fmap (\x -> g{cfg_vertices = x}) (lMod (cfg_vertices g))
 
-cfgArcs :: Lens' CFG (Map Label [(Label, [LabeledInst], ArcCondition)])
+cfgArcs :: Lens' CFG (Map Label [(Label, [LabeledInst], ArcCondition, FInfo)])
 cfgArcs lMod g = fmap (\x -> g{cfg_arcs = x}) (lMod (cfg_arcs g))
 
 cfgAssertions :: Lens' CFG (Map Label [Expr TBool])
@@ -47,14 +48,14 @@ interpret :: CFGBuildL a -> Impl a
 interpret = iterM exec . runCFGBuildL
  where
   exec (AddVertex l cont) = cfgVertices %= ([l] `union`) >> cont
-  exec (AddArc lFrom lTo insts test cont) = cfgArcs . at lFrom %= doAdd >> cont
+  exec (AddArc lFrom lTo insts test isF cont) = cfgArcs . at lFrom %= doAdd >> cont
    where
-    doAdd mArcs = Just ((lTo, insts, test) : mArcs ^. _Just)
+    doAdd mArcs = Just ((lTo, insts, test, isF) : mArcs ^. _Just)
   exec (AddAssertion l assertion cont) = cfgAssertions . at l %= doAdd >> cont
    where
     doAdd mAssertions = Just (assertion : mAssertions ^. _Just)
   exec (AskIdentifiers cont) = asks ci_identifiers >>= cont
-  exec (AskInstructions cont) = asks ci_instructions >>= cont
+  exec (AskProgram cont) = asks ci_program >>= cont
   exec (GetFuncSpec name cont) = do
     ci <- ask
     ci_getFuncSpec ci name & cont

@@ -30,9 +30,9 @@ interpret = iterM exec . runGlobalL
   exec (RunCFGBuildL builder cont) = do
     ci <- asks e_contractInfo
     liftEither (CFGBuild.runImpl ci (CFGBuild.interpret builder)) >>= cont
-  exec (RunCairoSemanticsL builder cont) = do
+  exec (RunCairoSemanticsL initStack builder cont) = do
     ci <- asks e_contractInfo
-    liftEither (CairoSemantics.run ci builder) >>= cont
+    liftEither (CairoSemantics.run initStack ci builder) >>= cont
   exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
   exec (RunPreprocessorL penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)
@@ -45,6 +45,8 @@ interpret = iterM exec . runGlobalL
     ci <- asks e_contractInfo
     cont (ci_getFuncSpec ci name)
   exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont
+  exec (GetInlinable cont) = asks (ci_inlinables . e_contractInfo) >>= cont
+  exec (GetLabelledInstrs cont) = asks (ci_labelledInstrs . e_contractInfo) >>= cont
   exec (GetSources cont) = asks (ci_sources . e_contractInfo) >>= cont
   exec (SetConfig conf cont) = do
     configRef <- asks e_config

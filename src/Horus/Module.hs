@@ -12,10 +12,11 @@ module Horus.Module
 where
 
 import Control.Applicative ((<|>))
+import Control.Monad (unless)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
-import Data.Coerce (coerce)
 import Data.Foldable (for_, traverse_)
+import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
@@ -23,13 +24,16 @@ import Data.Text qualified as Text (concat, cons, intercalate, length)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
-import Horus.CFGBuild (ArcCondition (..), Label (..))
+import Horus.CFGBuild (ArcCondition (..), Label (unLabel))
 import Horus.CFGBuild.Runner (CFG (..))
+import Horus.CallStack (CallStack, calledFOfCallEntry, callerPcOfCallEntry, initialWithFunc, pop, push, stackTrace, top)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
+import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall)
 import Horus.Instruction (LabeledInst)
+import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
@@ -38,7 +42,9 @@ import Horus.SW.ScopedName (ScopedName (..))
 data Module = Module
   { m_spec :: ModuleSpec
   , m_prog :: [LabeledInst]
-  , m_jnzOracle :: Map Label Bool
+  , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
+  , m_calledF :: Label
+  , m_lastPc :: (CallStack, Label)
   }
   deriving stock (Show)
 
@@ -66,7 +72,7 @@ labelNamesOfPc idents lblpc =
 normalizedName :: [ScopedName] -> (Text, Text)
 normalizedName scopedNames =
   let names :: [[Text]]
-      names = map coerce scopedNames
+      names = map sn_path scopedNames
       scopes = map (Text.intercalate "." . tail . init) names
       labels = map last names
    in (Text.concat scopes, summarizeLabels labels)
@@ -81,14 +87,16 @@ descrOfBool :: Bool -> Text
 descrOfBool True = "T"
 descrOfBool False = "F"
 
-descrOfOracle :: Map Label Bool -> Text
+descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
   if Map.null oracle
     then ""
     else Text.cons '+' . Text.concat . map descrOfBool . Map.elems $ oracle
 
+-- While we do have the name of the called function in Module, it does not contain
+-- the rest of the labels.
 nameOfModule :: Identifiers -> Module -> Text
-nameOfModule idents (Module spec prog oracle) =
+nameOfModule idents (Module spec prog oracle _ _) =
   case beginOfModule prog of
     Nothing -> "empty: " <> pprExpr post
     Just label ->
@@ -104,11 +112,12 @@ data Error
 
 instance Show Error where
   show (ELoopNoInvariant at) = printf "There is a loop at PC %d with no invariant" (unLabel at)
-  show ESpecNotPlainHasState = "Some function contains a loop, but uses rich specfication (e.g. state assertions)."
+  show ESpecNotPlainHasState =
+    "Some function contains a loop, but uses rich specfication (e.g. state assertions)."
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting Label (Bool -> ModuleL b) (b -> a)
+  | forall b. Visiting (NonEmpty Label, Label) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -134,7 +143,7 @@ emitModule m = liftF' (EmitModule m ())
 'm' additionally takes a parameter that tells whether 'l' has been
 visited before.
 -}
-visiting :: Label -> (Bool -> ModuleL b) -> ModuleL b
+visiting :: (NonEmpty Label, Label) -> (Bool -> ModuleL b) -> ModuleL b
 visiting l action = liftF' (Visiting l action id)
 
 throw :: Error -> ModuleL a
@@ -150,15 +159,25 @@ extractPlainBuilder fs@(FuncSpec _pre _post state)
   | not (null state) = throwError ESpecNotPlainHasState
   | PlainSpec{..} <- richToPlainSpec fs = pure (SBPlain ps_pre)
 
-gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL ()
-gatherModules cfg = traverse_ (uncurry (gatherFromSource cfg))
+gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
+gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
 
 gatherFromSource :: CFG -> Function -> FuncSpec -> ModuleL ()
-gatherFromSource cfg function fSpec = visit Map.empty [] SBRich (fu_pc function) ACNone
+gatherFromSource cfg function fSpec =
+  visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich (fu_pc function) ACNone Nothing
  where
-  visit :: Map Label Bool -> [LabeledInst] -> SpecBuilder -> Label -> ArcCondition -> ModuleL ()
-  visit oracle acc builder l arcCond = visiting l $ \alreadyVisited ->
-    if alreadyVisited then visitLoop builder else visitLinear builder
+  visit ::
+    Map (NonEmpty Label, Label) Bool ->
+    CallStack ->
+    [LabeledInst] ->
+    SpecBuilder ->
+    Label ->
+    ArcCondition ->
+    FInfo ->
+    ModuleL ()
+  visit oracle callstack acc builder l arcCond f =
+    visiting (stackTrace callstack', l) $ \alreadyVisited ->
+      if alreadyVisited then visitLoop builder else visitLinear builder
    where
     visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
     visitLoop (SBPlain pre)
@@ -175,16 +194,35 @@ gatherFromSource cfg function fSpec = visit Map.empty [] SBRich (fu_pc function)
           emitPlain pre (Expr.and assertions)
           visitArcs Map.empty [] (SBPlain (Expr.and assertions)) l
 
-    oracle' = updateOracle arcCond oracle
+    callstack' = case f of
+      Nothing -> callstack
+      Just (ArcCall fCallerPc fCalledF) -> push (fCallerPc, fCalledF) callstack
+      Just ArcRet -> snd $ pop callstack
+    oracle' = updateOracle arcCond callstack' oracle
     assertions = cfg_assertions cfg ^. ix l
     onFinalNode = null (cfg_arcs cfg ^. ix l)
-    emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle')
-    emitRich = emitModule (Module (MSRich fSpec) acc oracle')
+    emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
+    emitRich = emitModule (Module (MSRich fSpec) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
 
-  visitArcs oracle acc builder l = do
-    for_ (cfg_arcs cfg ^. ix l) $ \(lTo, insts, test) -> do
-      visit oracle (acc <> insts) builder lTo test
+    -- Visit all arcs from the current node.
+    --
+    -- This is here because a ret from a function adds a graph arc to
+    -- everything that ever calls it, and then we filter which one we want
+    -- during module generation, thus ignoring some outgoing edges.
+    visitArcs :: Map (NonEmpty Label, Label) Bool -> [LabeledInst] -> SpecBuilder -> Label -> ModuleL ()
+    visitArcs newOracle acc' pre l' = do
+      let outArcs = cfg_arcs cfg ^. ix l'
+      unless (null outArcs) $
+        let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==)
+            outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
+         in for_ outArcs' $ \(lTo, insts, test, f') ->
+              visit newOracle callstack' (acc' <> insts) pre lTo test f'
 
-updateOracle :: ArcCondition -> Map Label Bool -> Map Label Bool
-updateOracle ACNone = id
-updateOracle (ACJnz jnzPc isSat) = Map.insert jnzPc isSat
+updateOracle ::
+  ArcCondition ->
+  CallStack ->
+  Map (NonEmpty Label, Label) Bool ->
+  Map (NonEmpty Label, Label) Bool
+updateOracle ACNone _ = id
+updateOracle (ACJnz jnzPc isSat) callstack =
+  Map.insert (stackTrace callstack, jnzPc) isSat
