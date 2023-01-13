@@ -67,6 +67,8 @@ library
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
       Horus.Command.SMT
+      Horus.CallStack
+      Horus.FunctionAnalysis
       Horus.Expr
       Horus.Expr.SMT
       Horus.Expr.Std

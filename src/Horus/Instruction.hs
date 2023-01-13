@@ -18,7 +18,9 @@ module Horus.Instruction
   , callDestination
   , jumpDestination
   , toSemiAsm
+  , isCall
   , toSemiAsmUnsafe
+  , getNextPcInlinedWithFallback
   )
 where
 
@@ -26,10 +28,11 @@ import Control.Monad.Except (MonadError, throwError)
 import Data.Bits
 import Data.Coerce (coerce)
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Maybe (fromMaybe)
 import Data.Text (Text, unpack)
 
 import Horus.Label (Label (..), moveLabel)
-import Horus.Util (tShow, toSignedFelt)
+import Horus.Util (atMay, tShow, toSignedFelt)
 
 dstRegBit, op0RegBit, op1ImmBit, op1FpBit, op1ApBit :: Int
 resAddBit, resMulBit, pcJumpAbsBit, pcJumpRelBit, pcJnzBit :: Int
@@ -73,7 +76,10 @@ data Instruction = Instruction
   , i_fpUpdate :: FpUpdate
   , i_imm :: Integer
   }
-  deriving (Eq, Show)
+  deriving (Eq)
+
+instance Show Instruction where
+  show instr = "{instr imm: " ++ show (i_imm instr) ++ "}"
 
 type LabeledInst = (Label, Instruction)
 
@@ -89,9 +95,11 @@ instructionSize _ = 1
 getNextPc :: LabeledInst -> Label
 getNextPc (pc, i) = moveLabel pc (instructionSize i)
 
-isRet :: Instruction -> Bool
-isRet Instruction{i_opCode = Ret} = True
-isRet _ = False
+getNextPcInlinedWithFallback :: [LabeledInst] -> Int -> Label
+getNextPcInlinedWithFallback instrs pos =
+  let nextPcInlined = fst <$> atMay instrs (pos + 1)
+      def = getNextPc (instrs !! pos)
+   in fromMaybe def nextPcInlined
 
 uncheckedCallDestination :: LabeledInst -> Label
 uncheckedCallDestination (pc, i)
@@ -256,3 +264,11 @@ toSemiAsm Instruction{..} = do
     | v < 0 = op <> " - " <> tShow (-v)
     | v == 0 = op
     | otherwise = op <> " + " <> tShow v
+
+isRet :: Instruction -> Bool
+isRet Instruction{i_opCode = Ret} = True
+isRet _ = False
+
+isCall :: Instruction -> Bool
+isCall Instruction{i_opCode = Call} = True
+isCall _ = False
