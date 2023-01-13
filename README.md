@@ -159,7 +159,7 @@ cd horus-checker/
 ###### On Linux:
 ```console
 # Inside the `horus-checker/` repository root.
-sh ./scripts/ci/install-z3-linux.sh
+sh ./scripts/ci/install-z3-linux-amd64.sh
 sh ./scripts/ci/install-mathsat-linux.sh
 sh ./scripts/ci/install-cvc5-linux.sh
 ```
@@ -248,6 +248,10 @@ sudo docker build . -t horus
 ```
 
 This process might take several minutes.
+
+> **Note.** If your local platform is an AArch64 Mac, this process will take even longer
+> because some dependencies will be compiled from source. For us, it took 38min in a MacBook Pro M1.
+
 At the end you should see a message like this:
 
 ```console
