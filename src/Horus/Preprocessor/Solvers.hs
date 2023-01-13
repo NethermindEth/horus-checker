@@ -26,7 +26,7 @@ import Horus.Util (tShow)
 
 type Solver = MultiSolver
 
-newtype MultiSolver = MultiSolver [SingleSolver]
+newtype MultiSolver = MultiSolver [SingleSolver] deriving (Show)
 
 data SingleSolver = SingleSolver
   { s_name :: Text
@@ -41,6 +41,7 @@ data SolverSettings = SolverSettings
   { ss_shouldProduceModels :: Bool
   , ss_timeoutMillis :: Int -- negative for no timeout
   }
+  deriving (Show)
 
 defaultSolverSettings :: SolverSettings
 defaultSolverSettings =

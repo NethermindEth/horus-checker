@@ -4,6 +4,10 @@ module Horus.Global
   , Config (..)
   , solveContract
   , SolvingInfo (..)
+  , logDebug
+  , logInfo
+  , logError
+  , logWarning
   )
 where
 
@@ -31,6 +35,7 @@ import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
+import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
@@ -49,6 +54,7 @@ data Config = Config
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
   }
+  deriving (Show)
 
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
@@ -65,6 +71,7 @@ data GlobalF a
   | SetConfig Config a
   | PutStrLn' Text a
   | WriteFile' FilePath Text a
+  | forall b. Show b => Log (L.LogL b) a
   | Throw Text
   | forall b. Catch (GlobalL b) (Text -> GlobalL b) (b -> a)
 
@@ -243,3 +250,22 @@ solveContract = do
    in for (filter isUntrusted modules) solveModule
  where
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
+
+logM :: (a -> L.LogL ()) -> a -> GlobalL ()
+logM lg v =
+  do
+    config <- getConfig
+    when (cfg_verbose config) $ do
+      liftF' $ Log (lg v) ()
+
+logDebug :: Show a => a -> GlobalL ()
+logDebug = logM L.logDebug
+
+logInfo :: Text -> GlobalL ()
+logInfo = logM L.logInfo
+
+logError :: Show a => a -> GlobalL ()
+logError = logM L.logError
+
+logWarning :: Show a => a -> GlobalL ()
+logWarning = liftF' . flip Log () . L.logWarning
