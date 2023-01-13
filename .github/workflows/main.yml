@@ -103,7 +103,7 @@ jobs:
       - name: Build
         run: |
           jobs=$(getconf _NPROCESSORS_ONLN)
-          stack --jobs "$jobs" install
+          stack --jobs "$jobs" install --ghc-options -Werror
 
       - name: Test
         run: bash ./tests/entrypoint.sh
