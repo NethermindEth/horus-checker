@@ -1,6 +1,5 @@
 module Horus.Util
-  ( fieldPrime
-  , toSignedFelt
+  ( toSignedFelt
   , whenJust
   , whenJustM
   , unlessM
@@ -28,15 +27,12 @@ import Data.Text (Text, pack)
 import Data.Text qualified as Text
 import Data.Typeable (Typeable, eqT)
 
-fieldPrime :: Integer
-fieldPrime = 2 ^ (251 :: Int) + 17 * 2 ^ (192 :: Int) + 1
-
-toSignedFelt :: Integer -> Integer
-toSignedFelt x
-  | moddedX > fieldPrime `div` 2 = moddedX - fieldPrime
+toSignedFelt :: Integer -> Integer -> Integer
+toSignedFelt fPrime x
+  | moddedX > fPrime `div` 2 = moddedX - fPrime
   | otherwise = moddedX
  where
-  moddedX = x `mod` fieldPrime
+  moddedX = x `mod` fPrime
 
 whenJust :: Applicative f => Maybe a -> (a -> f ()) -> f ()
 whenJust Nothing _ = pure ()
