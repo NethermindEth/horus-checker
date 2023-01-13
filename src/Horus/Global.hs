@@ -40,7 +40,7 @@ import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
 import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program (Identifiers)
+import Horus.Program (Identifiers, Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName ())
@@ -67,6 +67,7 @@ data GlobalF a
   | GetIdentifiers (Identifiers -> a)
   | GetInlinable (Set ScopedFunction -> a)
   | GetLabelledInstrs ([LabeledInst] -> a)
+  | GetProgram (Program -> a)
   | GetSources ([(Function, ScopedName, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
@@ -114,6 +115,9 @@ getInlinable = liftF' (GetInlinable id)
 
 getLabelledInstructions :: GlobalL [LabeledInst]
 getLabelledInstructions = liftF' (GetLabelledInstrs id)
+
+getProgram :: GlobalL Program
+getProgram = liftF' (GetProgram id)
 
 getSources :: GlobalL [(Function, ScopedName, FuncSpec)]
 getSources = liftF' (GetSources id)
@@ -176,23 +180,27 @@ solveModule m = do
 
 outputSmtQueries :: Text -> ConstraintsState -> GlobalL ()
 outputSmtQueries moduleName constraints = do
+  fPrime <- p_prime <$> getProgram
+  let query = makeModel constraints fPrime
   Config{..} <- getConfig
-  whenJust cfg_outputQueries writeSmtFile
-  whenJust cfg_outputOptimizedQueries writeSmtFileOptimized
+  whenJust cfg_outputQueries (writeSmtFile query)
+  whenJust cfg_outputOptimizedQueries (writeSmtFileOptimized query)
  where
-  query = makeModel constraints
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
-  writeSmtFile dir = do
+  writeSmtFile :: Text -> FilePath -> GlobalL ()
+  writeSmtFile query dir = do
     writeFile' (dir </> unpack moduleName <> ".smt2") query
 
-  getQueryList = do
+  getQueryList :: Text -> PreprocessorL [Text]
+  getQueryList query = do
     queryList <- optimizeQuery query
     goalListToTextList queryList
 
-  writeSmtFileOptimized dir = do
+  writeSmtFileOptimized :: Text -> FilePath -> GlobalL ()
+  writeSmtFileOptimized query dir = do
     Config{..} <- getConfig
-    queries <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) getQueryList
+    queries <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (getQueryList query)
     writeSmtQueries queries dir moduleName
 
 writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalL ()
@@ -225,9 +233,10 @@ checkMathsat m = do
 solveSMT :: ConstraintsState -> GlobalL SolverResult
 solveSMT cs = do
   Config{..} <- getConfig
-  runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve query)
+  fPrime <- p_prime <$> getProgram
+  let query = makeModel cs fPrime
+  runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
  where
-  query = makeModel cs
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
 solveContract :: GlobalL [SolvingInfo]
