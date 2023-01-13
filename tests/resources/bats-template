@@ -9,7 +9,64 @@ test_case() {
     temp_file="${base}.temp"
 
     horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s mathsat -s z3 -t 20000 &> "$temp_file" || true
+    stack run horus-check "$compiled_file" -- -s cvc5 -s mathsat -s z3 -t 100000 &> "$temp_file" || true
+    diff "$gold_file" "$temp_file" \
+         --unified \
+         --ignore-trailing-space \
+         --ignore-blank-lines \
+         --new-file # treat absent files as empty
+    rm "$compiled_file"
+    rm "$temp_file"
+    rm "$base.out" -rf
+}
+
+test_case_z3() {
+    base="$1"
+    test_file="${base}.cairo"
+    gold_file="${base}.gold"
+    compiled_file="${base}.z3.json"
+    temp_file="${base}.z3.temp"
+
+    horus-compile "$test_file" > "$compiled_file"
+    stack run horus-check "$compiled_file" -- -s z3 -t 360000 &> "$temp_file" || true
+    diff "$gold_file" "$temp_file" \
+         --unified \
+         --ignore-trailing-space \
+         --ignore-blank-lines \
+         --new-file # treat absent files as empty
+    rm "$compiled_file"
+    rm "$temp_file"
+    rm "$base.out" -rf
+}
+
+test_case_mathsat() {
+    base="$1"
+    test_file="${base}.cairo"
+    gold_file="${base}.gold"
+    compiled_file="${base}.mathsat.json"
+    temp_file="${base}.mathsat.temp"
+
+    horus-compile "$test_file" > "$compiled_file"
+    stack run horus-check "$compiled_file" -- -s mathsat -t 360000 &> "$temp_file" || true
+    diff "$gold_file" "$temp_file" \
+         --unified \
+         --ignore-trailing-space \
+         --ignore-blank-lines \
+         --new-file # treat absent files as empty
+    rm "$compiled_file"
+    rm "$temp_file"
+    rm "$base.out" -rf
+}
+
+test_case_cvc5() {
+    base="$1"
+    test_file="${base}.cairo"
+    gold_file="${base}.gold"
+    compiled_file="${base}.cvc5.json"
+    temp_file="${base}.cvc5.temp"
+
+    horus-compile "$test_file" > "$compiled_file"
+    stack run horus-check "$compiled_file" -- -s cvc5 -t 360000 &> "$temp_file" || true
     diff "$gold_file" "$temp_file" \
          --unified \
          --ignore-trailing-space \

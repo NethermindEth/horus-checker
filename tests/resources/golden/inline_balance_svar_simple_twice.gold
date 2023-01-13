@@ -1,0 +1,8 @@
+main
+Unsat
+starknet.common.syscalls.storage_read
+Unsat
+starknet.common.syscalls.storage_write
+Unsat
+get_balance
+Unsat

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedLists #-}
 
-module Horus.SW.Std (FuncSpec (..), stdSpecs, trustedStdFuncs, mkReadSpec, mkWriteSpec) where
+module Horus.SW.Std (FuncSpec (..), stdSpecs, trustedStdFuncs, mkReadSpec, mkWriteSpec, stdSpecsList) where
 
 import Data.Map (Map)
 import Data.Map qualified as Map (fromList)
