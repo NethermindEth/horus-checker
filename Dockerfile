@@ -1,24 +1,31 @@
-FROM python:3.7-bullseye
+# FROM python:3.7-bullseye
+FROM haskell:latest
 
 WORKDIR /home
 
-RUN curl -sSL https://get.haskellstack.org/ | sh
+# RUN curl -sSL https://get.haskellstack.org/ | sh
 
-# Install horus-compile
-COPY horus-compile/ horus-compile/
-RUN pip3 install poetry \
-    && pip3 install horus-compile/
-RUN rm -rf horus-compile/
+# # Install horus-compile
+# COPY horus-compile/ horus-compile/
+# RUN pip3 install poetry \
+#     && pip3 install horus-compile/
+# RUN rm -rf horus-compile/
 
-# Install horus-checker
 COPY ./ horus-checker/
+
+# Install sudo and compatible version of llvm
 RUN apt-get update \
     && apt-get install sudo \
-    && sh horus-checker/scripts/ci/install-mathsat-linux.sh \
-    && sh horus-checker/scripts/ci/install-z3-linux.sh \
+    && apt-get install -y llvm-11 llvm-11-dev
+
+# Install solvers
+RUN sh horus-checker/scripts/ci/install-mathsat-linux.sh \
     && sh horus-checker/scripts/ci/install-cvc5-linux.sh \
-    && apt-get install -y llvm-13 llvm-13-dev
+    && sh horus-checker/scripts/ci/install-z3-linux-from-source.sh
+
+# Install horus-checker
 RUN cd horus-checker/ \
+    && stack --install-ghc setup \
     && stack install --local-bin-path /usr/local/bin/
 
-RUN rm -rf horus-checker/
+# RUN rm -rf horus-checker/
