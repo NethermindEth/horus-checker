@@ -12,7 +12,7 @@ import System.Environment (getArgs)
 import Horus.ContractDefinition (cd_program)
 import Horus.Instruction (labelInstructions, readAllInstructions, toSemiAsm)
 import Horus.Label (Label (..))
-import Horus.Program (p_code)
+import Horus.Program (p_code, p_prime)
 
 type EIO = ExceptT Text IO
 
@@ -20,7 +20,8 @@ main' :: EIO ()
 main' = do
   filename <- parseArgs =<< liftIO getArgs
   contract <- eioDecodeFileStrict filename
-  instructions <- readAllInstructions (p_code (cd_program contract))
+  let program = cd_program contract
+  instructions <- readAllInstructions (p_prime program) (p_code program)
   semiAsms <- traverse toSemiAsm instructions
   let labels = map fst (labelInstructions instructions)
   for_ (zip labels semiAsms) $ \(Label pc, semiAsm) -> liftIO $ do
