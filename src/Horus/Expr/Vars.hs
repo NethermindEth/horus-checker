@@ -15,9 +15,9 @@ module Horus.Expr.Vars
   , builtinAligned
   , builtinInSegment
   , builtinConstraint
+  , blockTimestamp
   , callerAddress
   , contractAddress
-  , blockTimestamp
   )
 where
 
@@ -29,12 +29,12 @@ import Data.Text qualified as Text
 import Data.Typeable ((:~:) (Refl))
 import Text.Read (readMaybe)
 
-import Horus.Expr (Cast (..), Expr (..), Ty (..), cast, (.&&), (.<), (.<=), (.==), (.=>))
+import Horus.Expr (Cast (..), Expr (..), Ty (..), cast, (.&&), (.<), (.<=), (.=>))
 import Horus.Expr qualified as Expr
 import Horus.Expr.Std (stdNames)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
-import Horus.SW.Builtin qualified as Builtin (name, size)
+import Horus.SW.Builtin qualified as Builtin (name)
 
 prime :: Expr TFelt
 prime = Expr.const "prime"
@@ -53,6 +53,7 @@ memory = Expr.function "memory"
 data RegKind = MainFp | CallFp Int | SingleAp | ApGroup Int
   deriving stock (Eq, Ord)
 
+-- TODO: The system for printing these is 'of course' broken.
 parseRegKind :: Text -> Maybe RegKind
 parseRegKind "fp!" = Just MainFp
 parseRegKind "ap!" = Just SingleAp
@@ -86,7 +87,12 @@ parseStorageVar e = do
   pure res
  where
   isStd n = n `elem` stdNames || n == "memory"
-  isReg n = isJust (parseRegKind n) || n == "ap" || n == "fp"
+  isReg n =
+    isJust (parseRegKind n)
+      || n == "ap"
+      || n == "fp"
+      || n == "range-check-bound"
+      || n == "prime"
   isLVar n = "$" `Text.isPrefixOf` n
 
 pattern StorageVar :: () => (a ~ TFelt) => Text -> [Expr TFelt] -> Expr a
@@ -114,10 +120,7 @@ builtinEnd :: Builtin -> Expr TFelt
 builtinEnd = Expr.const . builtinEndName
 
 builtinAligned :: Expr TFelt -> Builtin -> Expr TBool
-builtinAligned ptr b = start .<= ptr .&& ptr `Expr.mod` size .== 0
- where
-  start = builtinStart b
-  size = Builtin.size b
+builtinAligned ptr b = builtinStart b .<= ptr
 
 builtinInSegment :: Expr TFelt -> Builtin -> Expr TBool
 builtinInSegment ptr b = builtinAligned ptr b .&& ptr .< builtinEnd b

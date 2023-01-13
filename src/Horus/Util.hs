@@ -11,7 +11,9 @@ module Horus.Util
   , commonPrefix
   , enumerate
   , maybeToError
+  , invert
   , eqT'
+  , atMay
   )
 where
 
@@ -19,6 +21,7 @@ import Control.Monad (unless)
 import Control.Monad.Except (MonadError, throwError)
 import Control.Monad.Trans.Free.Church (FT (..))
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map (Map, fromListWith, toList)
 import Data.Maybe (isJust)
 import Data.Some (Some (..))
 import Data.Text (Text, pack)
@@ -72,5 +75,15 @@ enumerate = [minBound ..]
 maybeToError :: MonadError e m => e -> Maybe a -> m a
 maybeToError e = maybe (throwError e) pure
 
+invert :: Ord v => Map k v -> Map v [k]
+invert m = fromListWith (++) [(v, [k]) | (k, v) <- Data.Map.toList m]
+
 eqT' :: forall k (a :: k) (b :: k). (Typeable a, Typeable b) => Bool
 eqT' = isJust (eqT @a @b)
+
+atMay :: [a] -> Int -> Maybe a
+atMay [] _ = Nothing
+atMay (x : xs) n
+  | n < 0 = Nothing
+  | n == 0 = Just x
+  | otherwise = atMay xs $ n - 1

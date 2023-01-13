@@ -1,0 +1,12 @@
+thissat
+Sat
+thisunsat
+Unsat
+starknet.common.syscalls.storage_read
+Unsat
+starknet.common.syscalls.storage_write
+Unsat
+read_svar
+Unsat
+write_svar
+Sat
