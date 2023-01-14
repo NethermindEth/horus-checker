@@ -9,8 +9,8 @@ TEMP=$(mktemp)
 curl -L -o "${TEMP}" https://github.com/Z3Prover/z3/archive/refs/tags/z3-$version.zip
 unzip "${TEMP}"
 cd z3-z3-$version/
-python scripts/mk_make.py
-cd build
+python scripts/mk_make.py --prefix=/usr
+cd build 
 make
 sudo make install
 cd ../../

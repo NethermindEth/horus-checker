@@ -159,7 +159,7 @@ cd horus-checker/
 ###### On Linux:
 ```console
 # Inside the `horus-checker/` repository root.
-sh ./scripts/ci/install-z3-linux.sh
+sh ./scripts/ci/install-z3-linux-amd64.sh
 sh ./scripts/ci/install-mathsat-linux.sh
 sh ./scripts/ci/install-cvc5-linux.sh
 ```
