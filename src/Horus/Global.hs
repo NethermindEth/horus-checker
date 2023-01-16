@@ -53,6 +53,7 @@ data Config = Config
   { cfg_verbose :: Bool
   , cfg_outputQueries :: Maybe FilePath
   , cfg_outputOptimizedQueries :: Maybe FilePath
+  , cfg_version :: Bool
   , cfg_solver :: Solver
   , cfg_solverSettings :: SolverSettings
   }
