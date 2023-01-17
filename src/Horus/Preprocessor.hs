@@ -119,9 +119,9 @@ interpConst model name = do
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text)
 data Model = Model
-  { m_regs :: [(Text, Integer)]
+  { m_regs :: Map Text Integer
   , m_mem :: Map Integer Integer
-  , m_lvars :: [(LVar, Integer)]
+  , m_lvars :: Map LVar Integer
   }
 
 instance Show SolverResult where
@@ -131,9 +131,9 @@ instance Show SolverResult where
 
 instance Show Model where
   show Model{..} =
-    concatMap showAp m_regs
+    concatMap showAp (toList m_regs)
       <> concatMap showMem (toList m_mem)
-      <> concatMap showLVar m_lvars
+      <> concatMap showLVar (toList m_lvars)
    where
     showAp (reg, value) = printf "%8s\t=\t%d\n" reg value
     showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
@@ -189,9 +189,10 @@ z3ModelToHorusModel fPrime model =
       consts <- getConsts fPrime model
       mbRegs <- for consts (pure . parseRegVar)
       pure $
-        catMaybes mbRegs
-          & sort
-          & map (\(_regKind, regName, regVal) -> (regName, regVal))
+        fromList $
+          catMaybes mbRegs
+            & sort
+            & map (\(_regKind, regName, regVal) -> (regName, regVal))
     <*> do
       memAndAddrs <- getMemsAndAddrs
       addrValueList <- for memAndAddrs $ \(memName, addrName) -> do
@@ -202,7 +203,7 @@ z3ModelToHorusModel fPrime model =
     <*> do
       consts <- getConsts fPrime model
       mbLVars <- for consts (pure . parseLVar)
-      pure $ catMaybes mbLVars
+      pure $ fromList $ catMaybes mbLVars
  where
   parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
   parseRegVar (name, value) =
