@@ -69,19 +69,63 @@ labelNamesOfPc idents lblpc =
   , pc == lblpc
   ]
 
-normalizedName :: [ScopedName] -> (Text, Text)
-normalizedName scopedNames =
-  let names :: [[Text]]
-      names = map sn_path scopedNames
-      scopes = map (Text.intercalate "." . tail . init) names
-      labels = map last names
-   in (Text.concat scopes, summarizeLabels labels)
+-- | Remove the `__main__` prefix from top-level function names.
+dropMain :: [Text] -> [Text]
+dropMain [] = []
+dropMain ("__main__" : xs) = xs
+dropMain xs = xs
+
+{- | Summarize a list of labels for a function.
+
+ If you have `__main__.foo.bar` on the same PC* as `__main__.foo.baz`, you
+ get a string that tells you you're in `foo` scope for `bar | baz`.
+
+ If you get more than one scope (possibly, this cannot occur in Cairo), for
+ example, `__main__.foo.bar` and `__main__.FOO.baz` you get a summarization
+ of the scopes `fooFOO` and `bar|baz`.
+-}
+summarizeLabels :: [Text] -> Text
+summarizeLabels labels =
+  let prettyLabels = Text.intercalate "|" labels
+   in if length labels == 1
+        then prettyLabels
+        else Text.concat ["{", prettyLabels, "}"]
+
+{- | Returns the function name parts, in particular the fully qualified
+ function name and the label summary.
+
+ We take as arguments a list of scoped names (though in practice, this list
+ has only ever been observed to contain a single element), and a boolean flag
+ indicating whether the list of scoped names belongs to a function or a
+ *floating label* (as distinct from a function label).
+
+ A floating label is, for example, `add:` in the snippet below, which is
+ taken from the `func_multiple_ret.cairo` test file at revision 89ddeb2:
+
+ ```cairo
+ func succpred(m) -> (res: felt) {
+     ...
+     add:
+     [ap] = [fp - 3] - 1, ap++;
+     ...
+ }
+ ```
+ In particular, `add` is not a function name. A function name itself is, of
+ course, a label. But it is not a *floating label*, as defined above.
+
+ Note: we say "fully qualified", but we remove the `__main__` prefix from
+ top-level function names, if it exists.
+-}
+normalizedName :: [ScopedName] -> Bool -> (Text, Text)
+normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
  where
-  summarizeLabels labels =
-    let prettyLabels = Text.intercalate "|" labels
-     in if length labels == 1
-          then prettyLabels
-          else Text.concat ["{", prettyLabels, "}"]
+  -- Extract list of scopes from each ScopedName, dropping `__main__`.
+  names = map (dropMain . sn_path) scopedNames
+  -- If we have a floating label, we need to drop the last scope, because it is
+  -- the label name itself.
+  scopes = map (Text.intercalate ".") (if isFloatingLabel then map init names else names)
+  -- This will almost always just be the name of the single label.
+  labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
 
 descrOfBool :: Bool -> Text
 descrOfBool True = "T"
@@ -93,15 +137,43 @@ descrOfOracle oracle =
     then ""
     else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ oracle
 
--- While we do have the name of the called function in Module, it does not
--- contain the rest of the labels.
+{- | Return a triple of the function name, the label summary, and the oracle.
+
+ The oracle is a string of `T` and `F` characters, representing a path
+ through the control flow graph of the function. For example, if we have a
+ function
+
+ ```cairo
+ func f(x : felt) -> felt {
+     if (x == 0) {
+         return 0;
+     } else {
+         return 1;
+     }
+ }
+ ```
+
+ then the branch where we return 0 is represented by `T` (since the predicate
+ `x == 0` is True), and the branch where we return 1 is represented by `F`.
+
+ Nested control flow results in multiple `T` or `F` characters.
+
+ See `normalizedName` for the definition of a floating label. Here, the label
+ is floating if it is not a function declaration (i.e. equal to `calledF`),
+ since these are the only two types of labels we may encounter.
+
+ Note: while we do have the name of the called function in the `Module` type,
+ it does not contain the rest of the labels.
+-}
 getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text)
-getModuleNameParts idents (Module spec prog oracle _ _) =
+getModuleNameParts idents (Module spec prog oracle calledF _) =
   case beginOfModule prog of
     Nothing -> ("", "empty: " <> pprExpr post, "")
     Just label ->
-      let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
-       in (prefix, labelsDigest, descrOfOracle oracle)
+      let scopedNames = labelNamesOfPc idents label
+          isFloatingLabel = label /= calledF
+          (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
+       in (prefix, labelsSummary, descrOfOracle oracle)
  where
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
 
