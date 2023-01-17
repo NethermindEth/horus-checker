@@ -17,9 +17,9 @@ jobs:
 
       - name: Install SMT solvers
         run: |
-          sh ./scripts/ci/install-z3.sh
-          sh ./scripts/ci/install-mathsat.sh
-          sh ./scripts/ci/install-cvc5.sh
+          sh ./scripts/ci/install-z3-linux-amd64.sh
+          sh ./scripts/ci/install-mathsat-linux.sh
+          sh ./scripts/ci/install-cvc5-linux.sh
 
       - uses: actions/setup-python@v4
         with:
