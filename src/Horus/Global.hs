@@ -16,7 +16,7 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
-import Data.List (groupBy, sort)
+import Data.List (groupBy)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Text (Text, unpack)
@@ -166,34 +166,6 @@ data SolvingInfo = SolvingInfo
   }
   deriving (Eq)
 
-{- | Define an ordering on `SolvingInfo`s to group modules from the same function.
-
- This is only necessary for cases like `func_multiple_ret.cairo`, where without
- sorting, we get two results whose name is `succpred`, but since they are
- separated by a function with a different name (`succpred.add`), they are not
- grouped, and so we get what looks like a "duplicate" result:
-
-  main
-  Unsat
-  +
-  +succpred
-  +Unsat
-  +
-  succpred.add
-  Unsat
-  +
-  succpred
-  Unsat
-
- To fix this issue, we sort by `si_funcName` only in the case where one
- function name is a prefix of the other. This leaves the output order the same
- as the order in which the functions appear in the source code in all cases
- except when there is a potential duplication as in the above.
--}
-instance Ord SolvingInfo where
-  (SolvingInfo _ funcNameA _) <= (SolvingInfo _ funcNameB _) =
-    not (Text.isPrefixOf funcNameA funcNameB || Text.isPrefixOf funcNameB funcNameA) || funcNameA <= funcNameB
-
 {- | Construct a function name from a qualified function name and a summary of
  the label(s) (usually just one).
 
@@ -329,7 +301,6 @@ solveContract = do
   pure $
     ( concatMap collapseAllUnsats
         . groupBy sameFuncName
-        . sort
         . filter (not . isVerifiedIgnorable)
     )
       infos
