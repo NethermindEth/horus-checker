@@ -40,7 +40,7 @@ hint =
   \\n\
   \The timeout is per-SMT-query, which means that for a compiled contract\n\
   \containing 7 functions, a 5000ms timeout implies a maximum running time of at\n\
-  \least 35 seconds. It can be more becuase a function sometimes requires multiple\n\
+  \least 35 seconds. It can be more because a function sometimes requires multiple\n\
   \SMT queries.\n\
   \\n\
   \Example:\n\

@@ -20,7 +20,7 @@ import Data.List (groupBy, sort)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Text (Text, unpack)
-import Data.Text qualified as Text (isPrefixOf, splitOn)
+import Data.Text qualified as Text (isPrefixOf)
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
@@ -38,7 +38,7 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
+import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
 import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
@@ -194,18 +194,13 @@ instance Ord SolvingInfo where
   (SolvingInfo _ funcNameA _) <= (SolvingInfo _ funcNameB _) =
     not (Text.isPrefixOf funcNameA funcNameB || Text.isPrefixOf funcNameB funcNameA) || funcNameA <= funcNameB
 
-getModuleFuncName :: Identifiers -> Module -> Text
-getModuleFuncName identifiers m =
-  case Text.splitOn ":::" (nameOfModule identifiers m) of
-    (name : _) -> name
-    [] -> ""
-
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   checkMathsat m
   identifiers <- getIdentifiers
-  let moduleName = nameOfModule identifiers m
-      funcName = getModuleFuncName identifiers m
+  let (funcNamePrefix, labelsDigest, oracleSuffix) = getModuleNameParts identifiers m
+      funcName = if funcNamePrefix == "" then labelsDigest else funcNamePrefix <> "." <> labelsDigest
+      moduleName = funcName <> oracleSuffix
   result <- mkResult moduleName
   pure SolvingInfo{si_moduleName = moduleName, si_funcName = funcName, si_result = result}
  where
@@ -307,7 +302,10 @@ solveContract = do
 
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
-      isUntrusted = (`notElem` trustedStdFuncs) . getModuleFuncName identifiers
+      isUntrusted m = funcName `notElem` trustedStdFuncs
+       where
+        (funcNamePrefix, labelsDigest, _) = getModuleNameParts identifiers m
+        funcName = if funcNamePrefix == "" then labelsDigest else funcNamePrefix <> "." <> labelsDigest
   infos <- for (filter isUntrusted modules) solveModule
   pure $
     ( concatMap collapseAllUnsats
