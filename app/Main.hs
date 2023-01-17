@@ -5,11 +5,8 @@ import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, liftEither, runExceptT, throwError)
 import Control.Monad.IO.Class (liftIO)
 import Data.Aeson (FromJSON, eitherDecodeFileStrict)
-import Data.ByteString.Lazy.Char8 qualified as BS
-import Data.Char (isSpace)
-import Data.Foldable (find, for_)
+import Data.Foldable (for_)
 import Data.IORef (newIORef)
-import Data.Maybe (listToMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TextIO (putStrLn)
@@ -23,7 +20,6 @@ import Options.Applicative
   , progDescDoc
   )
 import Options.Applicative.Help.Pretty (text)
-import System.Directory (getCurrentDirectory, getDirectoryContents)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument)
 import Horus.ContractDefinition (cdSpecs)
@@ -49,22 +45,6 @@ hint =
   \\n\
   \Example:\n\
   \  $ horus-check -s cvc5 -t 5000 a.json"
-
-_readVersionFromCabal :: EIO String
-_readVersionFromCabal = do
-  cwdContents <- liftIO $ getDirectoryContents =<< getCurrentDirectory
-  case listToMaybe [file | file <- cwdContents, file == "horus-check.cabal"] of
-    Nothing -> throwError . T.pack $ "Unable to locate horus-check.cabal"
-    Just cabalFile -> do
-      versionLine <- liftIO $ BS.readFile cabalFile <&> find (versionStr `BS.isPrefixOf`) . BS.lines
-      case versionLine of
-        Nothing -> throwError . T.pack $ "Unable to identify version within horus-check.cabal"
-        Just version -> pure . ("Horus version: " ++) . parseVersion . BS.unpack $ version
- where
-  versionStr :: BS.ByteString
-  versionStr = "version:"
-  parseVersion :: String -> String
-  parseVersion = dropWhile isSpace . drop (fromIntegral $ BS.length versionStr)
 
 currentVersion :: String
 currentVersion = "0.1.0.1"
