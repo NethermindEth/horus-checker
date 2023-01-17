@@ -20,7 +20,7 @@ import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, intercalate, length)
+import Data.Text qualified as Text (concat, intercalate, length, pack)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
@@ -96,15 +96,16 @@ descrOfOracle oracle =
 -- While we do have the name of the called function in Module, it does not
 -- contain the rest of the labels.
 nameOfModule :: Identifiers -> Module -> Text
-nameOfModule idents (Module spec prog oracle _ _) =
+nameOfModule idents (Module spec prog oracle calledF _) =
   case beginOfModule prog of
     Nothing -> "empty: " <> pprExpr post
     Just label ->
       let (prefix, labelsDigest) = normalizedName $ labelNamesOfPc idents label
           noPrefix = Text.length prefix == 0
-       in Text.concat [prefix, if noPrefix then "" else ".", labelsDigest, descrOfOracle oracle]
+       in Text.concat [prefix, if noPrefix then "" else ".", labelsDigest, descrOfOracle oracle, " : ", Text.pack (show (isFunction label))]
  where
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
+  isFunction lbl = lbl == calledF
 
 data Error
   = ELoopNoInvariant Label
