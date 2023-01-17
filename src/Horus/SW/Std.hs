@@ -34,10 +34,10 @@ These functions will not be checked against their specifications.
 -}
 trustedStdFuncs :: [Text]
 trustedStdFuncs =
-  [ "starknet.common.syscalls.get_block_timestamp"
-  , "starknet.common.syscalls.get_caller_address"
-  , "starknet.common.syscalls.get_contract_address"
-  , "cairo.common.math.assert_le_felt"
+  [ "starkware.starknet.common.syscalls.get_block_timestamp"
+  , "starkware.starknet.common.syscalls.get_caller_address"
+  , "starkware.starknet.common.syscalls.get_contract_address"
+  , "starkware.cairo.common.math.assert_le_felt"
   ]
 
 {- | A lexicographically sorted by fs_name list of specifications of
