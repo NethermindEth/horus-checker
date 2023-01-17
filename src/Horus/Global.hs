@@ -194,15 +194,34 @@ instance Ord SolvingInfo where
   (SolvingInfo _ funcNameA _) <= (SolvingInfo _ funcNameB _) =
     not (Text.isPrefixOf funcNameA funcNameB || Text.isPrefixOf funcNameB funcNameA) || funcNameA <= funcNameB
 
+{- | Construct a function name from a qualified function name and a summary of
+ the label(s) (usually just one).
+
+ Basically, just concatenates the function name with the label(s), separated
+ by a dot. But crucially, it does this safely, so that if the label is empty,
+ it doesn't add a dot, and vice-versa if tghe function name is empty.
+
+ This terminology comes from the `normalizedName` function in `Module.hs`.
+-}
+mkLabeledFuncName :: Text -> Text -> Text
+mkLabeledFuncName qualifiedFuncName "" = qualifiedFuncName
+mkLabeledFuncName "" labelsSummary = labelsSummary
+mkLabeledFuncName qualifiedFuncName labelsSummary = qualifiedFuncName <> "." <> labelsSummary
+
+{- | Solve the constraints for a single module.
+
+ Here, a module is a label-delimited section of a function (or possibly the
+ whole function). In general, we have multiple modules in a function when
+ that function contains multiple branches (an if-then-else, for example).
+-}
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   checkMathsat m
   identifiers <- getIdentifiers
-  let (funcNamePrefix, labelsDigest, oracleSuffix) = getModuleNameParts identifiers m
-      funcName = if funcNamePrefix == "" then labelsDigest else funcNamePrefix <> "." <> labelsDigest
-      moduleName = funcName <> oracleSuffix
+  let (qualifiedFuncName, labelsSummary, oracleSuffix) = getModuleNameParts identifiers m
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix
   result <- mkResult moduleName
-  pure SolvingInfo{si_moduleName = moduleName, si_funcName = funcName, si_result = result}
+  pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result}
  where
   mkResult moduleName = printingErrors $ do
     constraints <- extractConstraints m
@@ -302,10 +321,10 @@ solveContract = do
 
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
-      isUntrusted m = funcName `notElem` trustedStdFuncs
+      isUntrusted m = labeledFuncName `notElem` trustedStdFuncs
        where
-        (funcNamePrefix, labelsDigest, _) = getModuleNameParts identifiers m
-        funcName = if funcNamePrefix == "" then labelsDigest else funcNamePrefix <> "." <> labelsDigest
+        (qualifiedFuncName, labelsSummary, _) = getModuleNameParts identifiers m
+        labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
   infos <- for (filter isUntrusted modules) solveModule
   pure $
     ( concatMap collapseAllUnsats
@@ -322,7 +341,7 @@ solveContract = do
   sameFuncName (SolvingInfo _ nameA _) (SolvingInfo _ nameB _) = nameA == nameB
 
   ignorableFuncPrefixes :: [Text]
-  ignorableFuncPrefixes = ["empty: ", "cairo.lang", "cairo.common", "starknet.common"]
+  ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
   isVerifiedIgnorable (SolvingInfo name _ res) =
