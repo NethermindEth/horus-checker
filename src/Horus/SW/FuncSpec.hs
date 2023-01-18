@@ -6,7 +6,7 @@ import Data.Maybe (fromMaybe)
 
 import Horus.Expr (Expr, Ty (..))
 import Horus.Expr qualified as Expr
-import Horus.JSON.Util (HSExpr (..))
+import Horus.JSON.Util (HSExpr (..), HSourcedSExpr (..))
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (parse)
 
@@ -47,8 +47,8 @@ toFuncSpec FuncSpec'{..} =
 instance FromJSON FuncSpec where
   parseJSON = withObject "FuncSpec" $ \v ->
     FuncSpec
-      <$> fmap elimHSExpr (v .: "pre")
-      <*> fmap elimHSExpr (v .: "post")
+      <$> fmap (elimHSExpr . hss_hsexpr) (v .: "pre")
+      <*> fmap (elimHSExpr . hss_hsexpr) (v .: "post")
       <*> (Storage.parse =<< (v .: "storage_update"))
 
 elimHSExpr :: HSExpr a -> Expr a
