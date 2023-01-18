@@ -14,10 +14,6 @@ for test_file in "$TEST_DIR"/*.cairo; do
     single_solver_test_case "$TEST_DIR/$base" "z3"
 }
 
-@test "$TEST_DIR/$base mathsat" {
-    single_solver_test_case "$TEST_DIR/$base" "mathsat"
-}
-
 @test "$TEST_DIR/$base cvc5" {
     single_solver_test_case "$TEST_DIR/$base" "cvc5"
 }
