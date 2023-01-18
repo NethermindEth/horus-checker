@@ -1050,13 +1050,15 @@ postconditions**.
 #### Why am I getting `Unknown`?
 
 There are many reasons why an SMT solver may timeout on a query. Unfortunately,
-satisfiability is a very difficult problem, and it is very difficult to
-accurately predict how long a query will take to solve.
+satisfiability is a very difficult problem
+([undecidable](https://en.wikipedia.org/wiki/Undecidable_problem) in general),
+and it is nigh impossible to accurately predict how long an arbitrary query
+will take to solve.
 
 However, besides increasing the timeout passed to the solver with the `-t`
 flag, it may also be helpful to try using a different solver backend to resolve
-`Unknown` results. It is notable that `cvc5` (the default solver) does not
-perform well with nonlinear arithmetic, and thus it is better to use `z3` or
+`Unknown` results. It is notable that **`cvc5` (the default solver) does not
+perform well with nonlinear arithmetic**, and thus it is better to use `z3` or
 `mathsat` for these cases.
 
 It is also sometimes helpful to rewrite your annotations in a different, but
