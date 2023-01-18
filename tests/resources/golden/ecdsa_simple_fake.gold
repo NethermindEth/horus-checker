@@ -1,5 +1,6 @@
-apply_ecdsa
+apply_ecdsa [inlined]
 Verified
 
-main
+main [inlined]
 False
+

@@ -1,14 +1,15 @@
 main_
 Verified
 
-_Stack.empty
+_Stack.empty [inlined]
 Verified
 
-_Stack.add
+_Stack.add [inlined]
 Verified
 
-_Stack.lit
+_Stack.lit [inlined]
 Verified
 
-_Stack.top
+_Stack.top [inlined]
 Verified
+
