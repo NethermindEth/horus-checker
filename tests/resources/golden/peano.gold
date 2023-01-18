@@ -1,8 +1,8 @@
 dec
-Unsat
-peano_sum+T
-Unsat
-peano_sum+F
-Unsat
+Verified
+
+peano_sum
+Verified
+
 succ
-Unsat
+Verified

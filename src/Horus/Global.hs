@@ -8,6 +8,7 @@ module Horus.Global
   , logInfo
   , logError
   , logWarning
+  , SolverResult (..)
   )
 where
 
@@ -15,10 +16,11 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
+import Data.List (groupBy)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Text (Text, unpack)
-import Data.Text as Text (splitOn)
+import Data.Text qualified as Text (isPrefixOf)
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
@@ -36,8 +38,8 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleL, gatherModules, nameOfModule)
-import Horus.Preprocessor (PreprocessorL, SolverResult (Unknown), goalListToTextList, optimizeQuery, solve)
+import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
+import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (p_prime))
@@ -110,8 +112,8 @@ getConfig = liftF' (GetConfig id)
 getFuncSpec :: ScopedFunction -> GlobalL FuncSpec'
 getFuncSpec name = liftF' (GetFuncSpec name id)
 
-getInlinable :: GlobalL (Set ScopedFunction)
-getInlinable = liftF' (GetInlinable id)
+getInlinables :: GlobalL (Set ScopedFunction)
+getInlinables = liftF' (GetInlinable id)
 
 getLabelledInstructions :: GlobalL [LabeledInst]
 getLabelledInstructions = liftF' (GetLabelledInstrs id)
@@ -159,16 +161,39 @@ extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (e
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
+  , si_funcName :: Text
   , si_result :: SolverResult
   }
+  deriving (Eq)
 
+{- | Construct a function name from a qualified function name and a summary of
+ the label(s) (usually just one).
+
+ Basically, just concatenates the function name with the label(s), separated
+ by a dot. But crucially, it does this safely, so that if the label is empty,
+ it doesn't add a dot, and vice-versa if tghe function name is empty.
+
+ This terminology comes from the `normalizedName` function in `Module.hs`.
+-}
+mkLabeledFuncName :: Text -> Text -> Text
+mkLabeledFuncName qualifiedFuncName "" = qualifiedFuncName
+mkLabeledFuncName "" labelsSummary = labelsSummary
+mkLabeledFuncName qualifiedFuncName labelsSummary = qualifiedFuncName <> "." <> labelsSummary
+
+{- | Solve the constraints for a single module.
+
+ Here, a module is a label-delimited section of a function (or possibly the
+ whole function). In general, we have multiple modules in a function when
+ that function contains multiple branches (an if-then-else, for example).
+-}
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   checkMathsat m
   identifiers <- getIdentifiers
-  let moduleName = nameOfModule identifiers m
+  let (qualifiedFuncName, labelsSummary, oracleSuffix) = getModuleNameParts identifiers m
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix
   result <- mkResult moduleName
-  pure SolvingInfo{si_moduleName = moduleName, si_result = result}
+  pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result}
  where
   mkResult moduleName = printingErrors $ do
     constraints <- extractConstraints m
@@ -239,10 +264,25 @@ solveSMT cs = do
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
+{- |  Collapse a list of modules for the same function if they are all `Unsat`.
+
+ Given a list of `SolvingInfo`s, each associated with a module, under the
+ assumption that they all have the same `si_funcName`, if they are all `Unsat`,
+ we collapse them into a singleton list of one `SolvingInfo`, where we
+ hot-patch the `moduleName`, replacing it with the `funcName`. Otherwise, we
+ leave the input invariant.
+-}
+collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
+collapseAllUnsats [] = []
+collapseAllUnsats infos@((SolvingInfo _ funcName result) : _) =
+  if all ((== Unsat) . si_result) infos
+    then [SolvingInfo funcName funcName result]
+    else infos
+
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   lInstructions <- getLabelledInstructions
-  inlinables <- getInlinable
+  inlinables <- getInlinables
   cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
 
   -- For every inlinable function `f`, build the CFG for all functions excluding `f`.
@@ -250,16 +290,33 @@ solveContract = do
   cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
   for_ cfgs verbosePrint
   modules <- concat <$> for ((cfg, isStandardSource inlinables) : zip cfgs (map (==) fs)) makeModules
+
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
-      isUntrusted m =
-        case Text.splitOn "+" (nameOfModule identifiers m) of
-          [] -> True
-          (name : _) -> name `notElem` trustedStdFuncs
-   in for (filter isUntrusted modules) solveModule
+      isUntrusted m = labeledFuncName `notElem` trustedStdFuncs
+       where
+        (qualifiedFuncName, labelsSummary, _) = getModuleNameParts identifiers m
+        labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
+  infos <- for (filter isUntrusted modules) solveModule
+  pure $
+    ( concatMap collapseAllUnsats
+        . groupBy sameFuncName
+        . filter (not . isVerifiedIgnorable)
+    )
+      infos
  where
+  isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
 
+  sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
+  sameFuncName (SolvingInfo _ nameA _) (SolvingInfo _ nameB _) = nameA == nameB
+
+  ignorableFuncPrefixes :: [Text]
+  ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
+
+  isVerifiedIgnorable :: SolvingInfo -> Bool
+  isVerifiedIgnorable (SolvingInfo name _ res) =
+    res == Unsat && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =
   do

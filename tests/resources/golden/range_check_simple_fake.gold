@@ -1,4 +1,5 @@
 apply_range_check
-Unsat
+Verified
+
 main
-Sat
+False

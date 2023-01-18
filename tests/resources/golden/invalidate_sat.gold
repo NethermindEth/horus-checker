@@ -1,8 +1,11 @@
 id
-Unsat
+Verified
+
 test1
-Unsat
-test1.lab+T
-Unsat
-test1.lab+F
-Sat
+Verified
+
+test1.lab:::T
+Verified
+
+test1.lab:::F
+False

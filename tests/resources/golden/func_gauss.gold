@@ -1,8 +1,5 @@
 gauss
-Unsat
-gauss.loop+T
-Unsat
-gauss.loop+F
-Unsat
+Verified
+
 main
-Unsat
+Verified
