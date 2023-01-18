@@ -39,9 +39,11 @@ hint =
   \The default is 2000ms.\n\
   \\n\
   \The timeout is per-SMT-query, which means that for a compiled contract\n\
-  \containing 7 functions, a 5000ms timeout implies a maximum running time of at\n\
-  \least 35 seconds. It can be more because a function sometimes requires multiple\n\
-  \SMT queries.\n\
+  \containing 7 functions that requires a total of 11 queries, a 5000ms timeout\n\
+  \implies a maximum running time of 55 seconds. Each function will give rise to\n\
+  \at least one query, and in general, queries are in 1-1 correspondence with \n\
+  \branches of control flow (so a function with a single if-then-else will require\n\
+  \2 queries).\n\
   \\n\
   \Example:\n\
   \  $ horus-check -s cvc5 -t 5000 a.json"
