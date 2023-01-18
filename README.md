@@ -661,12 +661,15 @@ func main{output_ptr : felt*}() -> () {
 }
 ```
 The annotations are the comments directly above each of the functions `add()`,
-`lit()`, and `top()`. They begin with `// @`. The `@post` keyword indicates
-that an annotation is specifying a condition that must hold **at the end of the
-function call**, when the function returns. It is called `@post` because it is
-a "postcondition".
+`lit()`, and `top()`, along with the assert comment in `main()`. They all begin
+with `// @`. The `@post` keyword indicates that an annotation is specifying a
+condition that must hold **at the end of the function call**, when the function
+returns. It is called `@post` because it is a "postcondition".
 
-Briefly, we are asserting that:
+The `@assert` keyword is the syntax for a condition that can be checked
+anywhere inside the body of a function.
+
+Briefly, with the annotations we've added, we are checking that:
 * The `add()` function returns a pointer to a stack with the sum of the first
   two elements on top, and the remainder of the original stack (the third
   element and so on) after that.
@@ -718,34 +721,24 @@ horus-check --solver z3 compiled.json
 _Stack.add
 Verified
 
-_Stack.empty
-Verified
-
 _Stack.lit
 Verified
 
 _Stack.top
 Verified
 
+_Stack.empty
+Verified
+
 main
 Verified
 
-cairo.lang.compiler.lib.registers.get_ap
-Verified
-
-empty: (and (= (memory (+ ap (- 2))) (memory (+ fp (- 2)))) (= (memory (+ ap (- 1))) (memory (+ fp (- 1)))))
-Verified
 ```
 
-> Note: The `cairo.lang.compiler.lib.registers.get_ap` appears here since we
-> have used the `new` keyword, and thus Horus must check its behavior in order
-> to verify the functions we wrote. You may similarly ignore the result for
-> `empty: ...`, which indicates an empty segment.
-
-> Note: `main` and `_Stack.empty` appear here since Horus implicitly gives all
+> Note: `_Stack.empty` appears here since Horus implicitly gives all
 > unannotated functions a trivial (always true) specification.
 
-The three functions `_Stack.add`, `_Stack.lit`, and `_Stack.top` that we
+The four functions `_Stack.add`, `_Stack.lit`, `_Stack.top`, and `main` that we
 annotated all say `Verified`, which means our implementations are correct with
 respect to the specifications we wrote in our annotations.
 
