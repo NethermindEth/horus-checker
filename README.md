@@ -1047,6 +1047,23 @@ type signature, it is defined _within_ the function body. We see this error
 because **local variables cannot be referenced in preconditions or
 postconditions**.
 
+#### Why am I getting `Unknown`?
+
+There are many reasons why an SMT solver may timeout on a query. Unfortunately,
+satisfiability is a very difficult problem, and it is very difficult to
+accurately predict how long a query will take to solve.
+
+However, besides increasing the timeout passed to the solver with the `-t`
+flag, it may also be helpful to try using a different solver backend to resolve
+`Unknown` results. It is notable that `cvc5` (the default solver) does not
+perform well with nonlinear arithmetic, and thus it is better to use `z3` or
+`mathsat` for these cases.
+
+It is also sometimes helpful to rewrite your annotations in a different, but
+logically equivalent form, as this sometimes has the effect of making the query
+easier for solver.
+
+
 ## Usage
 
 Horus consists of two command-line tools, `horus-compile` and `horus-check`.
