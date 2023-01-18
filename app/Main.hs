@@ -27,7 +27,7 @@ import Horus.ContractInfo (mkContractInfo)
 import Horus.Global (Config (cfg_version), SolverResult (..), SolvingInfo (..), solveContract)
 import Horus.Global.Runner qualified as Global (Env (..), run)
 import Horus.SW.Std (stdSpecs)
-import Horus.Util (if', tShow)
+import Horus.Util (tShow)
 
 type EIO = ExceptT Text IO
 
@@ -49,30 +49,27 @@ hint =
 currentVersion :: String
 currentVersion = "0.1.0.1"
 
-main' :: Arguments -> EIO ()
-main' Arguments{..} = guardVersion $ do
-  case arg_fileName of
-    Nothing -> fail . T.unpack $ "Missing " <> fileArgument <> ". Use --help for more information."
-    Just filename -> do
-      contract <- eioDecodeFileStrict filename <&> cdSpecs %~ (<> stdSpecs)
-      contractInfo <- mkContractInfo contract
-      configRef <- liftIO (newIORef arg_config)
-      let env = Global.Env{e_config = configRef, e_contractInfo = contractInfo}
-      infos <- liftIO (Global.run env solveContract) >>= liftEither
-      for_ infos $ \si -> liftIO $ do
-        TextIO.putStrLn (ppSolvingInfo si)
-      let unknowns = [res | res@(Unknown{}) <- map si_result infos]
-      unless (null unknowns) $ liftIO (TextIO.putStrLn hint')
+-- | The main entrypoint of everything that happens in our monad stack.
+--
+-- The contract is a 1-1 representation of the data in the compiled JSON file.
+-- The contract is then used to create a 'ContractInfo' which is a more
+-- convenient representation of the contract.
+--
+-- We run `solveContract`, which is the entrypoint into the *rest* of the
+-- program, and gather the results for pretty-printing.
+main' :: Arguments -> FilePath -> EIO ()
+main' Arguments{..} filename = do
+  contract <- eioDecodeFileStrict filename <&> cdSpecs %~ (<> stdSpecs)
+  contractInfo <- mkContractInfo contract
+  configRef <- liftIO (newIORef arg_config)
+  let env = Global.Env{e_config = configRef, e_contractInfo = contractInfo}
+  infos <- liftIO (Global.run env solveContract) >>= liftEither
+  for_ infos $ \si -> liftIO $ do
+    TextIO.putStrLn (ppSolvingInfo si)
+  let unknowns = [res | res@(Unknown{}) <- map si_result infos]
+  unless (null unknowns) $ liftIO (TextIO.putStrLn hint')
  where
   hint' = "\ESC[33m" <> (T.strip . T.unlines . map ("hint: " <>) . T.lines) hint <> "\ESC[0m"
-
-  guardVersion :: EIO () -> EIO ()
-  guardVersion =
-    if' (cfg_version arg_config)
-      . liftIO
-      . putStrLn
-      . ("Horus version: " ++)
-      $ currentVersion
 
 eioDecodeFileStrict :: FromJSON a => FilePath -> EIO a
 eioDecodeFileStrict path = do
@@ -84,10 +81,24 @@ eioDecodeFileStrict path = do
 ppSolvingInfo :: SolvingInfo -> Text
 ppSolvingInfo SolvingInfo{..} = si_moduleName <> "\n" <> tShow si_result <> "\n"
 
+-- | Main entrypoint of the program.
+--
+-- Cases
+-- =====
+-- 1. No arguments are passed. In this case, we print the help message.
+-- 2. The `--version` flag is passed. In this case, we print the version number.
+-- 3. No file is passed. In this case, we print an error.
+-- 4. A file is passed. In this case, we run `main'`.
 main :: IO ()
 main = do
   arguments <- execParser opts
-  runExceptT (main' arguments) >>= either (fail . T.unpack) pure
+  if cfg_version (arg_config arguments)
+    then putStrLn currentVersion
+    else
+      case arg_fileName arguments of
+        Nothing -> putStrLn "Missing compiled JSON file. Use --help for more information."
+        Just filename -> do
+           runExceptT (main' arguments filename) >>= either (fail . T.unpack) pure
  where
   opts =
     info
