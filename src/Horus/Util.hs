@@ -13,7 +13,6 @@ module Horus.Util
   , invert
   , eqT'
   , atMay
-  , if'
   )
 where
 
@@ -84,7 +83,3 @@ atMay (x : xs) n
   | n < 0 = Nothing
   | n == 0 = Just x
   | otherwise = atMay xs $ n - 1
-
-if' :: Bool -> a -> a -> a
-if' True x _ = x
-if' False _ y = y
