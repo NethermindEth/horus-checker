@@ -1,4 +1,5 @@
 elemSum0
-Unsat
+Verified
+
 elemSum1
-Sat
+False
