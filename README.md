@@ -1084,6 +1084,13 @@ A tool to compile checked StarkNet contracts.
 
 Emits a compiled Cairo program in the form of JSON, printed to `stdout` by default.
 
+#### Example
+
+```console
+horus-compile a.cairo > b.json
+```
+Compiles the annotated Cairo program `a.cairo`, and dumps the output into `b.json`.
+
 #### Positional arguments
 
 `file`
@@ -1169,13 +1176,21 @@ horus-check COMPILED_FILE [-v|--verbose] [--output-queries DIR]
             [--print-models] [-t|--timeout TIMEOUT]
 ```
 
+#### Example
+
+```console
+horus-check b.json
+```
+Attempts to verify the compiled Cairo program `b.json` with the default SMT
+solver `cvc5`, and prints the output to `stdout`.
+
+
 #### Positional arguments
 
 `COMPILED_FILE`
 
 A JSON contract compiled with 'horus-compile'. This can be generated from a
 '.cairo' file as follows (for an example contract called `program.cairo`):
-
 ```console
 horus-compile --output program.json program.cairo
 ```
