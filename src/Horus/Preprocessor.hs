@@ -18,7 +18,7 @@ import Data.Functor ((<&>))
 import Data.List (sort)
 import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, pack, stripPrefix, unpack)
 import Data.Traversable (for)
 import SimpleSMT qualified as SMT (Result (..))
 import Text.Printf (printf)
@@ -29,6 +29,8 @@ import Z3.Monad qualified as Z3
 import Horus.Expr.Vars (RegKind, parseRegKind)
 import Horus.Util (maybeToError, toSignedFelt)
 import Horus.Z3Util (goalToSExpr, sexprToGoal)
+
+type LVar = Text
 
 data PreprocessorF a
   = forall b. RunZ3 (Z3 b) (b -> a)
@@ -117,8 +119,9 @@ interpConst model name = do
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text)
 data Model = Model
-  { m_regs :: [(Text, Integer)]
+  { m_regs :: Map Text Integer
   , m_mem :: Map Integer Integer
+  , m_lvars :: Map LVar Integer
   }
 
 instance Show SolverResult where
@@ -128,11 +131,13 @@ instance Show SolverResult where
 
 instance Show Model where
   show Model{..} =
-    concatMap showAp m_regs
+    concatMap showAp (toList m_regs)
       <> concatMap showMem (toList m_mem)
+      <> concatMap showLVar (toList m_lvars)
    where
     showAp (reg, value) = printf "%8s\t=\t%d\n" reg value
     showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
+    showLVar (lvar, value) = printf "%8s\t=\t%d\n" lvar value
 
 solve :: Integer -> Text -> PreprocessorL SolverResult
 solve fPrime smtQuery = do
@@ -184,9 +189,10 @@ z3ModelToHorusModel fPrime model =
       consts <- getConsts fPrime model
       mbRegs <- for consts (pure . parseRegVar)
       pure $
-        catMaybes mbRegs
-          & sort
-          & map (\(_regKind, regName, regVal) -> (regName, regVal))
+        fromList $
+          catMaybes mbRegs
+            & sort
+            & map (\(_regKind, regName, regVal) -> (regName, regVal))
     <*> do
       memAndAddrs <- getMemsAndAddrs
       addrValueList <- for memAndAddrs $ \(memName, addrName) -> do
@@ -194,7 +200,13 @@ z3ModelToHorusModel fPrime model =
         addr <- interpConst model addrName
         pure (toSignedFelt fPrime addr, toSignedFelt fPrime value)
       pure $ fromList addrValueList
+    <*> do
+      consts <- getConsts fPrime model
+      mbLVars <- for consts (pure . parseLVar)
+      pure $ fromList $ catMaybes mbLVars
  where
   parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
   parseRegVar (name, value) =
     parseRegKind name <&> (,name,toSignedFelt fPrime value)
+  parseLVar :: (Text, Integer) -> Maybe (Text, Integer)
+  parseLVar (name, value) = (,value) . pack . ('$' :) . unpack <$> stripPrefix "$" name
