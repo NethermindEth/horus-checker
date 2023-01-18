@@ -54,6 +54,7 @@ library
       Horus.Arguments
       Horus.ContractDefinition
       Horus.ContractInfo
+      Horus.FunctionAnalysis
       Horus.Global
       Horus.Global.Runner
       Horus.Instruction
@@ -68,7 +69,6 @@ library
       Horus.CairoSemantics.Runner
       Horus.Command.SMT
       Horus.CallStack
-      Horus.FunctionAnalysis
       Horus.Expr
       Horus.Expr.SMT
       Horus.Expr.Std
@@ -126,6 +126,7 @@ executable horus-check
     main-is:                 Main.hs
     build-depends:
       aeson,
+      containers,
       directory,
       filepath,
       horus-check,

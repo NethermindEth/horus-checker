@@ -1,14 +1,15 @@
 main
 False
 
-succ
+succ [inlined]
 Verified
 
-pred
+pred [inlined]
 Verified
 
-id
+id [inlined]
 Verified
 
-addtwo
+addtwo [inlined]
 Verified
+

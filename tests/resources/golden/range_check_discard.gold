@@ -1,5 +1,6 @@
-range_check_5_times
+range_check_5_times [inlined]
 Verified
 
-discarding_range_check
+discarding_range_check [inlined]
 False
+

@@ -1,5 +1,6 @@
-apply_pedersen
+apply_pedersen [inlined]
 Verified
 
-main
+main [inlined]
 False
+
