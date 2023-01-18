@@ -1,8 +1,11 @@
 main
-Sat
+False
+
 pred
-Unsat
+Verified
+
 succ
-Unsat
+Verified
+
 id
-Unsat
+Verified

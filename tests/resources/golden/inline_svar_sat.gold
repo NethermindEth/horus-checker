@@ -1,10 +1,8 @@
 get_balance
-Unsat
+Verified
+
 increase_balance
-Sat
-starknet.common.syscalls.storage_read
-Unsat
-starknet.common.syscalls.storage_write
-Unsat
+False
+
 add_two
-Unsat
+Verified

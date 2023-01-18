@@ -1,0 +1,10 @@
+cradle:
+  stack:
+    - path: "./src/Horus"
+      component: "horus-check:lib"
+
+    - path: "./app/Main.hs"
+      component: "horus-check:exe:horus-check"
+
+    - path: "./app/disasm/Main.hs"
+      component: "horus-check:exe:horus-disasm"
