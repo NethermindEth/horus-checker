@@ -1,8 +1,5 @@
 main
-Unsat
-starknet.common.syscalls.storage_read
-Unsat
-starknet.common.syscalls.storage_write
-Unsat
+Verified
+
 get_balance
-Unsat
+Verified

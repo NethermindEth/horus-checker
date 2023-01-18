@@ -1,4 +1,5 @@
 apply_ecdsa
-Unsat
+Verified
+
 main
-Sat
+False

@@ -11,15 +11,15 @@ for test_file in "$TEST_DIR"/*.cairo; do
     cat <<EOF
 @test "$TEST_DIR/$base z3" {
     printf "# checking $TEST_DIR/$base\n" >&3
-    test_case_z3 "$TEST_DIR/$base"
+    single_solver_test_case "$TEST_DIR/$base" "z3"
 }
 
 @test "$TEST_DIR/$base mathsat" {
-    test_case_mathsat "$TEST_DIR/$base"
+    single_solver_test_case "$TEST_DIR/$base" "mathsat"
 }
 
 @test "$TEST_DIR/$base cvc5" {
-    test_case_cvc5 "$TEST_DIR/$base"
+    single_solver_test_case "$TEST_DIR/$base" "cvc5"
 }
 
 EOF

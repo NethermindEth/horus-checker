@@ -1,4 +1,2 @@
-main+T
-Unsat
-main+F
-Unsat
+main
+Verified
