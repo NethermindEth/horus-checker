@@ -12,7 +12,7 @@ import Data.Map (Map)
 import Lens.Micro (Lens')
 
 import Horus.Expr (Expr, Ty (..))
-import Horus.JSON.Util (HSExpr (..))
+import Horus.JSON.Util (HSExpr (..), HSourcedSExpr (..))
 import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.Std (FuncSpec (..))
@@ -39,8 +39,11 @@ instance FromJSON ContractDefinition where
     ContractDefinition
       <$> v .: "program"
       <*> v .:? "specifications" .!= mempty
-      <*> fmap elimHSExpr (v .:? "invariants" .!= mempty)
+      <*> fmap (elimHSExpr . elimHSourcedExpr) (v .:? "invariants" .!= mempty) -- temporary fix to allow using new version of horus-compile
       <*> v .:? "storage_vars" .!= mempty
+
+elimHSourcedExpr :: Map ScopedName (HSourcedSExpr a) -> Map ScopedName (HSExpr a)
+elimHSourcedExpr = fmap hss_hsexpr
 
 elimHSExpr :: Map ScopedName (HSExpr a) -> Map ScopedName (Expr a)
 elimHSExpr = coerce
