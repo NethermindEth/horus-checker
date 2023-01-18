@@ -19,6 +19,7 @@ import Data.Foldable (for_)
 import Data.List (groupBy)
 import Data.Maybe (fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
+import Data.Set qualified as Set (map)
 import Data.Text (Text, unpack)
 import Data.Text qualified as Text (isPrefixOf)
 import Data.Traversable (for)
@@ -36,7 +37,7 @@ import Horus.CairoSemantics.Runner
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction), isWrapper)
+import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
 import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
@@ -270,16 +271,21 @@ solveSMT cs = do
  assumption that they all have the same `si_funcName`, if they are all `Unsat`,
  we collapse them into a singleton list of one `SolvingInfo`, where we
  hot-patch the `moduleName`, replacing it with the `funcName`. Otherwise, we
- leave the input invariant.
+ leave the input invariant. If the outer function was inlinable, propagate that information.
 -}
-collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
+collapseAllUnsats :: [(SolvingInfo, Bool)] -> [(SolvingInfo, Bool)]
 collapseAllUnsats [] = []
-collapseAllUnsats infos@((SolvingInfo _ funcName result) : _) =
-  if all ((== Unsat) . si_result) infos
-    then [SolvingInfo funcName funcName result]
+collapseAllUnsats infos@((SolvingInfo _ funcName result, _) : _) =
+  if all ((== Unsat) . si_result . fst) infos
+    then [(SolvingInfo funcName funcName result, any snd infos)]
     else infos
 
-solveContract :: GlobalL [SolvingInfo]
+{- | Return a solution of SMT queries corresponding with the contract.
+
+  For the purposes of reporting results,
+  we also remember which SMT query corresponding to a function was inlined.
+-}
+solveContract :: GlobalL [(SolvingInfo, Bool)]
 solveContract = do
   lInstructions <- getLabelledInstructions
   inlinables <- getInlinables
@@ -297,11 +303,13 @@ solveContract = do
        where
         (qualifiedFuncName, labelsSummary, _) = getModuleNameParts identifiers m
         labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
-  infos <- for (filter isUntrusted modules) solveModule
+  infos <- for (filter isUntrusted modules) $ \mdl -> do
+    info <- solveModule mdl
+    pure (info, m_calledF mdl `elem` Set.map sf_pc inlinables)
   pure $
     ( concatMap collapseAllUnsats
-        . groupBy sameFuncName
-        . filter (not . isVerifiedIgnorable)
+        . groupBy (\(si, _) (si', _) -> sameFuncName si si')
+        . filter (not . isVerifiedIgnorable . fst)
     )
       infos
  where
@@ -317,6 +325,7 @@ solveContract = do
   isVerifiedIgnorable :: SolvingInfo -> Bool
   isVerifiedIgnorable (SolvingInfo name _ res) =
     res == Unsat && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
+
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =
   do

@@ -4,8 +4,9 @@ False
 pred
 Verified
 
-succ
+succ [inlined]
 Verified
 
-id
+id [inlined]
 Verified
+
