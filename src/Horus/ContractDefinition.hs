@@ -19,6 +19,7 @@ import Horus.SW.Std (FuncSpec (..))
 
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
+  , cd_version :: String
   , cd_specs :: Map ScopedName FuncSpec
   , cd_invariants :: Map ScopedName (Expr TBool)
   , -- The value indicates the number of arguments of the storage variable.
@@ -38,6 +39,7 @@ instance FromJSON ContractDefinition where
   parseJSON = withObject "ContractDefinition" $ \v ->
     ContractDefinition
       <$> v .: "program"
+      <*> v .: "horus_version"
       <*> v .:? "specifications" .!= mempty
       <*> fmap (elimHSExpr . elimHSourcedExpr) (v .:? "invariants" .!= mempty) -- temporary fix to allow using new version of horus-compile
       <*> v .:? "storage_vars" .!= mempty
