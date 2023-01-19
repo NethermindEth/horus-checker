@@ -1,0 +1,14 @@
+prod:::default
+Verified
+
+prod.loop
+Unknown
+All solvers failed.
+cvc5 failed with: cvc5: Time is out.
+z3 failed with: z3: Time is out.
+
+prod.!anonymous_assert_label_0:::T
+Verified
+
+prod.!anonymous_assert_label_0:::F
+Verified

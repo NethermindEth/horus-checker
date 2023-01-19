@@ -1,0 +1,8 @@
+elem_sum
+Verified
+
+empty: (= (+ (memory (+ fp (- 4))) (memory (+ fp (- 3)))) (+ (+ $s.x $s.y) 1))
+False
+
+elem_sum_broken.!anonymous_assert_label_1
+Verified
