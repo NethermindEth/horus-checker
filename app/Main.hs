@@ -55,9 +55,9 @@ main' Arguments{..} = do
   configRef <- liftIO (newIORef arg_config)
   let env = Global.Env{e_config = configRef, e_contractInfo = contractInfo}
   infos <- liftIO (Global.run env solveContract) >>= liftEither
-  for_ infos $ \(si, canInline) -> liftIO $ do
-    TextIO.putStrLn (ppSolvingInfo si canInline)
-  let unknowns = [res | res@(Unknown{}) <- map (si_result . fst) infos]
+  for_ infos $ \si -> liftIO $ do
+    TextIO.putStrLn (ppSolvingInfo si)
+  let unknowns = [res | res@(Unknown{}) <- map si_result infos]
   unless (null unknowns) $ liftIO (TextIO.putStrLn hint')
  where
   hint' = "\ESC[33m" <> (T.strip . T.unlines . map ("hint: " <>) . T.lines) hint <> "\ESC[0m"
@@ -69,14 +69,11 @@ eioDecodeFileStrict path = do
     Left err -> throwError (T.pack err)
     Right res -> pure res
 
-ppSolvingInfo :: SolvingInfo -> Bool -> Text
-ppSolvingInfo SolvingInfo{..} canInline =
-  si_moduleName <> formatInlined <> "\n" <> tShow si_result <> "\n"
+ppSolvingInfo :: SolvingInfo -> Text
+ppSolvingInfo SolvingInfo{..} =
+  si_moduleName <> inlinedIndicator <> "\n" <> tShow si_result <> "\n"
  where
-  formatInlined =
-    if canInline
-      then " [inlined]"
-      else ""
+  inlinedIndicator = if si_inlinable then " [inlined]" else ""
 
 main :: IO ()
 main = do
