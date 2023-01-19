@@ -4,8 +4,9 @@ False
 thisunsat
 Verified
 
-read_svar
+read_svar [inlined]
 Verified
 
-write_svar
+write_svar [inlined]
 False
+
