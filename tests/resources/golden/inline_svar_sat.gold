@@ -4,5 +4,6 @@ Verified
 increase_balance
 False
 
-add_two
+add_two [inlined]
 Verified
+
