@@ -4,7 +4,7 @@ Verified
 foo2 [inlined]
 False
 
-foo2.!dummy_label_1 [inlined]
+foo2.!anonymous_assert_label_1 [inlined]
 Verified
 
 bar [inlined]
@@ -13,5 +13,5 @@ Verified
 bar2 [inlined]
 False
 
-bar2.!dummy_label_3 [inlined]
+bar2.!anonymous_assert_label_3 [inlined]
 Verified
