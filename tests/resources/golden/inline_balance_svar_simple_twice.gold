@@ -1,5 +1,6 @@
 main
 Verified
 
-get_balance
+get_balance [inlined]
 Verified
+
