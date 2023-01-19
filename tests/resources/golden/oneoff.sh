@@ -8,7 +8,7 @@ temp_file="${base}.temp"
 spec_file="${base}_spec.json"
 
 horus-compile "$test_file" --output "$compiled_file" --spec_output "$spec_file"
-stack run horus-check "$compiled_file" "$spec_file" -- -s cvc5 -s z3 -t 100000 &> "$temp_file" || true
+stack run horus-check "$compiled_file" "$spec_file" -- -s cvc5 -s mathsat -s z3 -t 100000 &> "$temp_file" || true
 ansii="\x1B\[[0-9;]\{1,\}[A-Za-z]"
 sed -i "/^hint:/d" $temp_file
 sed -i "/^$ansii[h]int:/d" $temp_file
