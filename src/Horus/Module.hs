@@ -184,7 +184,7 @@ data Error
 instance Show Error where
   show (ELoopNoInvariant at) = printf "There is a loop at PC %d with no invariant" (unLabel at)
   show ESpecNotPlainHasState =
-    "Some function contains a loop, but uses rich specfication (e.g. state assertions)."
+    "Some function contains an assertion or invariant, but uses a rich specification (i.e. @storage_update annotations)."
 
 data ModuleF a
   = EmitModule Module a
