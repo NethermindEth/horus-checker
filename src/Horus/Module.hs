@@ -256,7 +256,7 @@ gatherFromSource cfg function fSpec =
       | otherwise = emitPlain pre (Expr.and assertions)
 
     visitLinear SBRich
-      | onFinalNode = emitRich
+      | onFinalNode = emitRich (fs_pre fSpec) (Expr.and $ cfg_assertions cfg ^. ix l)
       | null assertions = visitArcs oracle' acc builder l
       | otherwise = extractPlainBuilder fSpec >>= visitLinear
     visitLinear (SBPlain pre)
@@ -272,8 +272,9 @@ gatherFromSource cfg function fSpec =
     oracle' = updateOracle arcCond callstack' oracle
     assertions = cfg_assertions cfg ^. ix l
     onFinalNode = null (cfg_arcs cfg ^. ix l)
-    emitPlain pre post = emitModule (Module (MSPlain (PlainSpec pre post)) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
-    emitRich = emitModule (Module (MSRich fSpec) acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l))
+    emitPlain pre post = emit . MSPlain $ PlainSpec pre post
+    emitRich pre post = emit . MSRich $ FuncSpec pre post $ fs_storage fSpec
+    emit spec = emitModule $ Module spec acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l)
 
     -- Visit all arcs from the current node.
     --
