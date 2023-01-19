@@ -1,7 +1,7 @@
-test_invalid_1
+test_invalid_1:::
 False
 
-test_invalid_2
+test_invalid_2:::
 False
 
 test_valid

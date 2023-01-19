@@ -2,6 +2,7 @@ module Horus.Module
   ( Module (..)
   , ModuleL (..)
   , ModuleF (..)
+  , moduleNameSuffix
   , Error (..)
   , gatherModules
   , getModuleNameParts
@@ -135,7 +136,10 @@ descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
   if Map.null oracle
     then ""
-    else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ oracle
+    else (<>) moduleNameSuffix . Text.concat . map descrOfBool . Map.elems $ oracle
+
+moduleNameSuffix :: Text
+moduleNameSuffix = ":::"
 
 {- | Return a triple of the function name, the label summary, and the oracle.
 

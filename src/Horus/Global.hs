@@ -39,7 +39,7 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
+import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts, moduleNameSuffix)
 import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
@@ -196,13 +196,17 @@ solveModule m = do
   identifiers <- getIdentifiers
   let (qualifiedFuncName, labelsSummary, oracleSuffix) = getModuleNameParts identifiers m
       moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix
+      moduleNameFinal =
+        if moduleName == qualifiedFuncName
+          then qualifiedFuncName <> moduleNameSuffix
+          else moduleName
       inlinable = m_calledF m `elem` Set.map sf_pc inlinables
-  result <- mkResult moduleName
-  pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result, si_inlinable = inlinable}
+  result <- mkResult moduleNameFinal
+  pure SolvingInfo{si_moduleName = moduleNameFinal, si_funcName = qualifiedFuncName, si_result = result, si_inlinable = inlinable}
  where
-  mkResult moduleName = printingErrors $ do
+  mkResult mName = printingErrors $ do
     constraints <- extractConstraints m
-    outputSmtQueries moduleName constraints
+    outputSmtQueries mName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
     solveSMT constraints

@@ -1,7 +1,7 @@
 get_balance
 Verified
 
-increase_balance
+increase_balance:::
 False
 
 add_two [inlined]

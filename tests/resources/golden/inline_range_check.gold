@@ -1,4 +1,4 @@
-main
+main:::
 False
 
 apply_range_check [inlined]

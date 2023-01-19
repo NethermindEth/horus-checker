@@ -1,6 +1,6 @@
 apply_bitwise [inlined]
 Verified
 
-main [inlined]
+main::: [inlined]
 False
 
