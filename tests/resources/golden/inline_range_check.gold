@@ -1,5 +1,6 @@
 main
 False
 
-apply_range_check
+apply_range_check [inlined]
 Verified
+
