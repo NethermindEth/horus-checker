@@ -307,6 +307,7 @@ solveContract = do
   lInstructions <- getLabelledInstructions
   inlinables <- getInlinables
   cfg <- runCFGBuildL $ buildCFG lInstructions inlinables
+  verbosePrint cfg
 
   -- For every inlinable function `f`, build the CFG for all functions excluding `f`.
   let fs = toAscList inlinables
