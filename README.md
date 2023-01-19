@@ -1070,6 +1070,14 @@ logically equivalent form, as this sometimes has the effect of making the query
 easier for solver.
 
 
+#### Why don't `@assert` annotations work in my function?
+
+Unfortunately, we currently don’t support `@assert` annotations inside
+functions that read/write storage variables, so this is one possible reason why
+you may be having trouble with `@assert` annotations. If you're still stuck,
+please open an issue!
+
+
 ## Usage
 
 Horus consists of two command-line tools, `horus-compile` and `horus-check`.
