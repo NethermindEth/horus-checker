@@ -1,0 +1,18 @@
+comp_id
+Verified
+
+comp_id_broken:::default
+False
+
+comp_id_broken.!anonymous_assert_label_2
+False
+
+comp_id_broken.!anonymous_assert_label_3
+Verified
+
+pred
+Verified
+
+succ [inlined]
+Verified
+
