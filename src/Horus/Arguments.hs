@@ -14,7 +14,7 @@ import Horus.Global (Config (..))
 import Horus.Preprocessor.Solvers (MultiSolver (..), SingleSolver, SolverSettings (..), cvc5, mathsat, z3)
 
 data Arguments = Arguments
-  { arg_fileName :: FilePath
+  { arg_fileName :: Maybe FilePath
   , arg_config :: Config
   }
 
@@ -60,8 +60,7 @@ multiSolverParser = MultiSolver <$> (some singleSolverParser <|> pure [cvc5])
 argParser :: Parser Arguments
 argParser =
   Arguments
-    <$> strArgument
-      (metavar (unpack fileArgument))
+    <$> optional (strArgument (metavar (unpack fileArgument)))
     <*> configParser
 
 configParser :: Parser Config
@@ -85,6 +84,10 @@ configParser =
               <> metavar "DIR"
               <> help "Stores the (optimized) SMT queries for each module in .smt2 files inside DIR."
           )
+      )
+    <*> switch
+      ( long "version"
+          <> help "Print Horus version."
       )
     <*> multiSolverParser
     <*> ( SolverSettings
