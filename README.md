@@ -614,7 +614,6 @@ always do what the annotations say.
 
 Here's our program with the annotations:
 ```cairo
-%builtins output
 from starkware.cairo.common.serialize import serialize_word
 
 struct Stack {
