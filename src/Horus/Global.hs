@@ -269,20 +269,33 @@ solveSMT cs = do
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
+-- | Add an oracle suffix to the module name when the module name *is* the function name.
+appendMissingDefaultOracleSuffixes :: SolvingInfo -> SolvingInfo
+appendMissingDefaultOracleSuffixes si@(SolvingInfo moduleName funcName result inlinable) =
+  if moduleName == funcName
+    then SolvingInfo (moduleName <> ":::default") funcName result inlinable
+    else si
+
 {- |  Collapse a list of modules for the same function if they are all `Unsat`.
 
  Given a list of `SolvingInfo`s, each associated with a module, under the
  assumption that they all have the same `si_funcName`, if they are all `Unsat`,
  we collapse them into a singleton list of one `SolvingInfo`, where we
- hot-patch the `moduleName`, replacing it with the `funcName`. Otherwise, we
- leave the input invariant. If the outer function was inlinable, propagate that information.
+ hot-patch the `moduleName`, replacing it with the `funcName`.
+
+ Otherwise, we have at least one `Sat`.
+
+ We break the remaining cases into two subcases:
+  * If it is just a single module, we return the list as-is.
+  * If there are multiple modules, we add a `:::default` oracle suffix to the
+    module name that would otherwise just be `<funcName>`.
 -}
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
-collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable : _) =
-  if all ((== Unsat) . si_result) infos
-    then [SolvingInfo funcName funcName result inlinable]
-    else infos
+collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable : _)
+  | all ((== Unsat) . si_result) infos = [SolvingInfo funcName funcName result inlinable]
+  | length infos == 1 = infos
+  | otherwise = map appendMissingDefaultOracleSuffixes infos
 
 {- | Return a solution of SMT queries corresponding with the contract.
 
