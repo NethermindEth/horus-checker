@@ -1173,7 +1173,7 @@ Show program's version number and exit
 ```console
 horus-check COMPILED_FILE [-v|--verbose] [--output-queries DIR]
             [--output-optimized-queries DIR] (-s|--solver SOLVER)
-            [--print-models] [-t|--timeout TIMEOUT]
+            [-t|--timeout TIMEOUT]
 ```
 
 #### Example
@@ -1228,10 +1228,6 @@ horus-check example.json -s z3 mathsat cvc5
 The timeout will apply to each solver individually, meaning that running two
 solvers doubles the maximum time the `horus-check` command will run before
 terminating.
-
-`--print-models`
-
-Print models for SAT results (**highly experimental**).
 
 `-t,--timeout TIMEOUT`
 
