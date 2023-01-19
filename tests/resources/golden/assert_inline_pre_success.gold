@@ -1,7 +1,7 @@
 comp_id
 Verified
 
-comp_id_broken
+comp_id_broken:::default
 False
 
 comp_id_broken.!anonymous_assert_label_2

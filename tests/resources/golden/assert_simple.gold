@@ -1,7 +1,7 @@
 bar
 Verified
 
-bar_broken
+bar_broken:::default
 False
 
 bar_broken.!anonymous_assert_label_1
@@ -10,7 +10,7 @@ Verified
 foo
 Verified
 
-foo_broken
+foo_broken:::default
 False
 
 foo_broken.!anonymous_assert_label_3
