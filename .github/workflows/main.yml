@@ -64,7 +64,7 @@ jobs:
       labels: ubuntu-latest-16-cores
 
     env:
-      horus_compile_version: 0.0.6.4
+      horus_compile_version: 0.0.6.5
 
     steps:
       - uses: actions/checkout@v3
