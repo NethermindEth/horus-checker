@@ -164,6 +164,7 @@ data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
   , si_funcName :: Text
   , si_result :: SolverResult
+  , si_inlinable :: Bool
   }
   deriving (Eq)
 
@@ -189,12 +190,14 @@ mkLabeledFuncName qualifiedFuncName labelsSummary = qualifiedFuncName <> "." <> 
 -}
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
+  inlinables <- getInlinables
   checkMathsat m
   identifiers <- getIdentifiers
   let (qualifiedFuncName, labelsSummary, oracleSuffix) = getModuleNameParts identifiers m
       moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix
+      inlinable = m_calledF m `elem` Set.map sf_pc inlinables
   result <- mkResult moduleName
-  pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result}
+  pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result, si_inlinable = inlinable}
  where
   mkResult moduleName = printingErrors $ do
     constraints <- extractConstraints m
@@ -273,11 +276,11 @@ solveSMT cs = do
  hot-patch the `moduleName`, replacing it with the `funcName`. Otherwise, we
  leave the input invariant. If the outer function was inlinable, propagate that information.
 -}
-collapseAllUnsats :: [(SolvingInfo, Bool)] -> [(SolvingInfo, Bool)]
+collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
-collapseAllUnsats infos@((SolvingInfo _ funcName result, _) : _) =
-  if all ((== Unsat) . si_result . fst) infos
-    then [(SolvingInfo funcName funcName result, any snd infos)]
+collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable : _) =
+  if all ((== Unsat) . si_result) infos
+    then [SolvingInfo funcName funcName result inlinable]
     else infos
 
 {- | Return a solution of SMT queries corresponding with the contract.
@@ -285,7 +288,7 @@ collapseAllUnsats infos@((SolvingInfo _ funcName result, _) : _) =
   For the purposes of reporting results,
   we also remember which SMT query corresponding to a function was inlined.
 -}
-solveContract :: GlobalL [(SolvingInfo, Bool)]
+solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   lInstructions <- getLabelledInstructions
   inlinables <- getInlinables
@@ -303,13 +306,11 @@ solveContract = do
        where
         (qualifiedFuncName, labelsSummary, _) = getModuleNameParts identifiers m
         labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
-  infos <- for (filter isUntrusted modules) $ \mdl -> do
-    info <- solveModule mdl
-    pure (info, m_calledF mdl `elem` Set.map sf_pc inlinables)
+  infos <- for (filter isUntrusted modules) solveModule
   pure $
     ( concatMap collapseAllUnsats
-        . groupBy (\(si, _) (si', _) -> sameFuncName si si')
-        . filter (not . isVerifiedIgnorable . fst)
+        . groupBy sameFuncName
+        . filter (not . isVerifiedIgnorable)
     )
       infos
  where
@@ -317,13 +318,13 @@ solveContract = do
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
 
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
-  sameFuncName (SolvingInfo _ nameA _) (SolvingInfo _ nameB _) = nameA == nameB
+  sameFuncName (SolvingInfo _ nameA _ _) (SolvingInfo _ nameB _ _) = nameA == nameB
 
   ignorableFuncPrefixes :: [Text]
   ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
-  isVerifiedIgnorable (SolvingInfo name _ res) =
+  isVerifiedIgnorable (SolvingInfo name _ res _) =
     res == Unsat && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
 
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
