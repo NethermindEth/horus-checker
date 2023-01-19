@@ -726,20 +726,25 @@ Verified
 _Stack.top
 Verified
 
-_Stack.empty
+_Stack.empty [inlined]
 Verified
 
-main
+main [inlined]
 Verified
 
 ```
 
-> Note: `_Stack.empty` appears here since Horus implicitly gives all
-> unannotated functions a trivial (always true) specification.
-
 The four functions `_Stack.add`, `_Stack.lit`, `_Stack.top`, and `main` that we
 annotated all say `Verified`, which means our implementations are correct with
 respect to the specifications we wrote in our annotations.
+
+> Note: `_Stack.empty` appears here since Horus implicitly gives all
+> unannotated functions a trivial (always true) specification.
+
+> Note: The `[inlined]` marker just tells us that a given function was [inline
+> expanded](https://en.wikipedia.org/wiki/Inline_expansion), which happens
+> whenever a function has no explicit `@pre` or `@post` annotations, and but
+> needs to be checked for the purposes of checking something else.
 
 Congrats! You've just formally verified your first Cairo program!
 
