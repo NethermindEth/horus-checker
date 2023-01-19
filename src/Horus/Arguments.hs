@@ -88,12 +88,14 @@ configParser =
       )
     <*> multiSolverParser
     <*> ( SolverSettings
-            <$> switch
-              ( long "print-models"
-                  <> showDefault
-                  <> help "Print models for SAT results (highly experimental)."
-              )
-            <*> option
+            -- TODO: make it work one day:
+            -- <$> switch
+            --   ( long "print-models"
+            --       <> showDefault
+            --       <> help "Print models for SAT results."
+            --   )
+            False
+            <$> option
               auto
               ( long "timeout"
                   <> short 't'
