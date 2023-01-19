@@ -16,12 +16,14 @@ import Control.Monad (unless)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, traverse_)
-import Data.List.NonEmpty (NonEmpty)
+import Data.List qualified as L
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
-import Data.Map qualified as Map (elems, empty, insert, map, null, toList)
-import Data.Maybe (isJust)
+import Data.Map qualified as Map
+import Data.Maybe (isJust, mapMaybe)
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, intercalate)
+import Data.Text qualified as Text (concat, intercalate, isPrefixOf)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
@@ -83,8 +85,8 @@ dropMain name = name
  example, `__main__.foo.bar` and `__main__.FOO.baz` you get a summarization
  of the scopes `fooFOO` and `bar|baz`.
 -}
-summarizeLabels :: [Text] -> Text
-summarizeLabels labels =
+summarizeLabels' :: [Text] -> Text
+summarizeLabels' labels =
   let prettyLabels = Text.intercalate "|" labels
    in if length labels == 1
         then prettyLabels
@@ -104,18 +106,22 @@ commonPrefix (x : xs) (y : ys)
  We do this by computing the longest common prefix, dropping it from all the
  names, and then adding the prefix itself as a new name.
 -}
-sansCommonAncestor :: [[Text]] -> [[Text]]
-sansCommonAncestor xss = prefix : remainders
+detachCommonPrefix :: [[Text]] -> [[Text]]
+detachCommonPrefix [] = []
+detachCommonPrefix (xs : xss) = prefix : remainders
  where
-  prefix = foldl1 commonPrefix xss
-  remainders = map (drop (length prefix)) xss
+  prefix = L.foldl' commonPrefix xs xss
+  remainders = map (drop (length prefix)) (xs : xss)
 
-{- | Returns the function name parts, in particular the fully qualified
- function name and the label summary.
+-- | Extract list of scopes from each ScopedName, dropping `__main__`.
+preprocessScopes :: [ScopedName] -> [NonEmpty Text]
+preprocessScopes = mapMaybe NE.nonEmpty . detachCommonPrefix . map (sn_path . dropMain)
 
- We take as arguments a list of scoped names, and a boolean flag indicating
- whether the list of scoped names belongs to a function or a *floating label*
- (as distinct from a function label).
+{- | Get the formatted scopes from the preprocessed list of scopes.
+
+ The `isFloatingLabel` parameter is a boolean flag indicating whether the list
+ of scoped names belongs to a function or a *floating label* (as distinct from
+ a function label).
 
  A floating label is, for example, `add:` in the snippet below, which is
  taken from the `func_multiple_ret.cairo` test file at revision 89ddeb2:
@@ -134,16 +140,24 @@ sansCommonAncestor xss = prefix : remainders
  Note: we say "fully qualified", but we remove the `__main__` prefix from
  top-level function names, if it exists.
 -}
-normalizedName :: [ScopedName] -> Bool -> (Text, Text)
-normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
+formatScopes :: [NonEmpty Text] -> Bool -> Text
+formatScopes [] _ = ""
+formatScopes (ys : yss) isFloatingLabel
+  | isAssertName end || isFloatingLabel = Text.intercalate "." $ NE.init $ concat' names
+  | otherwise = Text.intercalate "." $ map (Text.intercalate "." . NE.toList) (ys : yss)
  where
-  -- Extract list of scopes from each ScopedName, dropping `__main__`.
-  names = filter (not . null) $ sansCommonAncestor $ map (sn_path . dropMain) scopedNames
-  -- If we have a floating label, we need to drop the last scope, because it is
-  -- the label name itself.
-  scopes = map (Text.intercalate ".") (if isFloatingLabel then map init names else names)
-  -- This will almost always just be the name of the single label.
-  labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
+  names = ys :| yss
+  end = NE.last names
+
+  concat' :: NonEmpty (NonEmpty a) -> NonEmpty a
+  concat' (x :| xs) = L.foldl' (<>) x xs
+
+  isAssertName :: NonEmpty Text -> Bool
+  isAssertName xs = length xs == 1 && all ("!anonymous_assert_label" `Text.isPrefixOf`) xs
+
+summarizeLabels :: [NonEmpty Text] -> Bool -> Text
+summarizeLabels [] _ = ""
+summarizeLabels names isFloatingLabel = if isFloatingLabel then summarizeLabels' (map NE.last names) else ""
 
 descrOfBool :: Bool -> Text
 descrOfBool True = "1"
@@ -179,7 +193,7 @@ descrOfOracle oracle =
 
  Nested control flow results in multiple `1` or `2` characters.
 
- See `normalizedName` for the definition of a floating label. Here, the label
+ See `formatScopes` for the definition of a floating label. Here, the label
  is floating if it is not a function declaration (i.e. equal to `calledF`),
  since these are the only two types of labels we may encounter.
 
@@ -193,7 +207,9 @@ getModuleNameParts idents (Module spec prog oracle calledF _ mbPreCheckedFuncAnd
     Just label ->
       let scopedNames = labelNamesOfPc idents label
           isFloatingLabel = label /= calledF
-          (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
+          scopes = preprocessScopes scopedNames
+          prefix = formatScopes scopes isFloatingLabel
+          labelsSummary = summarizeLabels scopes isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, preCheckingSuffix)
  where
   post = fs_post spec

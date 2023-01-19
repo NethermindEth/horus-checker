@@ -1,28 +1,26 @@
-bar [inlined]
+bar
 Verified
 
 empty: (= 5 6)
 False
 
-bar_broken.!anonymous_assert_label_1 [inlined]
+bar_broken
 Verified
 
-foo [inlined]
+baz
+Verified
+
+baz_broken:::default
+False
+
+baz_broken.!anonymous_assert_label_3
+Verified
+
+foo
 Verified
 
 empty: (= 5 6)
 False
 
-foo_broken.!anonymous_assert_label_5 [inlined]
+foo_broken
 Verified
-
-baz [inlined]
-Verified
-
-baz_broken:::default [inlined]
-False
-
-baz_broken.!anonymous_assert_label_3 [inlined]
-Verified
-
-
