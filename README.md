@@ -5,7 +5,7 @@
 <br />
   <h2 align="center">Horus</h2>
   <p align="center">
-    Formal verification of <a href="https://www.cairo-lang.org/">Cairo</a> programs with language annotations
+    Formal verification of <a href="https://starkware.co/starknet/">StarkNet</a> smart contracts with language annotations
     <br />
     <a href="https://github.com/NethermindEth/horus-checker/issues">Report bug</a>
     ·
