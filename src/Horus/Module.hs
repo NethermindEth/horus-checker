@@ -188,7 +188,7 @@ instance Show Error where
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting (NonEmpty Label, Label) (Bool -> ModuleL b) (b -> a)
+  | forall b. Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -214,8 +214,8 @@ emitModule m = liftF' (EmitModule m ())
 'm' additionally takes a parameter that tells whether 'l' has been
 visited before.
 -}
-visiting :: (NonEmpty Label, Label) -> (Bool -> ModuleL b) -> ModuleL b
-visiting l action = liftF' (Visiting l action id)
+visiting :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label) -> (Bool -> ModuleL b) -> ModuleL b
+visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
 
 throw :: Error -> ModuleL a
 throw t = liftF' (Throw t)
@@ -247,7 +247,7 @@ gatherFromSource cfg function fSpec =
     FInfo ->
     ModuleL ()
   visit oracle callstack acc builder l arcCond f =
-    visiting (stackTrace callstack', l) $ \alreadyVisited ->
+    visiting (stackTrace callstack', oracle, l) $ \alreadyVisited ->
       if alreadyVisited then visitLoop builder else visitLinear builder
    where
     visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
