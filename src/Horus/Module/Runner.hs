@@ -9,6 +9,7 @@ import Data.DList (DList)
 import Data.DList qualified as D (singleton)
 import Data.Foldable (toList)
 import Data.Function ((&))
+import Data.Map (Map)
 import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
@@ -18,7 +19,10 @@ import Horus.Label (Label (..))
 import Horus.Module (Error, Module (..), ModuleF (..), ModuleL (..))
 import Horus.Util (tShow)
 
-type Impl = ReaderT (Set (NonEmpty Label, Label)) (WriterT (DList Module) (Except Error))
+type Impl =
+  ReaderT
+    (Set (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label))
+    (WriterT (DList Module) (Except Error))
 
 interpret :: ModuleL a -> Impl a
 interpret = iterM exec . runModuleL
