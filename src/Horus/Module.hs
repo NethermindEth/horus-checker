@@ -91,13 +91,32 @@ summarizeLabels labels =
         then prettyLabels
         else Text.concat ["{", prettyLabels, "}"]
 
+commonPrefix :: (Eq e) => [e] -> [e] -> [e]
+commonPrefix _ [] = []
+commonPrefix [] _ = []
+commonPrefix (x : xs) (y : ys)
+  | x == y = x : commonPrefix xs ys
+  | otherwise = []
+
+{- | For labels whose names are prefixed by the scope specifier equivalent to the
+ scope of the function they are declared in, do not replicate this scope
+ information in their name.
+
+ We do this by computing the longest common prefix, dropping it from all the
+ names, and then adding the prefix itself as a new name.
+-}
+sansCommonAncestor :: [[Text]] -> [[Text]]
+sansCommonAncestor xss = prefix : remainders
+ where
+  prefix = foldl1 commonPrefix xss
+  remainders = map (drop (length prefix)) xss
+
 {- | Returns the function name parts, in particular the fully qualified
  function name and the label summary.
 
- We take as arguments a list of scoped names (though in practice, this list
- has only ever been observed to contain a single element), and a boolean flag
- indicating whether the list of scoped names belongs to a function or a
- *floating label* (as distinct from a function label).
+ We take as arguments a list of scoped names, and a boolean flag indicating
+ whether the list of scoped names belongs to a function or a *floating label*
+ (as distinct from a function label).
 
  A floating label is, for example, `add:` in the snippet below, which is
  taken from the `func_multiple_ret.cairo` test file at revision 89ddeb2:
@@ -120,7 +139,7 @@ normalizedName :: [ScopedName] -> Bool -> (Text, Text)
 normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
  where
   -- Extract list of scopes from each ScopedName, dropping `__main__`.
-  names = map (dropMain . sn_path) scopedNames
+  names = filter (not . null) $ sansCommonAncestor $ map (dropMain . sn_path) scopedNames
   -- If we have a floating label, we need to drop the last scope, because it is
   -- the label name itself.
   scopes = map (Text.intercalate ".") (if isFloatingLabel then map init names else names)
