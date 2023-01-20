@@ -18,9 +18,7 @@
 ## Introduction
 
 Horus is a command-line formal verification tool for
-[StarkNet](https://starkware.co/starknet/) contracts that checks inline,
-user-written specifications using one or more SMT (satisfiability modulo
-theory) solvers.
+[StarkNet](https://starkware.co/starknet/) contracts.
 
 ```diff
 - **Note.** Horus is currently in alpha, and thus should not be fully trusted yet! -
@@ -82,7 +80,6 @@ installed at all. Follow the instructions below to install the needed version.
   * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
   * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
   * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-  * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
 
   In each case, run the downloaded script/executable, and follow the instructions.
 
@@ -189,7 +186,7 @@ Otherwise, navigate to the `horus-compile/` repository root and run the followin
 python -m venv .venv/horus
 source .venv/horus/bin/activate
 ```
-<sup>In the above, `horus` is just the name we chose for our virtual environment.</sup>
+In the above, `horus` is just the name we chose for our virtual environment.
 
 ### Install `horus-compile`
 
@@ -800,11 +797,18 @@ You can write StarkNet smart contracts in the Cairo language.
 
 #### When should I use Horus?
 
-Use Horus when you need to be absolutely sure that a Cairo program or StarkNet
+Use Horus when you need to be absolutely sure that a function in a StarkNet
 contract executes correctly according to some specification. Horus is good for
 when you know what your program should do, but you aren't sure that the
 implementation actually does that thing, in all cases, no matter what. Horus
 will not help you if you don't know exactly what your program should do.
+
+You could also use Horus for lightweight things like a sanity check on the
+bounds of the output of some function, for instance.
+
+Horus has been designed to be easy to use without an extensive background in
+formal verification. You can start simple and iteratively refine your
+specifications as you learn how to use the tool better.
 
 Horus, and formal verification in general, proves that the implementation of a
 program **matches the expected behavior**, as expressed in some formal
@@ -847,9 +851,8 @@ examples of things you can check about these values:
   * A storage variable is updated with a particular value
   * An invariant holds, e.g. in a loop
 
-Note that arithmetic operations are, in general, defined for finite field
-elements (felts) with respect to the obvious embedding of felts into the
-naturals ($[x] \mapsto x \in \mathbb{N}$).
+Note that arithmetic operations are defined over [finite
+field](https://en.wikipedia.org/wiki/Finite_field) elements (felts).
 
 You can check these conditions hold at the start and end of a function call
 with `@pre` and `@post`, respectively, and also in the middle of a function
@@ -860,17 +863,18 @@ body with `@invariant` and `@assert`.
 
 The `-s`/`--solver` flag is used to tell Horus which SMT solver to use.
 
-> **Example**
-> ```console
-> horus-check -s cvc5 program.json
-> ```
-> In the above example, we use the solver named `cvc5`.
+**Example**
+```console
+horus-check -s cvc5 program.json
+```
+In the above example, we use the solver named `cvc5`.
 
 
-> ```console
-> horus-check -s mathsat program.json
-> ```
-> In the above example, we use the solver named `mathsat`.
+**Example**
+```console
+horus-check -s mathsat program.json
+```
+In the above example, we use the solver named `mathsat`.
 
 Horus supports the following solvers:
 * `cvc5`
@@ -951,9 +955,6 @@ library function), the judgement for `g` may also be printed.
 Horus also adds a trivial annotation (equivalent to `@pre True` and `@post
 True`) which is **always** verifiable to all unannotated functions, and so
 judgements for these will also be printed.
-
-An `empty: (...)` module and judgement is sometimes added to the output of a
-run. This indicates an empty segment.
 
 
 #### Why am I getting `Verified` when I expect `False`?
@@ -1250,7 +1251,19 @@ terminating.
 
 `-t,--timeout TIMEOUT`
 
-Time limit (ms) per-module, per-SMT solver.
+Time limit (ms) per-SMT query, per-SMT solver.
+
+Horus makes at least one SMT query per function in the program. It may make
+multiple SMT queries for a single function. And it does this when there are
+multiple control flow branches in that function.
+
+For example, if you have 2 functions in a contract/program, and both have an
+`if-then-else` clause, then we will have 4 branches, and thus 4 SMT queries
+made. If we run Horus with two separate solvers (say `Z3` and `cvc5`), then we
+will make a total of 8 queries.
+
+Thus if we set a timeout of 1000ms, the maximum running time of the
+`horus-check` invocation is 8000ms or 8s.
 
 `-h,--help`
 
@@ -1266,7 +1279,7 @@ all of a function's annotations is sometimes referred to as its _specification_
 or _spec_. Here's an example:
 
 ```cairo
-/ @post $Return.res == 3
+// @post $Return.res == 3
 func example() -> (res: felt) {
 	return (3,);
 }
@@ -1331,15 +1344,15 @@ Local variables cannot be referenced in preconditions.
 ### `@declare`
 Allows the introduction of logical variables.
 
-A **logical variable** is a variable defined and used within a function spec
-(i.e.  a set of annotations for a function, i.e. a set of lines starting with
-`// @`) for conveniently referring to subexpressions. They play the same role
-that ordinary variables do in any programming language, but they can only be
-used within `horus` annotations.
+A **logical variable** is a variable defined and used within a function
+specification (i.e. a set of annotations for a function, i.e. a set of lines
+starting with `// @`) for conveniently referring to subexpressions. They play
+the same role that ordinary variables do in any programming language, but they
+can only be used within `horus` annotations.
 
 Logical variable names must begin with a `$`. Note that if a logical variable
-is not mentioned in the precondition, then the spec must hold for all possible
-values of that variable.
+is not mentioned in the precondition, then the specification must hold for all
+possible values of that variable.
 
 > **Example**
 > ```cairo
