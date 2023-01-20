@@ -136,13 +136,4 @@ executable horus-check
       optparse-applicative,
       pretty-simple,
       text,
-
-executable horus-disasm
-    import:                  deps
-    hs-source-dirs:          app/disasm
-    main-is:                 Main.hs
-    build-depends:
-      aeson,
-      horus-check,
-      mtl,
-      text,
+      

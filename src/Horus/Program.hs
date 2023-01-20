@@ -30,8 +30,7 @@ import Horus.Util (tShow)
 type Identifiers = Map ScopedName Identifier
 
 data Program = Program
-  { p_attributes :: [String]
-  , p_builtins :: [String]
+  { p_builtins :: [String]
   , p_code :: [Integer]
   , p_identifiers :: Identifiers
   , p_mainScope :: String
@@ -63,8 +62,7 @@ data ApTracking = ApTracking {at_group :: Int, at_offset :: Int}
 instance FromJSON Program where
   parseJSON = withObject "Program" $ \v ->
     Program
-      <$> v .: "attributes"
-      <*> v .: "builtins"
+      <$> v .: "builtins"
       <*> (v .: "data" >>= traverse parseHexInteger)
       <*> v .: "identifiers"
       <*> v .: "main_scope"
