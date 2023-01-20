@@ -26,6 +26,10 @@ theory) solvers.
 - **Note.** Horus is currently in alpha, and thus should not be fully trusted yet! -
 ```
 
+Notes:
+Isn’t this too much detail for the very first sentence?
+Specifically: '... using one or more SMT (satisfiability modulo theory) solvers.'
+
 ### Our documentation
 
 * [**Installation**](#installation) - Get the `horus-compile` and
@@ -85,6 +89,9 @@ installed at all. Follow the instructions below to install the needed version.
   * [Windows](https://repo.anaconda.com/miniconda/Miniconda3-latest-Windows-x86_64.exe)
 
   In each case, run the downloaded script/executable, and follow the instructions.
+
+  Notes:
+  Why is Windows mentioned here - we don't support Windows. (Sadge!)
 
 2.  Create a conda environment with python 3.7:
 
@@ -225,6 +232,10 @@ horus-check --help
 If the above command executed without error, you are ready to use Horus!
 
 ### Quick installation using Docker
+
+Notes:
+Quick installation using docker should be IMHO the first one mentioned,
+only then should we list the slow installation instructions.
 
 Follow these instructions if you prefer to install Horus in a docker container.
 Refer to the [Docker documentation](https://docs.docker.com/) for more
@@ -796,7 +807,8 @@ bit like [Rust](https://www.rust-lang.org/).
 
 You can write StarkNet smart contracts in the Cairo language.
 
-
+Notes:
+I would drop 'Basically, ...'.
 
 #### When should I use Horus?
 
@@ -813,7 +825,13 @@ specification.
 You get the most mileage out of this when the expected behavior is simple, but
 the implementation is very complex.
 
-
+Notes:
+Use Horus when you need to be absolutely sure that a Cairo program or StarkNet contract executes correctly according to some specification.
+- I ‘disagree’. You can use Horus even for lightweight things,
+like… sanity-check that the number you get from a function is greater than 42.
+Basic things - I think this is important for users who don’t want to go full ballistic
+and might not even have the background -
+they can still write // post Return.x > 42. Important part of the messaging for marketing?
 
 #### Why should I use Horus?
 
@@ -823,7 +841,10 @@ Because you love formal verification and care about writing provably correct pro
 
 Alternatively, because you don't want your firm to be in the news.
 
-
+Notes:
+I think saying: Because it is also easy to use even without extensive background.
+You can start simple and refine your specifications as you learn how to use the tool better,
+or some such...
 
 #### What does Horus do?
 
@@ -835,7 +856,8 @@ function in question are true for all inputs. Then these queries are run, and
 the SMT solver magically tells us whether or not it was able to prove that the
 program is sound!
 
-
+Notes:
+I don't mind this kind of language, reviewers of my papers normally tell me it's too much though ^^.
 
 #### What things can I assert/check about a program?
 
@@ -855,6 +877,13 @@ You can check these conditions hold at the start and end of a function call
 with `@pre` and `@post`, respectively, and also in the middle of a function
 body with `@invariant` and `@assert`.
 
+Notes:
+People don't know what field (elements) are, they don't understand
+what an embedding is and they will feel bad when you say that there's an *obvious* embedding.
+Furthermore, ($[x] \mapsto x \in \mathbb{N}$) doesn't render for me.
+
+... and also in the middle of a function body with @invariant and @assert -> maybe a disclaimer on this,
+to make sure that they probably shouldn't be using an assert, or they're aware of what it really does.
 
 #### What SMT solvers are available?
 
@@ -866,6 +895,11 @@ The `-s`/`--solver` flag is used to tell Horus which SMT solver to use.
 > ```
 > In the above example, we use the solver named `cvc5`.
 
+Notes:
+As a general note, the fonts are all over the place, sections are short,
+it’s ‘standard text’, headings, code, links - very chaotic;
+in this context, I think using a smaller font for this sentence only adds to the vortex:
+In the above, horus is just the name we chose for our virtual environment.
 
 > ```console
 > horus-check -s mathsat program.json
@@ -954,6 +988,9 @@ judgements for these will also be printed.
 
 An `empty: (...)` module and judgement is sometimes added to the output of a
 run. This indicates an empty segment.
+
+Notes:
+.. This indicates an empty segment. - this tells users nothing :).
 
 
 #### Why am I getting `Verified` when I expect `False`?
@@ -1256,6 +1293,9 @@ Time limit (ms) per-module, per-SMT solver.
 
 Show this help text
 
+Notes:
+Time limit (ms) per-module, per-SMT solver; per-module tells nothing to the user I suspect.
+
 ## Annotations
 
 To formally verify a program, we must prove that it behaves as expected. In
@@ -1271,6 +1311,9 @@ func example() -> (res: felt) {
 	return (3,);
 }
 ```
+
+Notes:
+Missing / in / @post $Return.res == 3
 
 The annotation in the example above is the line:
 ```cairo
@@ -1340,6 +1383,9 @@ used within `horus` annotations.
 Logical variable names must begin with a `$`. Note that if a logical variable
 is not mentioned in the precondition, then the spec must hold for all possible
 values of that variable.
+
+Notes:
+The word 'spec' appears out of nowhere. ... used within 'horus' - Horus maybe capitalized?
 
 > **Example**
 > ```cairo
