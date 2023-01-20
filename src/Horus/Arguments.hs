@@ -104,6 +104,6 @@ configParser =
                   <> short 't'
                   <> metavar "TIMEOUT"
                   <> value defaultTimeoutMs
-                  <> help "Time limit (ms) for the smt solver."
+                  <> help "Time limit (ms) per query to an SMT solver."
               )
         )
