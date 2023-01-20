@@ -167,7 +167,7 @@ data SolvingInfo = SolvingInfo
   , si_result :: SolverResult
   , si_inlinable :: Bool
   }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 {- | Construct a function name from a qualified function name and a summary of
  the label(s) (usually just one).
