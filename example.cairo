@@ -1,4 +1,4 @@
-from starkware.cairo.common.serialize import serialize_word
+%lang starknet
 
 struct Stack {
     value: felt,
@@ -26,12 +26,12 @@ namespace _Stack {
 }
 
 // Perform some example operations on a stack.
-func main{output_ptr : felt*}() -> () {
+@external
+func main () -> (res : felt) {
     let (stack) = _Stack.empty();
     let (stack) = _Stack.lit(stack, 5);
     let (stack) = _Stack.lit(stack, 6);
     let (stack) = _Stack.add(stack);
     let (top) = _Stack.top(stack);
-    serialize_word(top);
-    return ();
+    return (res=top);
 }
