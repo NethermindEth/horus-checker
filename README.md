@@ -28,7 +28,7 @@ Horus is a command-line formal verification tool for
 
 * [**Installation**](#installation) - Get the `horus-compile` and
   `horus-check` executables setup for your development environment.
-* [Tutorial: Your first verified Cairo program](#tutorial-your-first-verified-cairo-program) - Try this if you're
+* [Tutorial: Your first verified StarkNet contract](#tutorial-your-first-verified-starknet-contract) - Try this if you're
   new to Horus and want to get a taste of verification in Cairo.  This will
   walk you through an example step-by-step.
 * [FAQ](#faq) - What is Cairo? What is Horus? When should I use Horus? Why should
@@ -298,9 +298,9 @@ If these commands execute without error, you're ready to use Horus!
 
 <br>
 
-## Tutorial: Your first verified Cairo program
+## Tutorial: Your first verified StarkNet contract
 
-Let's verify a Cairo program! First, we'll write a simple program that
+Let's verify a StarkNet contract! First, we'll write a simple program that
 implements a stack data structure in Cairo. If you're unfamiliar with Cairo, or
 you need a refresher, check out the
 [documentation](https://www.cairo-lang.org/docs/).
@@ -489,8 +489,8 @@ Great! Now we'll just add a short `main()` function to test that our stack
 functions as we expect.
 
 ```cairo
-// Import a function to perform output.
-from starkware.cairo.common.serialize import serialize_word
+// Declare this program as a starknet contract.
+%lang starknet
 
 struct Stack {
   value: felt,
@@ -517,88 +517,26 @@ namespace _Stack {
   }
 }
 
-// Perform some example operations on a stack to sum two integers, and then
-// print the result.
-func main{output_ptr : felt*}() -> () {
+// Perform some example operations on a stack to sum two integers.
+@external
+func main() -> (res : felt) {
   let (stack) = _Stack.empty();
   let (stack) = _Stack.lit(stack, 5);
   let (stack) = _Stack.lit(stack, 6);
   let (stack) = _Stack.add(stack);
   let (top) = _Stack.top(stack);
-  serialize_word(top);
-  return ();
+  return (res=top);
 }
 ```
 
-Note that we've added a compiler directive [`%builtins output`](https://www.cairo-lang.org/docs/hello_cairo/intro.html#writing-a-main-function). The Cairo documentation explains this:
+Our example `main()` function pushes two literals to an empty stack, adds them,
+and then returns the result.
 
-> The directive `%builtins output` instructs the Cairo compiler that our program will use the “output” builtin.
 
-For the purposes of this example, this just allows us to print stuff.
-
-We are then allowed to import the `serialize_word()` library function:
-```cairo
-from starkware.cairo.common.serialize import serialize_word
-```
-You can think of it like `print()`.
-
-The main function above takes no arguments and returns no values. There is an
-implicit argument `output_ptr` that we need in order to perform output. Our
-example `main()` function pushes two literals to an empty stack, adds them, and
-then prints the result.
-
-#### Compile and run our example program
-
-Let's try it out! If you've installed everything correctly, you should have the
-`cairo-compile` and `cairo-run` executables on your `PATH`.
-
-###### Check that `cairo-compile` is installed
-```console
-cairo-compile --version
-```
-<sub>Expected output:</sub>
-```
-cairo-compile 0.10.1
-```
-
-<br>
-
-###### Check that `cairo-run` is installed
-```console
-cairo-run --version
-```
-<sub>Expected output:</sub>
-```
-cairo-run 0.10.1
-```
-
-Now let's put the source code of the program we just wrote in a file and compile it. You can
-download the source code from
-[here](https://raw.githubusercontent.com/NethermindEth/horus-checker/example.cairo).
-
-Make sure your file has the name `example.cairo`, and then run the following command:
-```console
-cairo-compile example.cairo --output compiled.json
-```
-
-The compiler outputs a JSON file, which we name `compiled.json`. If everything
-goes according to plan, you should see this file in your current working
-directory.
-
-We can run this compiled program using `cairo-run`:
-```console
-cairo-run --program compiled.json --layout all --print_output
-```
-
-<sub>Expected output:</sub>
-```
-Program output:
-11
-
-```
-
-And we see that it correctly added the two literal values we pushed, `5` and
-`6`. Fantastic!
+See the [Hello,
+StarkNet](https://www.cairo-lang.org/docs/hello_starknet/index.html) tutorial
+if you'd like to try running this contract on a testnet. You should get the
+answer `11`.
 
 
 #### Formally verify our example program
@@ -610,7 +548,7 @@ always do what the annotations say.
 
 Here's our program with the annotations:
 ```cairo
-from starkware.cairo.common.serialize import serialize_word
+%lang starknet
 
 struct Stack {
   value: felt,
@@ -643,7 +581,8 @@ namespace _Stack {
 }
 
 // Perform some example operations on a stack.
-func main{output_ptr : felt*}() -> () {
+@external
+func main () -> (res : felt) {
   let (stack) = _Stack.empty();
   let (stack) = _Stack.lit(stack, 5);
   let (stack) = _Stack.lit(stack, 6);
@@ -651,8 +590,7 @@ func main{output_ptr : felt*}() -> () {
   let (top) = _Stack.top(stack);
 
   // @assert top == 11
-  serialize_word(top);
-  return ();
+  return (res=top);
 }
 ```
 The annotations are the comments directly above each of the functions `add()`,
@@ -683,7 +621,7 @@ As an example, let's examine the annotations for the `_Stack.add()` function:
 ```
 
 Here's what's going on:
-* The `//` is just the syntax for comments in Cairo.
+* The `//` is just the syntax for comments.
 * The `@post` declares a Horus postcondition annotation. This condition must
   hold at the end of each function call.
 * The `$Return` syntax is a way of referring to the return values of the
@@ -704,12 +642,14 @@ Let's compile this annotated program with Horus and then check these properties:
 horus-compile annotated.cairo --output compiled.json
 ```
 
-This should create a file called `compiled.json`. Now let's verify the compiled binary:
+This should create a file called `compiled.json`. Now let's verify the compiled
+binary:
 ```console
 horus-check --solver z3 compiled.json
 ```
 
-> The `--solver z3` flag tells Horus which SMT solver to use (Z3, in this case). See also the [available solvers](#usage).
+> The `--solver z3` flag tells Horus which SMT solver to use (Z3, in this
+> case). See also the [available solvers](#usage).
 
 <sub>Expected output:</sub>
 ```
@@ -742,20 +682,20 @@ respect to the specifications we wrote in our annotations.
 > whenever a function has no explicit `@pre` or `@post` annotations, and but
 > needs to be checked for the purposes of checking something else.
 
-Congrats! You've just formally verified your first Cairo program!
+Congrats! You've just formally verified your first StarkNet contract!
 
 
 ## FAQ
 
 #### What is Horus?
 
-Horus is a command-line tool for the [Cairo ecosystem](https://www.cairo-lang.org/).
+Horus is a command-line tool for the [StarkNet ecosystem](https://starkware.co/starknet/).
 It helps you [formally verify](https://en.wikipedia.org/wiki/Formal_verification)
-Cairo programs and [StarkNet smart contracts](https://starkware.co/starknet/).
+[StarkNet smart contracts](https://starkware.co/starknet/).
 
 The way it works is like this:
 
-1. You write a Cairo program.
+1. You write a StarkNet smart contract.
 2. You add annotations that describe how the program should operate.
 3. You run Horus on your program, and Horus tells you one of the following:
     * The program obeys the annotations.
@@ -831,7 +771,7 @@ Alternatively, because you don't want your firm to be in the news.
 
 #### What does Horus do?
 
-It uses a modified version of the Cairo compiler to translate your
+It uses a modified version of the StarkNet compiler to translate your
 [function specification annotations](#annotations) into
 [SMT solver](https://en.wikipedia.org/wiki/Satisfiability_modulo_theories)
 queries. These are mathematical assertions that the desired properties of the
@@ -1102,20 +1042,20 @@ horus-compile [-h] [--abi ABI] [--disable_hint_validation]
 ```
 A tool to compile checked StarkNet contracts.
 
-Emits a compiled Cairo program in the form of JSON, printed to `stdout` by default.
+Emits a compiled StarkNet contract in the form of JSON, printed to `stdout` by default.
 
 #### Example
 
 ```console
 horus-compile a.cairo > b.json
 ```
-Compiles the annotated Cairo program `a.cairo`, and dumps the output into `b.json`.
+Compiles the annotated StarkNet contract `a.cairo`, and dumps the output into `b.json`.
 
 #### Positional arguments
 
 `file`
 
-One or more Cairo programs to compile.
+One or more StarkNet contracts to compile.
 
 #### Flags
 `-h, --help`
@@ -1201,7 +1141,7 @@ horus-check COMPILED_FILE [-v|--verbose] [--output-queries DIR]
 ```console
 horus-check b.json
 ```
-Attempts to verify the compiled Cairo program `b.json` with the default SMT
+Attempts to verify the compiled StarkNet contract `b.json` with the default SMT
 solver `cvc5`, and prints the output to `stdout`.
 
 
