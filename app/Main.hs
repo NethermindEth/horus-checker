@@ -49,7 +49,7 @@ hint =
   \  $ horus-check -s cvc5 -t 5000 a.json"
 
 compatibleHorusCompileVersion :: String
-compatibleHorusCompileVersion = "0.0.6.6"
+compatibleHorusCompileVersion = "0.0.6.7"
 
 currentVersion :: String
 currentVersion = "0.1.0.1"
