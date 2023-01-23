@@ -33,7 +33,6 @@ import Horus.CairoSemantics.Runner
   , MemoryVariable (..)
   , debugFriendlyModel
   , makeModel
-  , makePreconditionModel
   )
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
@@ -214,7 +213,7 @@ solveModule m = do
 outputSmtQueries :: Text -> ConstraintsState -> GlobalL ()
 outputSmtQueries moduleName constraints = do
   fPrime <- p_prime <$> getProgram
-  let query = makeModel constraints fPrime
+  let query = makeModel False constraints fPrime
   Config{..} <- getConfig
   whenJust cfg_outputQueries (writeSmtFile query)
   whenJust cfg_outputOptimizedQueries (writeSmtFileOptimized query)
@@ -267,8 +266,8 @@ solveSMT :: ConstraintsState -> GlobalL HorusResult
 solveSMT cs = do
   Config{..} <- getConfig
   fPrime <- p_prime <$> getProgram
-  let query = makeModel cs fPrime
-  let preQuery = makePreconditionModel cs fPrime
+  let query = makeModel False cs fPrime
+  let preQuery = makeModel True cs fPrime
   res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
   preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
   -- Convert the `SolverResult` to a `HorusResult`.
