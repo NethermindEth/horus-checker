@@ -3,7 +3,6 @@ module Horus.CairoSemantics.Runner
   , MemoryVariable (..)
   , ConstraintsState (..)
   , makeModel
-  , makePreconditionModel
   , debugFriendlyModel
   )
 where
@@ -32,7 +31,7 @@ import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CairoSemantics (AssertionType (InstructionSemanticsAssertion, PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
@@ -62,9 +61,8 @@ builderToAss mv (ExistentialAss f) = f mv
 -- inlined.
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [MemoryVariable]
-  , cs_preAsserts :: [AssertionBuilder]
-  , cs_asserts :: [AssertionBuilder]
-  , cs_expects :: [Expr TBool]
+  , cs_asserts :: [(AssertionBuilder, AssertionType)]
+  , cs_expects :: [(Expr TBool, AssertionType)]
   , cs_nameCounter :: Int
   , cs_callStack :: CallStack
   }
@@ -72,13 +70,10 @@ data ConstraintsState = ConstraintsState
 csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
 csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
-csPreAsserts :: Lens' ConstraintsState [AssertionBuilder]
-csPreAsserts lMod g = fmap (\x -> g{cs_preAsserts = x}) (lMod (cs_preAsserts g))
-
-csAsserts :: Lens' ConstraintsState [AssertionBuilder]
+csAsserts :: Lens' ConstraintsState [(AssertionBuilder, AssertionType)]
 csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
 
-csExpects :: Lens' ConstraintsState [Expr TBool]
+csExpects :: Lens' ConstraintsState [(Expr TBool, AssertionType)]
 csExpects lMod g = fmap (\x -> g{cs_expects = x}) (lMod (cs_expects g))
 
 csNameCounter :: Lens' ConstraintsState Int
@@ -91,7 +86,6 @@ emptyConstraintsState :: CallStack -> ConstraintsState
 emptyConstraintsState initStack =
   ConstraintsState
     { cs_memoryVariables = []
-    , cs_preAsserts = []
     , cs_asserts = []
     , cs_expects = []
     , cs_nameCounter = 0
@@ -127,9 +121,8 @@ interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
   exec :: CairoSemanticsF (Impl a) -> Impl a
-  exec (Assert' a cont) = eConstraints . csAsserts %= (QFAss a :) >> cont
-  exec (AssertPre' a cont) = eConstraints . csPreAsserts %= (QFAss a :) >> cont
-  exec (Expect' a cont) = eConstraints . csExpects %= (a :) >> cont
+  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
+  exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
   exec (CheckPoint a cont) = do
     initAss <- use (eConstraints . csAsserts)
     initExp <- use (eConstraints . csExpects)
@@ -139,13 +132,16 @@ interpret = iterM exec
     restAss <- use (eConstraints . csAsserts)
     restExp <- use (eConstraints . csExpects)
     eConstraints . csAsserts
-      .= ( ExistentialAss
-            ( \mv ->
-                let rest = map (builderToAss mv) restAss
-                    asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) rest
-                 in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
-                      .=> Expr.and (rest ++ [Expr.not (Expr.and restExp) | not (null restExp)])
-            )
+      .= ( ( ExistentialAss
+              ( \mv ->
+                  let restAss' = map (builderToAss mv . fst) restAss
+                      asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) restAss'
+                      restExp' = map fst restExp
+                   in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
+                        .=> Expr.and (restAss' ++ [Expr.not (Expr.and restExp') | not (null restExp')])
+              )
+           , InstructionSemanticsAssertion
+           )
             : initAss
          )
     eConstraints . csExpects .= initExp
@@ -229,9 +225,9 @@ debugFriendlyModel ConstraintsState{..} =
       [ ["# Memory"]
       , memoryPairs
       , ["# Assert"]
-      , map (pprExpr . builderToAss cs_memoryVariables) cs_asserts
+      , map (pprExpr . builderToAss cs_memoryVariables . fst) cs_asserts
       , ["# Expect"]
-      , map pprExpr cs_expects
+      , map (pprExpr . fst) cs_expects
       ]
  where
   memoryPairs =
@@ -249,64 +245,41 @@ restrictMemTail (mv0 : rest) =
   mem0 = Expr.const (mv_varName mv0)
   addr0 = Expr.const (mv_addrName mv0)
 
-restrictRange :: forall ty. Integer -> Function ty -> Maybe (Expr TBool)
-restrictRange fPrime (Function name) = case sing @ty of
-  SFelt
-    | Just value <- name `lookup` constants -> Just (ExitField (var .== fromInteger value))
-    | otherwise -> Just (0 .<= var .&& var .< prime)
-   where
-    var = Fun name
-    constants :: [(Text, Integer)]
-    constants = [(pprExpr prime, fPrime), (pprExpr rcBound, Builtin.rcBound)]
-  _ -> Nothing
-
--- Construct a model purely for detecting contradictory preconditions.
-makePreconditionModel :: ConstraintsState -> Integer -> Text
-makePreconditionModel ConstraintsState{..} fPrime =
+makeModel :: Bool -> ConstraintsState -> Integer -> Text
+makeModel checkPreOnly ConstraintsState{..} fPrime =
   Text.intercalate "\n" (decls <> map (Command.assert fPrime) restrictions)
  where
   functions =
     toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
   decls = map (foldSome Command.declare) functions
-  rangeRestrictions = mapMaybe (foldSome (restrictRange fPrime)) functions
+  rangeRestrictions = mapMaybe (foldSome restrictRange) functions
   memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
   addrRestrictions =
     [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
+
+  -- If checking @pre only, only take `PreAssertion`s, no postconditions.
+  allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . snd) cs_asserts else cs_asserts
+  allowedExpects = if checkPreOnly then [] else cs_expects
+
   generalRestrictions =
     concat
       [ memRestrictions
       , addrRestrictions
-      , map (builderToAss cs_memoryVariables) cs_preAsserts
-      , -- We simulate a postcondition of `False` here, which means the result of
-        -- the precondition query will be `Verified` if there is a contradiction
-        -- in the precondition(s), and `False` otherwise.
-        --
-        -- It says `Expr.True` and not `Expr.False` below because we negate the
-        -- ppost before constructing `generalRestrictions`, as can be seen below
-        -- in the implementation of `makeModel`.
-        [Expr.True]
+      , map (builderToAss cs_memoryVariables . fst) allowedAsserts
+      , [Expr.not (Expr.and (map fst allowedExpects)) | not (null allowedExpects)]
       ]
   restrictions = rangeRestrictions <> generalRestrictions
 
-makeModel :: ConstraintsState -> Integer -> Text
-makeModel ConstraintsState{..} fPrime =
-  Text.intercalate "\n" (decls <> map (Command.assert fPrime) restrictions)
- where
-  functions =
-    toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
-  decls = map (foldSome Command.declare) functions
-  rangeRestrictions = mapMaybe (foldSome (restrictRange fPrime)) functions
-  memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-  addrRestrictions =
-    [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
-  generalRestrictions =
-    concat
-      [ memRestrictions
-      , addrRestrictions
-      , map (builderToAss cs_memoryVariables) cs_asserts
-      , [Expr.not (Expr.and cs_expects) | not (null cs_expects)]
-      ]
-  restrictions = rangeRestrictions <> generalRestrictions
+  restrictRange :: forall ty. Function ty -> Maybe (Expr TBool)
+  restrictRange (Function name) = case sing @ty of
+    SFelt
+      | Just value <- name `lookup` constants -> Just (ExitField (var .== fromInteger value))
+      | otherwise -> Just (0 .<= var .&& var .< prime)
+     where
+      var = Fun name
+      constants :: [(Text, Integer)]
+      constants = [(pprExpr prime, fPrime), (pprExpr rcBound, Builtin.rcBound)]
+    _ -> Nothing
 
 runImpl :: CallStack -> ContractInfo -> Impl a -> Either Text ConstraintsState
 runImpl initStack contractInfo m = v $> e_constraints env

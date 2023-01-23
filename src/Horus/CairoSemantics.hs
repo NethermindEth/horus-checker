@@ -6,6 +6,7 @@ module Horus.CairoSemantics
   , CairoSemanticsL
   , BuiltinOffsets (..)
   , MemoryVariable (..)
+  , AssertionType (..)
   )
 where
 
@@ -71,10 +72,15 @@ data MemoryVariable = MemoryVariable
   }
   deriving (Show)
 
+data AssertionType
+  = PreAssertion
+  | PostAssertion
+  | InstructionSemanticsAssertion
+  deriving (Eq, Show)
+
 data CairoSemanticsF a
-  = Assert' (Expr TBool) a
-  | AssertPre' (Expr TBool) a
-  | Expect' (Expr TBool) a
+  = Assert' (Expr TBool) AssertionType a
+  | Expect' (Expr TBool) AssertionType a
   | CheckPoint ([MemoryVariable] -> Expr TBool) a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
   | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
@@ -99,14 +105,11 @@ data CairoSemanticsF a
 
 type CairoSemanticsL = F CairoSemanticsF
 
-assert' :: Expr TBool -> CairoSemanticsL ()
-assert' a = liftF (Assert' a ())
-
-assertPre' :: Expr TBool -> CairoSemanticsL ()
-assertPre' a = liftF (AssertPre' a ())
+assert' :: AssertionType -> Expr TBool -> CairoSemanticsL ()
+assert' assType a = liftF (Assert' a assType ())
 
 expect' :: Expr TBool -> CairoSemanticsL ()
-expect' a = liftF (Expect' a ())
+expect' a = liftF (Expect' a PostAssertion ())
 
 checkPoint :: ([MemoryVariable] -> Expr TBool) -> CairoSemanticsL ()
 checkPoint a = liftF (CheckPoint a ())
@@ -148,12 +151,10 @@ getStorage :: CairoSemanticsL Storage
 getStorage = liftF (GetStorage id)
 
 assert :: Expr TBool -> CairoSemanticsL ()
-assert a = assert' =<< memoryRemoval a
+assert a = assert' InstructionSemanticsAssertion =<< memoryRemoval a
 
--- Together with `assertPre'`, this is used solely to gather precondition
--- assertions for contradiction-detection.
 assertPre :: Expr TBool -> CairoSemanticsL ()
-assertPre a = assertPre' =<< memoryRemoval a
+assertPre a = assert' PreAssertion =<< memoryRemoval a
 
 expect :: Expr TBool -> CairoSemanticsL ()
 expect a = expect' =<< memoryRemoval a
@@ -266,14 +267,6 @@ encodePlainSpec mdl PlainSpec{..} = do
   fp <- getFp
 
   assert (fp .<= apStart)
-  assert =<< prepare' apStart fp ps_pre
-
-  -- We gather a secondary set of assertions that contains only the
-  -- preconditions, since unlike `assert`, `assertPre` is *only* used here.
-  --
-  -- These precondition-specific assertions have their very own field in the
-  -- `ConstraintsState`, and are ultimately used to run a secondary solver
-  -- query used to check the preconditions for contradictions.
   assertPre =<< prepare' apStart fp ps_pre
 
   let instrs = m_prog mdl
