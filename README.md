@@ -640,13 +640,13 @@ Here's what's going on:
 
 Let's compile this annotated program with Horus and then check these properties:
 ```console
-horus-compile annotated.cairo --output compiled.json
+horus-compile annotated.cairo --output compiled.json --spec_output spec.json
 ```
 
-This should create a file called `compiled.json`. Now let's verify the compiled
+This should create two files called `compiled.json` and `spec.json`. Now let's verify the compiled
 binary:
 ```console
-horus-check --solver z3 compiled.json
+horus-check --solver z3 compiled.json spec.json
 ```
 
 > The `--solver z3` flag tells Horus which SMT solver to use (Z3, in this
@@ -813,7 +813,7 @@ In the above example, we use the solver named `cvc5`.
 
 **Example**
 ```console
-horus-check -s mathsat program.json
+horus-check -s mathsat program.json spec.json
 ```
 In the above example, we use the solver named `mathsat`.
 
@@ -989,7 +989,7 @@ func f(x: felt) -> (a: felt) {
 When we compile this, we see:
 
 ```console
-(horus37) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo > a.json
+(horus37) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo --output a.json --spec_output spec.json
 contra.cairo:1:6: Cannot obtain identifier "y". Expected a reference but got "future"
 @pre y == 3
      ^
@@ -1048,9 +1048,9 @@ Emits a compiled StarkNet contract in the form of JSON, printed to `stdout` by d
 #### Example
 
 ```console
-horus-compile a.cairo > b.json
+horus-compile a.cairo --output b.json --spec_output spec.json
 ```
-Compiles the annotated StarkNet contract `a.cairo`, and dumps the output into `b.json`.
+Compiles the annotated StarkNet contract `a.cairo`, and dumps the output into `b.json` and `spec.json` for the specifications.
 
 #### Positional arguments
 
@@ -1153,8 +1153,11 @@ solver `cvc5`, and prints the output to `stdout`.
 A JSON contract compiled with 'horus-compile'. This can be generated from a
 '.cairo' file as follows (for an example contract called `program.cairo`):
 ```console
-horus-compile --output program.json program.cairo
+horus-compile --output program.json --spec_output spec.json program.cairo
 ```
+
+`SPECIFICATION`
+A JSON file containing additional information about annotations. This is produced by `horus-compile` as well.
 
 #### Flags
 
