@@ -2,6 +2,7 @@ module Horus.Arguments
   ( Arguments (..)
   , argParser
   , fileArgument
+  , specFileArgument
   )
 where
 
@@ -15,11 +16,15 @@ import Horus.Preprocessor.Solvers (MultiSolver (..), SingleSolver, SolverSetting
 
 data Arguments = Arguments
   { arg_fileName :: Maybe FilePath
+  , arg_specFile :: Maybe FilePath
   , arg_config :: Config
   }
 
 fileArgument :: Text
 fileArgument = "COMPILED_FILE"
+
+specFileArgument :: Text
+specFileArgument = "SPECIFICATION"
 
 defaultTimeoutMs :: Int
 defaultTimeoutMs = 3000
@@ -61,6 +66,7 @@ argParser :: Parser Arguments
 argParser =
   Arguments
     <$> optional (strArgument (metavar (unpack fileArgument)))
+    <*> optional (strArgument (metavar (unpack specFileArgument)))
     <*> configParser
 
 configParser :: Parser Config
