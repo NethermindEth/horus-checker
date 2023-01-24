@@ -4,7 +4,8 @@ import Control.Applicative ((<**>))
 import Control.Monad (unless, when)
 import Control.Monad.Except (ExceptT, liftEither, runExceptT)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson (FromJSON, eitherDecodeFileStrict)
+import Data.Aeson (FromJSON, Result (..), eitherDecodeFileStrict, fromJSON)
+import Data.Aeson.Extra.Merge (lodashMerge)
 import Data.Foldable (for_)
 import Data.IORef (newIORef)
 import Data.Text (Text)
@@ -21,7 +22,7 @@ import Options.Applicative
   )
 import Options.Applicative.Help.Pretty (text)
 
-import Horus.Arguments (Arguments (..), argParser, fileArgument)
+import Horus.Arguments (Arguments (..), argParser, fileArgument, specFileArgument)
 import Horus.ContractDefinition (ContractDefinition, cdSpecs, cd_version)
 import Horus.ContractInfo (mkContractInfo)
 import Horus.Global (SolverResult (..), SolvingInfo (..), cfg_version, solveContract)
@@ -49,7 +50,7 @@ hint =
   \  $ horus-check -s cvc5 -t 5000 a.json"
 
 compatibleHorusCompileVersion :: String
-compatibleHorusCompileVersion = "0.0.6.7"
+compatibleHorusCompileVersion = "0.0.6.8"
 
 currentVersion :: String
 currentVersion = "0.1.0.1"
@@ -61,9 +62,9 @@ currentVersion = "0.1.0.1"
  We run `solveContract`, which is the entrypoint into the *rest* of the
  program, and gather the results for pretty-printing.
 -}
-main' :: Arguments -> FilePath -> EIO ()
-main' Arguments{..} filename = do
-  contract <- eioDecodeFileStrict filename <&> cdSpecs %~ (<> stdSpecs)
+main' :: Arguments -> FilePath -> FilePath -> EIO ()
+main' Arguments{..} filename specFileName = do
+  contract <- eioDecodeFileStrict filename specFileName <&> cdSpecs %~ (<> stdSpecs)
   guardVersion contract
   contractInfo <- mkContractInfo contract
   configRef <- liftIO (newIORef arg_config)
@@ -84,12 +85,18 @@ main' Arguments{..} filename = do
       , cd_version cd
       ]
 
-eioDecodeFileStrict :: FromJSON a => FilePath -> EIO a
-eioDecodeFileStrict path = do
-  mbRes <- liftIO (eitherDecodeFileStrict path)
-  case mbRes of
-    Left err -> fail ("Malformed *.json. Cause: " ++ err)
-    Right res -> pure res
+eioDecodeFileStrict :: FromJSON a => FilePath -> FilePath -> EIO a
+eioDecodeFileStrict contractFile specFile = do
+  mbContract <- liftIO (eitherDecodeFileStrict contractFile)
+  mbSpecs <- liftIO (eitherDecodeFileStrict specFile)
+  case (mbContract, mbSpecs) of
+    (Left err, _) -> fail ("Malformed contract *.json. Cause: " ++ err)
+    (_, Left err) -> fail ("Malformed specification *.json. Cause: " ++ err)
+    (Right contract, Right specifications) -> do
+      let mbRes = fromJSON $ lodashMerge contract specifications
+      case mbRes of
+        Error err -> fail ("Malformed contract *.json. Cause: " ++ err)
+        Success res -> pure res
 
 ppSolvingInfo :: SolvingInfo -> Text
 ppSolvingInfo SolvingInfo{..} =
@@ -116,10 +123,11 @@ main = do
         , "\nHorus-compile (required): "
         , compatibleHorusCompileVersion
         ]
-    else case arg_fileName arguments of
-      Nothing -> putStrLn "Missing compiled JSON file. Use --help for more information."
-      Just filename -> do
-        runExceptT (main' arguments filename) >>= either (fail . T.unpack) pure
+    else case (arg_fileName arguments, arg_specFile arguments) of
+      (Nothing, _) -> putStrLn "Missing compiled JSON file. Use --help for more information."
+      (_, Nothing) -> putStrLn "Missing specification JSON file. Use --help for more information."
+      (Just filename, Just specFileName) -> do
+        runExceptT (main' arguments filename specFileName) >>= either (fail . T.unpack) pure
  where
   opts =
     info
@@ -129,13 +137,15 @@ main = do
             ( Just $
                 text "Verifies "
                   <> text (T.unpack fileArgument)
-                  <> text " (a JSON contract compiled with horus-compile)\n\n"
+                  <> text " (a JSON contract compiled with horus-compile) with the specification file "
+                  <> text (T.unpack specFileArgument)
+                  <> text " provided by horus-compile \n\n"
                   <> text "Example using solver cvc5 (default):\n"
-                  <> text "  $ horus-check a.json\n\n"
+                  <> text "  $ horus-check a.json spec.json\n\n"
                   <> text "Example using solver mathsat:\n"
-                  <> text "  $ horus-check -s mathsat a.json\n\n"
+                  <> text "  $ horus-check -s mathsat a.json spec.json\n\n"
                   <> text "Example using solvers z3, mathsat:\n"
-                  <> text "  $ horus-check -s z3 -s mathsat a.json\n"
+                  <> text "  $ horus-check -s z3 -s mathsat a.json spec.json\n"
             )
           <> header "horus-check: an SMT-based checker for StarkNet contracts"
       )

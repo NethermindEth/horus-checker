@@ -126,6 +126,7 @@ executable horus-check
     main-is:                 Main.hs
     build-depends:
       aeson,
+      aeson-extra,
       containers,
       directory,
       filepath,

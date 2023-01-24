@@ -20,12 +20,14 @@ test_case() {
     printf "# checking %s\n" "$test_file" >&3
     gold_file="${base}.gold"
     compiled_file="${base}.json"
+    spec_file="${base}_spec.json"
     temp_file="${base}.temp"
 
-    horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s cvc5 -s z3 -t 100000 &> "$temp_file" || true
+    horus-compile "$test_file" --output "$compiled_file" --spec_output "$spec_file"
+    stack run horus-check "$compiled_file" "$spec_file" -- -s cvc5 -s z3 -t 100000 &> "$temp_file" || true
     compare "${gold_file}" "${temp_file}"
     rm "$compiled_file"
+    rm "$spec_file"
     rm "$base.out" -rf
 }
 
@@ -35,11 +37,13 @@ single_solver_test_case() {
     test_file="${base}.cairo"
     gold_file="${base}.gold"
     compiled_file="${base}.${solver}.json"
+    spec_file="${base}_spec.${solver}.json"
     temp_file="${base}.${solver}.temp"
 
-    horus-compile "$test_file" > "$compiled_file"
-    stack run horus-check "$compiled_file" -- -s ${solver} -t 360000 &> "$temp_file" || true
+    horus-compile "$test_file" --output "$compiled_file" --spec_output "$spec_file"
+    stack run horus-check "$compiled_file" "$spec_file" -- -s ${solver} -t 360000 &> "$temp_file" || true
     compare "${gold_file}" "${temp_file}"
     rm "$compiled_file"
+    rm "$spec_file"
     rm "$base.out" -rf
 }
