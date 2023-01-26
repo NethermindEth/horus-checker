@@ -49,10 +49,10 @@ hint =
   \Example:\n\
   \  $ horus-check -s cvc5 -t 5000 a.json"
 
-issueTrackingMsg :: Text
-issueTrackingMsg =
+issuesMsg :: Text
+issuesMsg =
   "Horus is currently in the *alpha* stage. Please be aware of the\n\
-  \current issues: https://github.com/NethermindEth/horus-checker/issues\n"
+  \known issues: https://github.com/NethermindEth/horus-checker/issues\n"
 
 compatibleHorusCompileVersion :: String
 compatibleHorusCompileVersion = "0.0.6.8"
@@ -119,7 +119,7 @@ ppSolvingInfo SolvingInfo{..} =
 -}
 main :: IO ()
 main = do
-  TextIO.putStrLn issueTrackingMsg'
+  TextIO.putStrLn issuesMsg'
   arguments <- execParser opts
   if cfg_version (arg_config arguments)
     then
@@ -135,7 +135,8 @@ main = do
       (Just filename, Just specFileName) -> do
         runExceptT (main' arguments filename specFileName) >>= either (fail . T.unpack) pure
  where
-  issueTrackingMsg' = "\ESC[33m" <> (T.strip . T.unlines . map ("Warning: " <>) . T.lines) issueTrackingMsg <> "\ESC[0m\n"
+  issuesMsg' =
+    "\ESC[33m" <> (T.strip . T.unlines . map ("Warning: " <>) . T.lines) issuesMsg <> "\ESC[0m\n"
   opts =
     info
       (argParser <**> helper)
