@@ -137,4 +137,5 @@ executable horus-check
       optparse-applicative,
       pretty-simple,
       text,
-      
+    other-modules:
+      Paths_horus_check
