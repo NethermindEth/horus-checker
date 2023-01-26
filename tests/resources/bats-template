@@ -6,6 +6,8 @@ compare() {
     ansii="\x1B\[[0-9;]\{1,\}[A-Za-z]"
     sed -i "/^hint:/d" $temp_file
     sed -i "/^$ansii[h]int:/d" $temp_file
+    sed -i "/^Warning:/d" $temp_file
+    sed -i "/^$ansii[W]arning:/d" $temp_file
     diff "$gold_file" "$temp_file" \
          --unified \
          --ignore-trailing-space \
