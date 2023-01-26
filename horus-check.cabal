@@ -127,6 +127,8 @@ library horus-version
       Version
     other-modules:
       Paths_horus_check
+    ghc-options:
+      -Wno-prepositive-qualified-module
 
 executable horus-check
     import:                  deps
