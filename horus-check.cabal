@@ -140,4 +140,4 @@ executable horus-check
     other-modules:
       Paths_horus_check
     ghc-options:
-      -Wwarn=prepositive-qualified-module
+      -Wno-prepositive-qualified-module
