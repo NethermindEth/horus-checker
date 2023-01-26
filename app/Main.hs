@@ -11,6 +11,7 @@ import Data.IORef (newIORef)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TextIO (putStrLn)
+import Data.Version (Version, makeVersion, parseVersion, showVersion)
 import Lens.Micro ((%~), (<&>))
 import Options.Applicative
   ( execParser
@@ -21,6 +22,8 @@ import Options.Applicative
   , progDescDoc
   )
 import Options.Applicative.Help.Pretty (text)
+import Paths_horus_check (version)
+import Text.ParserCombinators.ReadP (readP_to_S)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument, specFileArgument)
 import Horus.ContractDefinition (ContractDefinition, cdSpecs, cd_version)
@@ -49,11 +52,10 @@ hint =
   \Example:\n\
   \  $ horus-check -s cvc5 -t 5000 a.json"
 
-compatibleHorusCompileVersion :: String
-compatibleHorusCompileVersion = "0.0.6.8"
-
-currentVersion :: String
-currentVersion = "0.1.0.1"
+compatibleHorusCompileVersionLower :: Version
+compatibleHorusCompileVersionLower = makeVersion [0, 0, 6, 8]
+compatibleHorusCompileVersionHigher :: Version
+compatibleHorusCompileVersionHigher = makeVersion [0, 0, 7]
 
 {- | The main entrypoint of everything that happens in our monad stack.
  The contract is a 1-1 representation of the data in the compiled JSON file.
@@ -77,13 +79,27 @@ main' Arguments{..} filename specFileName = do
  where
   hint' = "\ESC[33m" <> (T.strip . T.unlines . map ("hint: " <>) . T.lines) hint <> "\ESC[0m"
   guardVersion :: ContractDefinition -> EIO ()
-  guardVersion cd =
-    when (cd_version cd /= compatibleHorusCompileVersion) . fail . concat $
-      [ "The *.json on input has been compiled with an incompatible version of Horus-compile.\nExpected: "
-      , compatibleHorusCompileVersion
-      , " but got: "
-      , cd_version cd
-      ]
+  guardVersion cd = do
+    compilerVersion <- case [ x
+                            | x@(_, lst) <- readP_to_S parseVersion (cd_version cd)
+                            , null lst
+                            ] of
+      [(v, [])] -> pure v
+      _ -> fail $ "Wrong version format: " <> cd_version cd
+    when
+      ( compilerVersion < compatibleHorusCompileVersionLower
+          || compilerVersion >= compatibleHorusCompileVersionHigher
+      )
+      . fail
+      . concat
+      $ [ "The *.json on input has been compiled with an incompatible version of Horus-compile.\nExpected: "
+        , ">="
+        , showVersion compatibleHorusCompileVersionLower
+        , ", <"
+        , showVersion compatibleHorusCompileVersionHigher
+        , " but got: "
+        , showVersion compilerVersion
+        ]
 
 eioDecodeFileStrict :: FromJSON a => FilePath -> FilePath -> EIO a
 eioDecodeFileStrict contractFile specFile = do
@@ -119,9 +135,12 @@ main = do
     then
       putStrLn . concat $
         [ "Horus version: "
-        , currentVersion
+        , showVersion version
         , "\nHorus-compile (required): "
-        , compatibleHorusCompileVersion
+        , ">="
+        , showVersion compatibleHorusCompileVersionLower
+        , ", <"
+        , showVersion compatibleHorusCompileVersionHigher
         ]
     else case (arg_fileName arguments, arg_specFile arguments) of
       (Nothing, _) -> putStrLn "Missing compiled JSON file. Use --help for more information."
