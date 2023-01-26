@@ -16,7 +16,6 @@ common deps
       FlexibleInstances
       GADTs
       GeneralizedNewtypeDeriving
-      ImportQualifiedPost
       KindSignatures
       MultiParamTypeClasses
       OverloadedStrings
@@ -50,6 +49,8 @@ library
     import:                  deps
     hs-source-dirs:          src
     build-tool-depends:      alex:alex, happy:happy
+    default-extensions:
+      ImportQualifiedPost
     exposed-modules:
       Horus.Arguments
       Horus.ContractDefinition
@@ -120,10 +121,19 @@ library
       vinyl,
       z3,
 
+library horus-version
+    import: deps
+    exposed-modules:
+      Version
+    other-modules:
+      Paths_horus_check
+
 executable horus-check
     import:                  deps
     hs-source-dirs:          app
     main-is:                 Main.hs
+    default-extensions:
+      ImportQualifiedPost
     build-depends:
       aeson,
       aeson-extra,
@@ -137,7 +147,4 @@ executable horus-check
       optparse-applicative,
       pretty-simple,
       text,
-    other-modules:
-      Paths_horus_check
-    ghc-options:
-      -Wwarn=prepositive-qualified-module
+      horus-version,

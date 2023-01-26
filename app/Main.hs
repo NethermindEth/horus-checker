@@ -22,7 +22,7 @@ import Options.Applicative
   , progDescDoc
   )
 import Options.Applicative.Help.Pretty (text)
-import Paths_horus_check (version)
+import Version (version)
 import Text.ParserCombinators.ReadP (readP_to_S)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument, specFileArgument)
