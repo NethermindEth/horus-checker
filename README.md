@@ -50,13 +50,13 @@ container.
 
 ### Prerequisites
 
-- [Python 3.7](https://www.python.org/downloads/release/python-379/)
+- [Python 3.9](https://www.python.org/downloads/release/python-3913/)
 - [Stack](https://docs.haskellstack.org/en/stable/) (Haskell build tool)
 - [Poetry](https://python-poetry.org/) (Python package and dependency manager)
 - [Z3](https://github.com/Z3Prover/z3) (version 4.10.2)
 - [CVC5](https://cvc5.github.io/downloads.html) (version 1.0.3)
 
-### Installing Python 3.7
+### Installing Python 3.9
 
 Check your python version:
 ```console
@@ -64,10 +64,10 @@ python3 --version
 ```
 <sub>Expected output:</sub>
 ```
-Python 3.7.15
+Python 3.9.13
 ```
 
-If you see `3.7` as in above (any variant of 3.7 should be okay), **you can
+If you see `3.9` as in above (any variant of 3.9 should be okay), **you can
 skip head to [installing stack](#installing-stack).**
 
 Otherwise, you may have a different version, or you may not have python
@@ -80,30 +80,30 @@ installed at all. Follow the instructions below to install the needed version.
 
   * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
   * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh)
 
   In each case, run the downloaded script/executable, and follow the instructions.
 
-2.  Create a conda environment with python 3.7:
+2.  Create a conda environment with python 3.9:
 
   ```console
-  conda create -n horus-py37 python=3.7
+  conda create -n horus-py39 python=3.9
   ```
-  In the above, `horus-py37` is just a name we've chosen for this environment.
+  In the above, `horus-py39` is just a name we've chosen for this environment.
 
 3.  Activate the created environmment:
 
   ```console
-  conda activate horus-py37
+  conda activate horus-py39
   ```
 
-4.  Verify that you're running 3.7:
+4.  Verify that you're running 3.9:
   ```console
   python3 --version
   ```
   <sub>Expected output:</sub>
   ```
-  Python 3.7.15
+  Python 3.9.13
   ```
 
 ### Installing the Haskell tool stack
@@ -989,7 +989,7 @@ func f(x: felt) -> (a: felt) {
 When we compile this, we see:
 
 ```console
-(horus37) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo --output a.json --spec_output spec.json
+(horus39) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo --output a.json --spec_output spec.json
 contra.cairo:1:6: Cannot obtain identifier "y". Expected a reference but got "future"
 @pre y == 3
      ^
