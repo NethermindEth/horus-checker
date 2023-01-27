@@ -68,7 +68,7 @@ Python 3.9.13
 ```
 
 If you see `3.9` as in above (any variant of 3.9 should be okay), **you can
-skip head to [installing stack](#installing-stack).**
+skip ahead to [installing stack](#installing-stack).**
 
 Otherwise, you may have a different version, or you may not have python
 installed at all. Follow the instructions below to install the needed version.
