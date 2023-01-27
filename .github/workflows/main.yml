@@ -63,9 +63,6 @@ jobs:
     runs-on:
       labels: ubuntu-latest-16-cores
 
-    env:
-      horus_compile_version: 0.0.6.10
-
     steps:
       - uses: actions/checkout@v3
 
@@ -91,18 +88,18 @@ jobs:
           path: ${{ env.pythonLocation }}
           key: ${{ env.pythonLocation }}-${{ env.horus_compile_version }}
 
+      - name: Build
+        run: |
+          jobs=$(getconf _NPROCESSORS_ONLN)
+          stack --jobs "$jobs" install --ghc-options -Werror
+
       - name: Install python dependencies
         env:
           USER: ${{ secrets.PYPI_USER }}
           PASS: ${{ secrets.PYPI_PASSWORD }}
         run: |
           pip install setuptools wheel
-          pip install horus-compile=="$horus_compile_version" --extra-index-url http://${USER}:${PASS}@139.162.29.35/ --trusted-host 139.162.29.35
-
-      - name: Build
-        run: |
-          jobs=$(getconf _NPROCESSORS_ONLN)
-          stack --jobs "$jobs" install --ghc-options -Werror
+          bash ./scripts/ci/install-compiler.sh
 
       - name: Test
         run: bash ./tests/entrypoint.sh
