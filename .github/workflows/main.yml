@@ -16,7 +16,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          python-version: '3.9'
 
       - uses: actions/cache@v2
         name: Cache python dependencies
@@ -73,7 +73,7 @@ jobs:
 
       - uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          python-version: '3.9'
 
       - name: Setup BATS
         uses: mig4/setup-bats@v1
