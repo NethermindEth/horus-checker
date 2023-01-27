@@ -589,6 +589,7 @@ namespace _Stack {
 }
 
 // Perform some example operations on a stack.
+// @post $Return.res == 11
 @external
 func main () -> (res : felt) {
   let (stack) = _Stack.empty();
@@ -596,8 +597,6 @@ func main () -> (res : felt) {
   let (stack) = _Stack.lit(stack, 6);
   let (stack) = _Stack.add(stack);
   let (top) = _Stack.top(stack);
-
-  // @assert top == 11
   return (res=top);
 }
 ```
@@ -606,9 +605,6 @@ The annotations are the comments directly above each of the functions `add()`,
 with `// @`. The `@post` keyword indicates that an annotation is specifying a
 condition that must hold **at the end of the function call**, when the function
 returns. It is called `@post` because it is a "postcondition".
-
-The `@assert` keyword is the syntax for a condition that can be checked
-anywhere inside the body of a function.
 
 Briefly, with the annotations we've added, we are checking that:
 * The `add()` function returns a pointer to a stack with the sum of the first
@@ -1379,6 +1375,10 @@ that the expression will always evaluate to `True`.
 > // @assert j >= 10
 > ```
 > In the above example, we assert that a local variable `j` is at least 10.
+
+**Warning:** Assertions do not behave intuitively! Preconditions declared with
+`@pre` syntax at the top of a function are essentially _forgotten_ after the
+use of an `@assert` annotation.
 
 ### Storage variable rules
 
