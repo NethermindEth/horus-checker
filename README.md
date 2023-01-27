@@ -1376,9 +1376,18 @@ that the expression will always evaluate to `True`.
 > ```
 > In the above example, we assert that a local variable `j` is at least 10.
 
-**Warning:** Assertions do not behave intuitively! Preconditions declared with
-`@pre` syntax at the top of a function are essentially _forgotten_ after the
-use of an `@assert` annotation.
+**Warning:** Assertions constitute a full-stop in the continuity of Horus's
+reasoning and should be thought of exactly as though a function with unknown
+allocation pointer change was invoked and its postcondition is the annotation
+present at `@assert`. Horus can no longer reason about anything that 'happened'
+prior to said assertion, whether it is contents of memory or preceding
+annotations such as the precondition.
+
+It is therefore recommended to avoid `@assert`, or alternatively, to make sure
+to propagate all information that one wants to remember for further reasoning.
+
+In other words, use at your own peril, the semantics are complicated. It is
+*not* like a typical `assert` statement in an ordinary programming language.
 
 ### Storage variable rules
 
