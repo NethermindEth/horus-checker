@@ -207,8 +207,15 @@ CFLAGS=-I`brew --prefix gmp`/include LDFLAGS=-L`brew --prefix gmp`/lib pip insta
 ### Install `horus-checker`
 
 Navigate to the `horus-checker` repository root and run:
+
+On Linux:
 ```console
 stack install
+```
+
+On macOS:
+```console
+C_INCLUDE_PATH="`xcrun --show-sdk-path`/usr/include/ffi" stack --extra-include-dirs=/opt/homebrew/opt/z3@4.10.2/include --extra-lib-dirs=/opt/homebrew/opt/z3@4.10.2/lib install
 ```
 
 > **Note.** Stack installs executables to `~/.local/bin` by default. Make sure
