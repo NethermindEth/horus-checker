@@ -1030,6 +1030,30 @@ you may be having trouble with `@assert` annotations. If you're still stuck,
 please open an issue!
 
 
+#### Why am I seeing `Unexpected annotation type` or `annotation is not allowed here` in my commented-out code?
+
+This can sometimes happen when you comment-out a function, but not its
+annotations (which are themselves already comments). Make sure to add another
+set of `//` characters in front of any annotations that were associated with
+your commented-out function. Instead of:
+```cairo
+// @pre x == 0
+// @post 0 == 1
+// func f(x : felt) -> felt {
+//     return 0;
+// }
+```
+
+Try:
+```cairo
+// // @pre x == 0
+// // @post 0 == 1
+// func f(x : felt) -> felt {
+//     return 0;
+// }
+```
+
+
 ## Usage
 
 Horus consists of two command-line tools, `horus-compile` and `horus-check`.
