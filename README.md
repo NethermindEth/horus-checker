@@ -1389,6 +1389,8 @@ to propagate all information that one wants to remember for further reasoning.
 In other words, use at your own peril, the semantics are complicated. It is
 *not* like a typical `assert` statement in an ordinary programming language.
 
+See also: [this relevant bug report](https://github.com/NethermindEth/horus-checker/issues/125).
+
 ### Storage variable rules
 
 In a function that updates a storage variable `x`, it is ambiguous what the
