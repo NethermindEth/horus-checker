@@ -1,9 +1,8 @@
 <div align="center">
 <br />
-    <img src="./nethermind.png" alt="Ethereum" width="80" >
+    <img src="./horus_logo.png" alt="" width="2000" >
 
 <br />
-  <h2 align="center">Horus</h2>
   <p align="center">
     Formal verification of <a href="https://starkware.co/starknet/">StarkNet</a> smart contracts with language annotations
     <br />
