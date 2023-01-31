@@ -1032,6 +1032,12 @@ you may be having trouble with `@assert` annotations. If you're still stuck,
 please open an issue!
 
 
+#### Why can't Horus verify my account contract?
+
+Horus does not yet fully support account contracts compiled with the
+`--account_contract` CLI flag.
+
+
 ## Usage
 
 Horus consists of two command-line tools, `horus-compile` and `horus-check`.
