@@ -61,7 +61,7 @@ jobs:
 
   test:
     runs-on:
-      labels: ubuntu-latest-16-cores
+      labels: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v3
