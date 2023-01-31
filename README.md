@@ -1360,9 +1360,11 @@ not mentioned within it cannot be used after.
 > **Example**
 > ```cairo
 > // @invariant i <= 10
+> label1:
 > ```
 > In the above example, we assert that a local variable `i` (perhaps a loop
-> variable) is always less than or equal to 10.
+> variable) is always less than or equal to 10. This invariant assertion is
+> attached to the label named `label1`.
 
 ### `@assert`
 Introduces a boolean constraint at an arbitrary point in a function body.
