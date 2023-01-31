@@ -1480,6 +1480,8 @@ Apart from `GlobalL`, there are several other sub-DSLs, which include:
 * **SMT query** - a symbolic proposition which may be passed to an SMT solver,
   which will attempt to prove it or give a counterexample.
 
+### Disclaimer
+
 Kindly note, Horus is a tool consisting of two separate components: Horus-Checker, released under the AGPLv3 license, and Horus-Compile, released under the Cairo Toolkit License. When "Horus" is referenced, the reference is to the two components jointly.
 
 Horus is currently in the alpha stage and no guarantee is being given as to the accuracy and/or completeness of any of the outputs the tool may generate. The tool is provided on an 'as is' basis, without warranties or conditions of any kind, either express or implied, including without limitation as to the outputs of the verification process and the security of any system verified using Horus. As per the relevant licenses, to the fullest extent permitted by the law, Nethermind disclaims any liability in connection with your use of Horus and/or any of its outputs.
