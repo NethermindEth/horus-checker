@@ -656,6 +656,9 @@ horus-check --solver z3 compiled.json spec.json
 
 <sub>Expected output:</sub>
 ```
+Warning: Horus is currently in the *alpha* stage. Please be aware of the
+Warning: known issues: https://github.com/NethermindEth/horus-checker/issues
+
 _Stack.add
 Verified
 
@@ -665,10 +668,10 @@ Verified
 _Stack.top
 Verified
 
-_Stack.empty [inlined]
+main
 Verified
 
-main [inlined]
+_Stack.empty [inlined]
 Verified
 
 ```
