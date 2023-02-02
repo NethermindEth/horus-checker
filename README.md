@@ -1,9 +1,8 @@
 <div align="center">
 <br />
-    <img src="./nethermind.png" alt="Ethereum" width="80" >
+    <img src="./horus_logo.png" alt="" width="2000" >
 
 <br />
-  <h2 align="center">Horus</h2>
   <p align="center">
     Formal verification of <a href="https://starkware.co/starknet/">StarkNet</a> smart contracts with language annotations
     <br />
@@ -50,13 +49,13 @@ container.
 
 ### Prerequisites
 
-- [Python 3.7](https://www.python.org/downloads/release/python-379/)
+- [Python 3.9](https://www.python.org/downloads/release/python-3913/)
 - [Stack](https://docs.haskellstack.org/en/stable/) (Haskell build tool)
 - [Poetry](https://python-poetry.org/) (Python package and dependency manager)
 - [Z3](https://github.com/Z3Prover/z3) (version 4.10.2)
 - [CVC5](https://cvc5.github.io/downloads.html) (version 1.0.3)
 
-### Installing Python 3.7
+### Installing Python 3.9
 
 Check your python version:
 ```console
@@ -64,11 +63,11 @@ python3 --version
 ```
 <sub>Expected output:</sub>
 ```
-Python 3.7.15
+Python 3.9.13
 ```
 
-If you see `3.7` as in above (any variant of 3.7 should be okay), **you can
-skip head to [installing stack](#installing-stack).**
+If you see `3.9` as in above (any variant of 3.9 should be okay), **you can
+skip ahead to [installing stack](#installing-stack).**
 
 Otherwise, you may have a different version, or you may not have python
 installed at all. Follow the instructions below to install the needed version.
@@ -80,30 +79,30 @@ installed at all. Follow the instructions below to install the needed version.
 
   * [Linux 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh)
   * [macOS Intel x86 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
-  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-x86_64.sh)
+  * [macOS Apple M1 64-bit](https://repo.anaconda.com/miniconda/Miniconda3-latest-MacOSX-arm64.sh)
 
   In each case, run the downloaded script/executable, and follow the instructions.
 
-2.  Create a conda environment with python 3.7:
+2.  Create a conda environment with python 3.9:
 
   ```console
-  conda create -n horus-py37 python=3.7
+  conda create -n horus-py39 python=3.9
   ```
-  In the above, `horus-py37` is just a name we've chosen for this environment.
+  In the above, `horus-py39` is just a name we've chosen for this environment.
 
 3.  Activate the created environmment:
 
   ```console
-  conda activate horus-py37
+  conda activate horus-py39
   ```
 
-4.  Verify that you're running 3.7:
+4.  Verify that you're running 3.9:
   ```console
   python3 --version
   ```
   <sub>Expected output:</sub>
   ```
-  Python 3.7.15
+  Python 3.9.13
   ```
 
 ### Installing the Haskell tool stack
@@ -207,8 +206,15 @@ CFLAGS=-I`brew --prefix gmp`/include LDFLAGS=-L`brew --prefix gmp`/lib pip insta
 ### Install `horus-checker`
 
 Navigate to the `horus-checker` repository root and run:
+
+On Linux:
 ```console
 stack install
+```
+
+On macOS:
+```console
+C_INCLUDE_PATH="`xcrun --show-sdk-path`/usr/include/ffi" stack --extra-include-dirs=/opt/homebrew/opt/z3@4.10.2/include --extra-lib-dirs=/opt/homebrew/opt/z3@4.10.2/lib install
 ```
 
 > **Note.** Stack installs executables to `~/.local/bin` by default. Make sure
@@ -582,6 +588,7 @@ namespace _Stack {
 }
 
 // Perform some example operations on a stack.
+// @post $Return.res == 11
 @external
 func main () -> (res : felt) {
   let (stack) = _Stack.empty();
@@ -589,8 +596,6 @@ func main () -> (res : felt) {
   let (stack) = _Stack.lit(stack, 6);
   let (stack) = _Stack.add(stack);
   let (top) = _Stack.top(stack);
-
-  // @assert top == 11
   return (res=top);
 }
 ```
@@ -599,9 +604,6 @@ The annotations are the comments directly above each of the functions `add()`,
 with `// @`. The `@post` keyword indicates that an annotation is specifying a
 condition that must hold **at the end of the function call**, when the function
 returns. It is called `@post` because it is a "postcondition".
-
-The `@assert` keyword is the syntax for a condition that can be checked
-anywhere inside the body of a function.
 
 Briefly, with the annotations we've added, we are checking that:
 * The `add()` function returns a pointer to a stack with the sum of the first
@@ -640,13 +642,13 @@ Here's what's going on:
 
 Let's compile this annotated program with Horus and then check these properties:
 ```console
-horus-compile annotated.cairo --output compiled.json
+horus-compile annotated.cairo --output compiled.json --spec_output spec.json
 ```
 
-This should create a file called `compiled.json`. Now let's verify the compiled
+This should create two files called `compiled.json` and `spec.json`. Now let's verify the compiled
 binary:
 ```console
-horus-check --solver z3 compiled.json
+horus-check --solver z3 compiled.json spec.json
 ```
 
 > The `--solver z3` flag tells Horus which SMT solver to use (Z3, in this
@@ -654,6 +656,9 @@ horus-check --solver z3 compiled.json
 
 <sub>Expected output:</sub>
 ```
+Warning: Horus is currently in the *alpha* stage. Please be aware of the
+Warning: known issues: https://github.com/NethermindEth/horus-checker/issues
+
 _Stack.add
 Verified
 
@@ -663,10 +668,10 @@ Verified
 _Stack.top
 Verified
 
-_Stack.empty [inlined]
+main
 Verified
 
-main [inlined]
+_Stack.empty [inlined]
 Verified
 
 ```
@@ -813,7 +818,7 @@ In the above example, we use the solver named `cvc5`.
 
 **Example**
 ```console
-horus-check -s mathsat program.json
+horus-check -s mathsat program.json spec.json
 ```
 In the above example, we use the solver named `mathsat`.
 
@@ -989,7 +994,7 @@ func f(x: felt) -> (a: felt) {
 When we compile this, we see:
 
 ```console
-(horus37) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo > a.json
+(horus39) user@computer:~/pkgs/horus-checker$ horus-compile contra.cairo --output a.json --spec_output spec.json
 contra.cairo:1:6: Cannot obtain identifier "y". Expected a reference but got "future"
 @pre y == 3
      ^
@@ -1048,9 +1053,9 @@ Emits a compiled StarkNet contract in the form of JSON, printed to `stdout` by d
 #### Example
 
 ```console
-horus-compile a.cairo > b.json
+horus-compile a.cairo --output b.json --spec_output spec.json
 ```
-Compiles the annotated StarkNet contract `a.cairo`, and dumps the output into `b.json`.
+Compiles the annotated StarkNet contract `a.cairo`, and dumps the output into `b.json` and `spec.json` for the specifications.
 
 #### Positional arguments
 
@@ -1153,8 +1158,11 @@ solver `cvc5`, and prints the output to `stdout`.
 A JSON contract compiled with 'horus-compile'. This can be generated from a
 '.cairo' file as follows (for an example contract called `program.cairo`):
 ```console
-horus-compile --output program.json program.cairo
+horus-compile --output program.json --spec_output spec.json program.cairo
 ```
+
+`SPECIFICATION`
+A JSON file containing additional information about annotations. This is produced by `horus-compile` as well.
 
 #### Flags
 
@@ -1370,6 +1378,21 @@ that the expression will always evaluate to `True`.
 > ```
 > In the above example, we assert that a local variable `j` is at least 10.
 
+**Warning:** Assertions constitute a full-stop in the continuity of Horus's
+reasoning and should be thought of exactly as though a function with unknown
+allocation pointer change was invoked and its postcondition is the annotation
+present at `@assert`. Horus can no longer reason about anything that 'happened'
+prior to said assertion, whether it is contents of memory or preceding
+annotations such as the precondition.
+
+It is therefore recommended to avoid `@assert`, or alternatively, to make sure
+to propagate all information that one wants to remember for further reasoning.
+
+In other words, use at your own peril, the semantics are complicated. It is
+*not* like a typical `assert` statement in an ordinary programming language.
+
+See also: [this relevant bug report](https://github.com/NethermindEth/horus-checker/issues/125).
+
 ### Storage variable rules
 
 In a function that updates a storage variable `x`, it is ambiguous what the
@@ -1458,3 +1481,17 @@ Apart from `GlobalL`, there are several other sub-DSLs, which include:
   `True`, and another module for when it is `False`.
 * **SMT query** - a symbolic proposition which may be passed to an SMT solver,
   which will attempt to prove it or give a counterexample.
+
+### Disclaimer
+
+Kindly note, Horus is a tool consisting of two separate components: Horus-Checker, released under the AGPLv3 license, and Horus-Compile, released under the Cairo Toolkit License. When "Horus" is referenced, the reference is to the two components jointly.
+
+Horus is currently in the alpha stage and no guarantee is being given as to the accuracy and/or completeness of any of the outputs the tool may generate. The tool is provided on an 'as is' basis, without warranties or conditions of any kind, either express or implied, including without limitation as to the outputs of the verification process and the security of any system verified using Horus. As per the relevant licenses, to the fullest extent permitted by the law, Nethermind disclaims any liability in connection with your use of Horus and/or any of its outputs.
+
+Please also note that the terminology used by Horus, including but not limited to words such as 'guarantee', should be interpreted strictly within the remit of formal verification terminology. These words are not intended to, and shall not be construed as having legal significance of any kind.
+
+For the avoidance of doubt, the outputs generated by Horus and/or your usage thereof shall not be considered or relied upon as any form of financial, investment, tax, legal, regulatory, or other advice.
+
+Horus-Checker is licensed under AGPLv3 (Copyright (C) 2023 Nethermind). For more information on the dependencies, please see [here](https://github.com/NethermindEth/horus-checker/blob/master/LICENSE).
+
+Horus-Compile is licensed under the Cairo Toolkit License (Copyright (C) 2023 Nethermind), pursuant to an exception granted to Nethermind by Starkware Industries Ltd. For more information on the dependencies please see [here](https://github.com/NethermindEth/horus-compile/blob/master/LICENSE).
