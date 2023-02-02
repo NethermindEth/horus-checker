@@ -126,6 +126,7 @@ executable horus-check
     main-is:                 Main.hs
     build-depends:
       aeson,
+      aeson-extra,
       containers,
       directory,
       filepath,
@@ -136,4 +137,7 @@ executable horus-check
       optparse-applicative,
       pretty-simple,
       text,
-      
+    other-modules:
+      Paths_horus_check
+    ghc-options:
+      -Wno-prepositive-qualified-module

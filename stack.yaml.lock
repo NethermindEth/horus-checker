@@ -5,20 +5,20 @@
 
 packages:
 - completed:
+    commit: dd03ca119ddcd50bde52fbe40c96eb60cc1d6338
+    git: https://github.com/yav/simple-smt.git
     name: simple-smt
-    version: 0.9.7
-    git: https://github.com/yav/simple-smt.git
     pantry-tree:
-      size: 357
       sha256: 52b7da75230a4cbc27007b8560371a007d3ce5f4773023dc8f1f43299e99a414
-    commit: dd03ca119ddcd50bde52fbe40c96eb60cc1d6338
+      size: 357
+    version: 0.9.7
   original:
-    git: https://github.com/yav/simple-smt.git
     commit: dd03ca119ddcd50bde52fbe40c96eb60cc1d6338
+    git: https://github.com/yav/simple-smt.git
 - completed:
-    name: z3
-    version: '408.2'
+    commit: dd7f75f253c42053e1ebb75aa2c498ef64465177
     git: https://github.com/IagoAbal/haskell-z3.git
+    name: z3
     pantry-tree:
       size: 2204
       sha256: f40a91f16c9e4f65dd69b48df62f42876c7154cbfb329fb14eeec013a5278de6
@@ -29,14 +29,14 @@ packages:
 - completed:
     hackage: co-log-core-0.3.1.0@sha256:9794bdedd1391decd0e22bdfe2b11abcb42e6cff7a4531e1f8882890828f4e63,3816
     pantry-tree:
-      size: 584
       sha256: d4cc089c40c5052ee02f91eafa567e0a239908aabc561dfa6080ba3bfc8c25bd
+      size: 584
   original:
     hackage: co-log-core-0.3.1.0@sha256:9794bdedd1391decd0e22bdfe2b11abcb42e6cff7a4531e1f8882890828f4e63,3816
 snapshots:
 - completed:
+    sha256: 57d4ce67cc097fea2058446927987bc1f7408890e3a6df0da74e5e318f051c20
     size: 618884
     url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/7.yaml
-    sha256: 57d4ce67cc097fea2058446927987bc1f7408890e3a6df0da74e5e318f051c20
   original:
     url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/7.yaml

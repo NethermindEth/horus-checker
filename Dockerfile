@@ -13,8 +13,7 @@ RUN apt-get update \
 
 # Install solvers
 COPY scripts/ scripts/
-RUN sh scripts/ci/install-mathsat-linux.sh \
-    && sh scripts/ci/install-cvc5-linux.sh \
+RUN sh scripts/ci/install-cvc5-linux.sh \
     && if [ $(arch) = "aarch64" ]; then sh scripts/ci/install-z3-from-source.sh; else sh scripts/ci/install-z3-linux-amd64.sh; fi \
     && rm -rf scripts/
 
