@@ -811,7 +811,7 @@ The `-s`/`--solver` flag is used to tell Horus which SMT solver to use.
 
 **Example**
 ```console
-horus-check -s cvc5 program.json
+horus-check -s cvc5 program.json spec.json
 ```
 In the above example, we use the solver named `cvc5`.
 
@@ -962,7 +962,7 @@ func g(x: felt) -> (b: felt) {
 ```
 When we run Horus on the above program, we get:
 ```console
-user@computer:~/pkgs/horus-checker$ horus-check -s cvc5 a.json
+user@computer:~/pkgs/horus-checker$ horus-check -s cvc5 a.json spec.json
 f
 Verified
 
@@ -1039,9 +1039,10 @@ Horus consists of two command-line tools, `horus-compile` and `horus-check`.
 ### `horus-compile`
 ```console
 horus-compile [-h] [--abi ABI] [--disable_hint_validation]
-              [--account_contract] [--prime PRIME]
-              [--cairo_path CAIRO_PATH] [--preprocess]
-              [--output OUTPUT] [--no_debug_info]
+              [--account_contract] [--spec_output SPEC_OUTPUT]
+              [--prime PRIME] [--cairo_path CAIRO_PATH]
+              [--preprocess] [--output OUTPUT] [--no_debug_info]
+              [--debug_info_with_source]
               [--cairo_dependencies CAIRO_DEPENDENCIES]
               [--no_opt_unused_functions] [-v]
               file [file ...]
@@ -1084,6 +1085,10 @@ program hints against a whitelist.
 
 Compile as account contract, which means the ABI will
 be checked for expected builtin entry points.
+
+`--spec_output SPEC_OUTPUT`
+
+The specification output file name (default: stdout).
 
 `--prime PRIME`
 
@@ -1137,17 +1142,17 @@ Show program's version number and exit
 
 ### `horus-check`
 ```console
-horus-check COMPILED_FILE [-v|--verbose] [--output-queries DIR]
-            [--output-optimized-queries DIR] (-s|--solver SOLVER)
-            [-t|--timeout TIMEOUT]
+horus-check [COMPILED_FILE] [SPECIFICATION] [-v|--verbose] 
+            [--output-queries DIR] [--output-optimized-queries DIR] 
+            [--version] [(-s|--solver SOLVER)] [-t|--timeout TIMEOUT]
 ```
 
 #### Example
 
 ```console
-horus-check b.json
+horus-check b.json spec.json
 ```
-Attempts to verify the compiled StarkNet contract `b.json` with the default SMT
+Attempts to verify the compiled StarkNet contract `b.json` and its specification `spec.json` with the default SMT
 solver `cvc5`, and prints the output to `stdout`.
 
 
@@ -1191,7 +1196,7 @@ You can also pass multiple solvers, which will be tried in the order they are
 passed as flags. In the example below, we run `z3` followed by `mathsat`:
 
 ```console
-horus-check example.json -s z3 mathsat cvc5
+horus-check example.json spec.json -s z3 mathsat cvc5
 ```
 
 The timeout will apply to each solver individually, meaning that running two
@@ -1413,9 +1418,9 @@ understanding the source code and contributing to the project.
 The entrypoint source file is `app/Main.hs`. When we run `horus-check` on a
 compiled JSON file:
 ```console
-horus-check -s z3 a.json
+horus-check -s z3 a.json spec.json
 ```
-the first thing that happens is that we deserialize the JSON into a value of
+the first thing that happens is that we deserialize the JSONs into a value of
 type `ContractDefinition`, which is defined in `ContractDefinition.hs`. This
 contract is then preprocessed into a richer value of type called
 `ContractInfo`, which contains information on the instructions, storage
