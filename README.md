@@ -1040,12 +1040,27 @@ Horus does not yet fully support account contracts compiled with the
 #### Why am I seeing `Unexpected annotation type` or `annotation is not allowed here` in my commented-out code?
 
 This can sometimes happen when you comment-out a function, but not its
-annotations (which are themselves already comments). Make sure to add another
-set of `//` characters in front of any annotations that were associated with
-your commented-out function. Instead of:
+annotations (which are themselves already comments). It can also happen when
+you comment out a decorator, like `@external` (because then it looks like a
+Horus annotation: `// @external`).
+
+Make sure to add another set of `///` characters in front of any annotations
+that were associated with your commented-out function. Suppose we want to
+comment out an annotated function like this:
 ```cairo
 // @pre x == 0
 // @post 0 == 1
+@external
+func f(x : felt) -> felt {
+    return 0;
+}
+```
+
+Instead of:
+```cairo
+// @pre x == 0
+// @post 0 == 1
+// @external
 // func f(x : felt) -> felt {
 //     return 0;
 // }
@@ -1053,11 +1068,12 @@ your commented-out function. Instead of:
 
 Try:
 ```cairo
-// // @pre x == 0
-// // @post 0 == 1
-// func f(x : felt) -> felt {
-//     return 0;
-// }
+/// // @pre x == 0
+/// // @post 0 == 1
+/// @external
+/// func f(x : felt) -> felt {
+///     return 0;
+}
 ```
 
 
