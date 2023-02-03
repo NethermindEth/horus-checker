@@ -8,7 +8,7 @@ module Horus.Global
   , logInfo
   , logError
   , logWarning
-  , SolverResult (..)
+  , HorusResult (..)
   )
 where
 
@@ -40,7 +40,7 @@ import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
-import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
+import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (p_prime))
@@ -164,7 +164,7 @@ extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (e
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
   , si_funcName :: Text
-  , si_result :: SolverResult
+  , si_result :: HorusResult
   , si_inlinable :: Bool
   }
   deriving (Eq, Show)
@@ -200,18 +200,20 @@ solveModule m = do
   result <- mkResult moduleName
   pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result, si_inlinable = inlinable}
  where
+  mkResult :: Text -> GlobalL HorusResult
   mkResult moduleName = printingErrors $ do
     constraints <- extractConstraints m
     outputSmtQueries moduleName constraints
     verbosePrint m
     verbosePrint (debugFriendlyModel constraints)
     solveSMT constraints
-  printingErrors a = a `catchError` (\e -> pure (Unknown (Just ("Error: " <> e))))
+  printingErrors :: GlobalL HorusResult -> GlobalL HorusResult
+  printingErrors a = a `catchError` (\e -> pure (Timeout (Just ("Error: " <> e))))
 
 outputSmtQueries :: Text -> ConstraintsState -> GlobalL ()
 outputSmtQueries moduleName constraints = do
   fPrime <- p_prime <$> getProgram
-  let query = makeModel constraints fPrime
+  let query = makeModel False constraints fPrime
   Config{..} <- getConfig
   whenJust cfg_outputQueries (writeSmtFile query)
   whenJust cfg_outputOptimizedQueries (writeSmtFileOptimized query)
@@ -260,12 +262,23 @@ checkMathsat m = do
 
   falseIfError a = a `catchError` const (pure False)
 
-solveSMT :: ConstraintsState -> GlobalL SolverResult
+solveSMT :: ConstraintsState -> GlobalL HorusResult
 solveSMT cs = do
   Config{..} <- getConfig
   fPrime <- p_prime <$> getProgram
-  let query = makeModel cs fPrime
-  runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
+  let query = makeModel False cs fPrime
+  let preQuery = makeModel True cs fPrime
+  res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
+  preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
+  -- Convert the `SolverResult` to a `HorusResult`.
+  --
+  -- Note that the special case where the normal query is `Unsat` *and* the
+  -- preconditions -> False query is `Unsat` identifies contradictory premises.
+  case (res, preRes) of
+    (Sat mbModel, _) -> pure $ Counterexample mbModel
+    (Unknown mbReason, _) -> pure $ Timeout mbReason
+    (Unsat, Unsat) -> pure ContradictoryPrecondition
+    (Unsat, _) -> pure Verified
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
@@ -293,7 +306,7 @@ appendMissingDefaultOracleSuffixes si@(SolvingInfo moduleName funcName result in
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable : _)
-  | all ((== Unsat) . si_result) infos = [SolvingInfo funcName funcName result inlinable]
+  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result inlinable]
   | length infos == 1 = infos
   | otherwise = map appendMissingDefaultOracleSuffixes infos
 
@@ -340,7 +353,7 @@ solveContract = do
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
   isVerifiedIgnorable (SolvingInfo name _ res _) =
-    res == Unsat && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
+    res == Verified && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
 
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =
