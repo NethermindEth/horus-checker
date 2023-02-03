@@ -1,6 +1,7 @@
 module Horus.Preprocessor
   ( Model (..)
   , SolverResult (..)
+  , HorusResult (..)
   , PreprocessorF (..)
   , PreprocessorL (..)
   , solve
@@ -118,17 +119,37 @@ interpConst model name = do
   runZ3 $ Z3.getInt value
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text) deriving (Eq)
+
+{- | The set of user-facing results for a given module or function.
+
+ This is just like `SolverResult`, except that we rename the constructors to
+ match more closely what a person unfamiliar with SMT solvers would expect,
+ and we add the `ContradictoryPrecondition` constructor.
+-}
+data HorusResult
+  = Verified
+  | Counterexample (Maybe Model)
+  | ContradictoryPrecondition
+  | Timeout (Maybe Text)
+  deriving (Eq)
+
+instance Show SolverResult where
+  show Unsat = "Unsat"
+  show (Sat mbModel) = "Sat" <> maybe "" (\m -> "\n" <> show m) mbModel
+  show (Unknown reason) = "Unknown" <> maybe "" (\r -> "\n" <> unpack r) reason
+
+instance Show HorusResult where
+  show Verified = "Verified"
+  show (Counterexample mbModel) = "False" <> maybe "" (\m -> "\n" <> show m) mbModel
+  show ContradictoryPrecondition = "Contradictory premises"
+  show (Timeout reason) = "Unknown" <> maybe "" (\r -> "\n" <> unpack r) reason
+
 data Model = Model
   { m_regs :: Map Text Integer
   , m_mem :: Map Integer Integer
   , m_lvars :: Map LVar Integer
   }
   deriving (Eq)
-
-instance Show SolverResult where
-  show Unsat = "Verified"
-  show (Sat mbModel) = "False" <> maybe "" (\m -> "\n" <> show m) mbModel
-  show (Unknown reason) = "Unknown" <> maybe "" (\r -> "\n" <> unpack r) reason
 
 instance Show Model where
   show Model{..} =
