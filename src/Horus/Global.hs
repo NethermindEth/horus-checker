@@ -37,7 +37,7 @@ import Horus.CairoSemantics.Runner
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
+import Horus.FunctionAnalysis (ScopedFunction (..), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
 import Horus.Preprocessor (PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
@@ -47,7 +47,7 @@ import Horus.Program (Identifiers, Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName ())
-import Horus.SW.Std (trustedStdFuncs)
+import Horus.SW.Std (stdSpecsList, trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 
 data Config = Config
@@ -313,7 +313,7 @@ solveContract = do
   let fs = toAscList inlinables
   cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
   for_ cfgs verbosePrint
-  modules <- concat <$> for ((cfg, isStandardSource inlinables) : zip cfgs (map (==) fs)) makeModules
+  modules <- concat <$> for ((cfg, isUserAnnotated inlinables) : zip cfgs (map (==) fs)) makeModules
 
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
@@ -329,8 +329,10 @@ solveContract = do
     )
       infos
  where
-  isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
-  isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
+  isUserAnnotated :: Set ScopedFunction -> ScopedFunction -> Bool
+  isUserAnnotated inlinables f = f `notElem` inlinables
+                                    && not (isWrapper f)
+                                    && sf_scopedName f `notElem` map fst stdSpecsList
 
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
   sameFuncName (SolvingInfo _ nameA _ _) (SolvingInfo _ nameB _ _) = nameA == nameB

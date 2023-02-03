@@ -118,6 +118,33 @@ stdSpecsList =
         }
     )
   ,
+    -- [fp - 2 - k] is always the k-th-to-last argument of the function.
+    -- 
+    -- So [fp - 3] is the last argument, [fp - 4] is the second-to-last, etc.
+    --
+    -- In this case, the function signature is:
+    --
+    -- ```cairo
+    -- func memcpy(dst: felt*, src: felt*, len) {
+    -- ```
+    --
+    -- So we have the following mapping:
+    --  dst == [fp - 5]
+    --  src == [fp - 4]
+    --  len == [fp - 3]
+    ( "starkware.cairo.common.memcpy.memcpy"
+    , let
+        dstPtr = memory (fp - 5)
+        srcPtr = memory (fp - 4)
+        len = memory (fp - 3)
+        dst = memory dstPtr
+        src = memory srcPtr
+        dsts = [memory (dstPtr + fromIntegral i) | i <- [0 .. len - 1]]
+      in emptyFuncSpec
+      { fs_post = memory (memory (fp - 5)) .== memory (memory (fp - 4))
+      }
+    )
+  ,
     ( "starkware.cairo.lang.compiler.lib.registers.get_ap"
     , emptyFuncSpec{fs_post = memory (ap - 1) .== fp - 2}
     )
