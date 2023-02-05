@@ -247,16 +247,16 @@ removeMathSAT m run = do
   let solver = cfg_solver conf
   usesLvars <- or <$> traverse instUsesLvars (m_prog m)
   if (includesMathsat solver && usesLvars)
-  then do
-    let solver' = filterMathsat solver
-    if isEmptySolver solver'
-    then throw "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
-    else do
-      setConfig conf{cfg_solver = solver'}
-      result <- run
-      setConfig conf
-      pure result
-  else run
+    then do
+      let solver' = filterMathsat solver
+      if isEmptySolver solver'
+        then throw "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
+        else do
+          setConfig conf{cfg_solver = solver'}
+          result <- run
+          setConfig conf
+          pure result
+    else run
  where
   -- FIXME should check not just pre, but also post
   instUsesLvars i = falseIfError $ do
