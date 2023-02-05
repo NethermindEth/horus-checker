@@ -246,7 +246,7 @@ removeMathSAT m run = do
   conf <- getConfig
   let solver = cfg_solver conf
   usesLvars <- or <$> traverse instUsesLvars (m_prog m)
-  if (includesMathsat solver && usesLvars)
+  if includesMathsat solver && usesLvars
     then do
       let solver' = filterMathsat solver
       if isEmptySolver solver'
