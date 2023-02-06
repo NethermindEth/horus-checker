@@ -19,7 +19,7 @@
 %lang starknet
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
-from starkware.cairo.common.uint256 import Uint256, uint256_check, uint256_le
+from starkware.cairo.common.uint256 import Uint256, uint256_le
 from starkware.starknet.common.syscalls import get_caller_address
 from safe_math import (
     Int256,
@@ -29,20 +29,14 @@ from safe_math import (
     _sub,
     mul,
     _mul,
-    add_signed,
-    mul_signed256,
 )
 from assertions import (
     assert_either,
     either,
     both,
-    assert_both,
-    not_0,
     assert_not_0,
-    assert_0,
     ge,
     _ge_0,
-    assert_le,
     _le_0,
     eq_0,
     check,
@@ -103,24 +97,9 @@ func _gem(i: felt, u: felt) -> (gem: Uint256) {
 func _dai(u: felt) -> (dai: Uint256) {
 }
 
-// mapping (address => uint256)                   public sin;  // [rad]
-@storage_var
-func _sin(u: felt) -> (sin: Uint256) {
-}
-
-// int256  public surf;  // Total Dai Bridged   [rad]
-@storage_var
-func _surf() -> (surf: Int256) {
-}
-
 // uint256 public debt;  // Total Dai Issued    [rad]
 @storage_var
 func _debt() -> (debt: Uint256) {
-}
-
-// uint256 public vice;  // Total Unbacked Dai  [rad]
-@storage_var
-func _vice() -> (vice: Uint256) {
 }
 
 // uint256 public Line;  // Total Debt Ceiling  [rad]
@@ -133,15 +112,8 @@ func _Line() -> (Line: Uint256) {
 func _live() -> (live: felt) {
 }
 
-// views
-@view
-func wards{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(user: felt) -> (
-    res: felt
-) {
-    let (res) = _wards.read(user);
-    return (res,);
-}
-
+// @pre True
+// @post True
 @view
 func can{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(b: felt, u: felt) -> (
     res: felt
@@ -150,12 +122,16 @@ func can{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(b: fel
     return (res,);
 }
 
+// @pre True
+// @post True
 @view
 func ilks{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt) -> (ilk: Ilk) {
     let (ilk) = _ilks.read(i);
     return (ilk,);
 }
 
+// @pre True
+// @post True
 @view
 func urns{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt, u: felt) -> (
     urn: Urn
@@ -164,6 +140,8 @@ func urns{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: fe
     return (urn,);
 }
 
+// @pre True
+// @post True
 @view
 func dai{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(u: felt) -> (
     res: Uint256
@@ -172,6 +150,8 @@ func dai{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(u: fel
     return (res,);
 }
 
+// @pre True
+// @post True
 @view
 func gem{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt, u: felt) -> (
     gem: Uint256
@@ -180,38 +160,24 @@ func gem{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: fel
     return (gem,);
 }
 
-@view
-func sin{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(u: felt) -> (
-    sin: Uint256
-) {
-    let (sin) = _sin.read(u);
-    return (sin,);
-}
-
+// @pre True
+// @post True
 @view
 func debt{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (debt: Uint256) {
     let (debt) = _debt.read();
     return (debt,);
 }
 
-@view
-func surf{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (surf: Int256) {
-    let (surf) = _surf.read();
-    return (surf,);
-}
-
-@view
-func vice{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (vice: Uint256) {
-    let (vice) = _vice.read();
-    return (vice,);
-}
-
+// @pre True
+// @post True
 @view
 func Line{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (Line: Uint256) {
     let (Line) = _Line.read();
     return (Line,);
 }
 
+// @pre True
+// @post True
 @view
 func live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (live: felt) {
     let (live) = _live.read();
@@ -231,6 +197,8 @@ func Fold(i: felt, u: felt, rate: Uint256) {
 // function wish(address bit, address usr) internal view returns (bool) {
 //     return either(bit == usr, can[bit][usr] == 1);
 // }
+// @pre True
+// @post True
 @external
 func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     bit: felt, user: felt
@@ -264,6 +232,8 @@ func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
 //     require((y = int256(x)) >= 0);
 // }
 
+// @pre True
+// @post True
 func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() {
     // require(live == 1, "Vat/not-live");
     with_attr error_message("Vat/not-live") {
@@ -285,6 +255,8 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 
 // // --- CDP Manipulation ---
 // function frob(bytes32 i, address u, address v, address w, int256 dink, int256 dart) external {
+// @pre True
+// @post True
 @external
 func frob{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
