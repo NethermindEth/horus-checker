@@ -19,36 +19,14 @@
 %lang starknet
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
-from starkware.cairo.common.uint256 import Uint256
-from starkware.cairo.common.math import assert_not_zero, assert_le
+from starkware.cairo.common.math import assert_not_zero
 from starkware.cairo.common.math_cmp import is_le
 from starkware.starknet.common.syscalls import get_caller_address
-from safe_math import (
-    Int256,
-    add,
-    _add,
-    sub,
-    _sub,
-    mul,
-    _mul,
-)
 from assertions import (
     assert_either,
-    either,
     both,
-    assert_not_0,
-    ge,
-    _ge_0,
-    _le_0,
     eq_0,
-    check,
 )
-
-// // --- Data ---
-// mapping (address => uint256) public wards;
-@storage_var
-func _wards(user: felt) -> (res: felt) {
-}
 
 // mapping(address => mapping (address => uint256)) public can;
 @storage_var
@@ -102,11 +80,6 @@ func _dai(u: felt) -> (dai: felt) {
 // uint256 public debt;  // Total Dai Issued    [rad]
 @storage_var
 func _debt() -> (debt: felt) {
-}
-
-// uint256 public Line;  // Total Debt Ceiling  [rad]
-@storage_var
-func _Line() -> (Line: Uint256) {
 }
 
 // uint256 public live;  // Active Flag
@@ -173,14 +146,6 @@ func debt{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> 
 // @pre True
 // @post True
 @view
-func Line{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (Line: Uint256) {
-    let (Line) = _Line.read();
-    return (Line,);
-}
-
-// @pre True
-// @post True
-@view
 func live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (live: felt) {
     let (live) = _live.read();
     return (live,);
@@ -189,11 +154,6 @@ func live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> 
 // event Frob(bytes32 indexed i, address indexed u, address v, address w, int256 dink, int256 dart);
 @event
 func Frob(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
-}
-
-// event Fold(bytes32 indexed i, address indexed u, int256 rate);
-@event
-func Fold(i: felt, u: felt, rate: Uint256) {
 }
 
 // function wish(address bit, address usr) internal view returns (bool) {
