@@ -16,10 +16,12 @@ import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
-import Data.List (groupBy)
-import Data.Maybe (fromMaybe)
+import Data.Graph (reachable)
+import Data.List (groupBy, partition)
+import Data.Map qualified as Map
+import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
-import Data.Set qualified as Set (map)
+import Data.Set qualified as Set (fromList, map, member)
 import Data.Text (Text, unpack)
 import Data.Text qualified as Text (isPrefixOf)
 import Data.Traversable (for)
@@ -37,7 +39,7 @@ import Horus.CairoSemantics.Runner
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
+import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), callgraph, functionsOf, graphOfCG, isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
@@ -49,6 +51,7 @@ import Horus.SW.Identifier (Function (..))
 import Horus.SW.ScopedName (ScopedName ())
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
+import Lens.Micro ((^.), _3)
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -312,6 +315,7 @@ collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable : _)
 
 {- | Return a solution of SMT queries corresponding with the contract.
 
+
   For the purposes of reporting results,
   we also remember which SMT query corresponding to a function was inlined.
 -}
@@ -326,7 +330,8 @@ solveContract = do
   let fs = toAscList inlinables
   cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
   for_ cfgs verbosePrint
-  modules <- concat <$> for ((cfg, isStandardSource inlinables) : zip cfgs (map (==) fs)) makeModules
+  sources <- standardSources inlinables lInstructions
+  modules <- concat <$> for ((cfg, (`elem` sources)) : zip cfgs (map (==) fs)) makeModules
 
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
@@ -342,8 +347,22 @@ solveContract = do
     )
       infos
  where
-  isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
-  isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
+  standardSources :: Set ScopedFunction -> [LabeledInst] -> GlobalL (Set ScopedFunction)
+  standardSources inlinableFs rows =
+    getProgram >>= \prog ->
+      let functionsWithBodies = functionsOf rows prog
+          functions = Map.keys functionsWithBodies
+          (cg, vToLbl, lblToV) = graphOfCG . callgraph . Map.mapKeys sf_pc $ functionsWithBodies
+          (wrapperFunctions, nonwrapperFunctions) = partition isWrapper functions
+          reachableLsFromWrappers =
+            Set.fromList
+              . concatMap (concatMap ((^. _3) . vToLbl) . reachable cg . fromJust . lblToV . sf_pc)
+              $ wrapperFunctions
+          dirtiedByWrappers =
+            Set.fromList
+              [ sf | sf <- functions, sf_pc sf `Set.member` reachableLsFromWrappers
+              ]
+       in pure (Set.fromList nonwrapperFunctions \\ inlinableFs \\ dirtiedByWrappers)
 
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
   sameFuncName (SolvingInfo _ nameA _ _) (SolvingInfo _ nameB _ _) = nameA == nameB
