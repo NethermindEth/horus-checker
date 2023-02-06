@@ -77,12 +77,3 @@ func eq_0(a: felt) -> (res: felt) {
     }
     return (0,);
 }
-
-// @pre True
-// @post True
-func check{range_check_ptr}(a: Uint256) {
-    with_attr error_message("invalid amount") {
-        uint256_check(a);
-    }
-    return ();
-}
