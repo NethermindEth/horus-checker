@@ -71,8 +71,8 @@ func _le_0{range_check_ptr}(a: Int256) -> (res: felt) {
 
 // @pre True
 // @post True
-func eq_0(a: Uint256) -> (res: felt) {
-    if (a.low + a.high == 0) {
+func eq_0(a: felt) -> (res: felt) {
+    if (a == 0) {
         return (1,);
     }
     return (0,);
