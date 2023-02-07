@@ -123,6 +123,13 @@ interpret = iterM exec
   exec :: CairoSemanticsF (Impl a) -> Impl a
   exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
   exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
+  -- Implements logical variables by 'stopping' once it finds some, executing
+  -- the rest of the program, gathering all memory accesses that the rest of
+  -- the program generates in order to parametrize the instantiation of the
+  -- variable over all memory that has been gahtered this  way, and then sticks
+  -- everything recursively into implications that are conceptually of form pre
+  -- => pre /\ post /\ restOfTheProgram where restOfTheProgram can have this
+  -- very same recursive shape
   exec (CheckPoint a cont) = do
     initAss <- use (eConstraints . csAsserts)
     initExp <- use (eConstraints . csExpects)
