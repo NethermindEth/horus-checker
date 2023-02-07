@@ -218,6 +218,7 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // // --- CDP Manipulation ---
 // function frob(bytes32 i, address u, address v, address w, int256 dink, int256 dart) external {
 // @pre True
+// @storage_update _ilks(i).Art := _ilks(i).Art + dart
 // @post True
 @external
 func frob{
@@ -252,91 +253,6 @@ func frob{
     // ilk.Art = _add(ilk.Art, dart);
     let Art = ilk.Art + dart;
     _ilks.write(i, Ilk(Art, ilk.rate, ilk.spot, ilk.line, ilk.dust));
-
-    // int256 dtab = _int256(ilk.rate) * dart;
-    // uint256 tab = ilk.rate * urn.art;
-    let dtab = ilk.rate * dart;
-    let tab = ilk.rate * art;
-
-    // debt     = _add(debt, dtab);
-    let (debt) = _debt.read();
-    let debt = debt + dtab;
-    _debt.write(debt);
-
-    // either debt has decreased, or debt ceilings are not exceeded
-    // require(either(dart <= 0, both(ilk.Art * ilk.rate <= ilk.line, debt <= Line)), "Vat/ceiling-exceeded");
-    with_attr error_message("Vat/ceiling-exceeded") {
-        let debt_decreased = is_le(dart, 0);
-        let ilk_debt = Art * ilk.rate;
-        let line_ok = is_le(ilk_debt, ilk.line);
-        let Line_ok = is_le(debt, ilk.line);
-        let (lines_ok) = both(line_ok, Line_ok);
-        assert_either(debt_decreased, lines_ok);
-    }
-
-    // urn is either less risky than before, or it is safe
-    // require(either(both(dart <= 0, dink >= 0), tab <= urn.ink * ilk.spot), "Vat/not-safe");
-    with_attr error_message("Vat/not-safe") {
-        let dart_le_0 = is_le(dart, 0);
-        let dink_ge_0 = is_le(0, dink);
-        let (less_risky) = both(dart_le_0, dink_ge_0);
-        let brim = ink * ilk.spot;
-        let safe = is_le(tab, brim);
-        assert_either(less_risky, safe);
-    }
-
-    let (caller) = get_caller_address();
-
-    // urn is either more safe, or the owner consents
-    // require(either(both(dart <= 0, dink >= 0), wish(u, msg.sender)), "Vat/not-allowed-u");
-    with_attr error_message("Vat/not-allowed-u") {
-        let dart_le_0 = is_le(dart, 0);
-        let dink_ge_0 = is_le(0, dink);
-        let (less_risky) = both(dart_le_0, dink_ge_0);
-        let (owner_consents) = wish(u, caller);
-        assert_either(less_risky, owner_consents);
-    }
-
-    // collateral src consents
-    // require(either(dink <= 0, wish(v, msg.sender)), "Vat/not-allowed-v");
-    with_attr error_message("Vat/not-allowed-v") {
-        let dink_le_0 = is_le(dink, 0);
-        let (src_consents) = wish(v, caller);
-        assert_either(dink_le_0, src_consents);
-    }
-
-    // debt dst consents
-    // require(either(dart >= 0, wish(w, msg.sender)), "Vat/not-allowed-w");
-    with_attr error_message("Vat/not-allowed-w") {
-        let dart_ge_0 = is_le(0, dart);
-        let (dst_consents) = wish(w, caller);
-        assert_either(dart_ge_0, dst_consents);
-    }
-
-    // urn has no debt, or a non-dusty amount
-    // require(either(urn.art == 0, tab >= ilk.dust), "Vat/dust");
-    // TODO: how to manage underwater dusty vaults?
-    with_attr error_message("Vat/dust") {
-        let (no_debt) = eq_0(art);
-        let non_dusty = is_le(ilk.dust, tab);
-        assert_either(no_debt, non_dusty);
-    }
-
-    // gem[i][v] = sub(gem[i][v], dink);
-    let (gem) = _gem.read(i, v);
-    let gem = gem - dink;
-    _gem.write(i, v, gem);
-
-    // dai[w]    = add(dai[w],    dtab);
-    let (dai) = _dai.read(w);
-    let dai = dai + dtab;
-    _dai.write(w, dai);
-
-    // urns[i][u] = urn;
-    _urns.write(i, u, Urn(ink, art));
-
-    // emit Frob(i, u, v, w, dink, dart);
-    Frob.emit(i, u, v, w, dink, dart);
 
     return ();
 }
