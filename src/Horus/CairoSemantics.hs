@@ -370,8 +370,7 @@ mkCallConstraints pc nextPc fp f = do
     removedStorage <- storageRemoval pre'
     preparedPre <- prepare calleePc calleeFp removedStorage
     preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp =<< storageRemoval pre'
-    dbgStrg <- traverseStorage (prepare nextPc calleeFp) storage
-    updateStorage dbgStrg
+    updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
     pop
     preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
     checkPoint preparedPreCheckPoint

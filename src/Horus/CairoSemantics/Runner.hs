@@ -134,10 +134,12 @@ interpret = iterM exec
     eConstraints . csAsserts
       .= ( ( ExistentialAss
               ( \mv ->
+                  -- I am sorry about this code.
                   let restAss' = map (builderToAss mv . fst) restAss
                       asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) restAss'
                       restExp' = map fst restExp
-                   in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
+                      isNotPre = (`notElem` fromMaybe [a mv] (unAnd (a mv)))
+                   in (a mv .|| Expr.not (Expr.and (filter isNotPre asAtoms)))
                         .=> Expr.and (restAss' ++ [Expr.not (Expr.and restExp') | not (null restExp')])
               )
            , InstructionSemanticsAssertion
