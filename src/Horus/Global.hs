@@ -195,12 +195,11 @@ mkLabeledFuncName qualifiedFuncName labelsSummary = qualifiedFuncName <> "." <> 
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
-  checkMathsat m
   identifiers <- getIdentifiers
   let (qualifiedFuncName, labelsSummary, oracleSuffix) = getModuleNameParts identifiers m
       moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix
       inlinable = m_calledF m `elem` Set.map sf_pc inlinables
-  result <- mkResult moduleName
+  result <- removeMathSAT m (mkResult moduleName)
   pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result, si_inlinable = inlinable}
  where
   mkResult :: Text -> GlobalL HorusResult
@@ -245,16 +244,22 @@ writeSmtQueries queries dir moduleName = do
   newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
   writeQueryFile (n, q) = writeFile' (newFileName n) q
 
-checkMathsat :: Module -> GlobalL ()
-checkMathsat m = do
+removeMathSAT :: Module -> GlobalL a -> GlobalL a
+removeMathSAT m run = do
   conf <- getConfig
   let solver = cfg_solver conf
   usesLvars <- or <$> traverse instUsesLvars (m_prog m)
-  when (includesMathsat solver && usesLvars) $ do
-    let solver' = filterMathsat solver
-    if isEmptySolver solver'
-      then throw "MathSat solver was used to analyze a call with a logical variable in its specification."
-      else setConfig conf{cfg_solver = solver'}
+  if includesMathsat solver && usesLvars
+    then do
+      let solver' = filterMathsat solver
+      if isEmptySolver solver'
+        then throw "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
+        else do
+          setConfig conf{cfg_solver = solver'}
+          result <- run
+          setConfig conf
+          pure result
+    else run
  where
   -- FIXME should check not just pre, but also post
   instUsesLvars i = falseIfError $ do
