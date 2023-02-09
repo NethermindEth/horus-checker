@@ -82,7 +82,7 @@ func get_pool_token_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, rang
 // @pre pool_balance(token_to) == $old_pool_balance_to
 //
 // Tokens should be different
-// @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B) or (token_from == TOKEN_TYPE_B and token_to == TOKEN_TYPE_A)
+// @pre (token_from == TOKEN_TYPE_A and token_to == TOKEN_TYPE_B)
 //
 // The account has enough balance
 // @pre 0 < amount_from and amount_from <= account_balance(account_id, token_from)
