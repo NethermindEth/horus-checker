@@ -33,7 +33,7 @@ Horus is a command-line formal verification tool for
   through an example step-by-step.
 * [FAQ](#faq) - What is Cairo? What is Horus? When should I use Horus? Why should
   I use Horus? All these answered and more!
-* [Usage](#usage) - Exhastive reference information on the CLI options, among
+* [Usage](#usage) - Exhaustive reference information on the CLI options, among
   other things.
 * [Internals](#internals) - In which we explain why things are implemented the
   way they are, and discuss details relevant to the development of Horus. This
@@ -90,7 +90,7 @@ installed at all. Follow the instructions below to install the needed version.
   ```
   In the above, `horus-py39` is just a name we've chosen for this environment.
 
-3.  Activate the created environmment:
+3.  Activate the created environment:
 
   ```console
   conda activate horus-py39
