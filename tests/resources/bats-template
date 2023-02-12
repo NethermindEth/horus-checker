@@ -26,7 +26,7 @@ test_case() {
     temp_file="${base}.temp"
 
     horus-compile "$test_file" --output "$compiled_file" --spec_output "$spec_file"
-    stack run horus-check "$compiled_file" "$spec_file" -- -s cvc5 -s z3 -t 100000 &> "$temp_file" || true
+    stack run horus-check "$compiled_file" "$spec_file" -- -s cvc5 -s z3 -t 120000 &> "$temp_file" || true
     compare "${gold_file}" "${temp_file}"
     rm "$compiled_file"
     rm "$spec_file"

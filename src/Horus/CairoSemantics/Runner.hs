@@ -7,6 +7,7 @@ module Horus.CairoSemantics.Runner
   )
 where
 
+import Control.Arrow (first)
 import Control.Monad (unless)
 import Control.Monad.Except (ExceptT, runExceptT, throwError)
 import Control.Monad.Free.Church (iterM)
@@ -31,7 +32,7 @@ import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (AssertionType (InstructionSemanticsAssertion, PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CairoSemantics (AssertionType (InstructionSemanticsAssertion, PostAssertion, PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
@@ -126,7 +127,7 @@ interpret = iterM exec
   -- Implements logical variables by 'stopping' once it finds some, executing
   -- the rest of the program, gathering all memory accesses that the rest of
   -- the program generates in order to parametrize the instantiation of the
-  -- variable over all memory that has been gahtered this  way, and then sticks
+  -- variable over all memory that has been gathered this way, and then sticks
   -- everything recursively into implications that are conceptually of form pre
   -- => pre /\ post /\ restOfTheProgram where restOfTheProgram can have this
   -- very same recursive shape
@@ -141,11 +142,14 @@ interpret = iterM exec
     eConstraints . csAsserts
       .= ( ( ExistentialAss
               ( \mv ->
-                  let restAss' = map (builderToAss mv . fst) restAss
-                      asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) restAss'
+                  let restAss' = map (first (builderToAss mv)) restAss
+                      mkAtomicAssertionsWithTypes :: (Expr TBool, AssertionType) -> [(Expr TBool, AssertionType)]
+                      mkAtomicAssertionsWithTypes (e, t) = map (,t) $ fromMaybe [e] (unAnd e)
+                      asAtomsWithTypes = concatMap mkAtomicAssertionsWithTypes restAss'
+                      filteredAtoms = map fst $ filter (\(_, t) -> t `elem` [PostAssertion, InstructionSemanticsAssertion]) asAtomsWithTypes
                       restExp' = map fst restExp
-                   in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
-                        .=> Expr.and (restAss' ++ [Expr.not (Expr.and restExp') | not (null restExp')])
+                   in (a mv .|| Expr.not (Expr.and filteredAtoms))
+                        .=> Expr.and (map fst restAss' ++ [Expr.not (Expr.and restExp') | not (null restExp')])
               )
            , InstructionSemanticsAssertion
            )
