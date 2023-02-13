@@ -207,7 +207,7 @@ getModuleNameParts idents (Module spec prog oracle calledF _ mbPreCheckedFuncAnd
     Just label ->
       let scopedNames = labelNamesOfPc idents label
           isFloatingLabel = label /= calledF
-          scopes = preprocessScopes scopedNames
+          scopes = preprocessScopes $ L.sort scopedNames
           prefix = formatScopes scopes isFloatingLabel
           labelsSummary = summarizeLabels scopes isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, preCheckingSuffix)
