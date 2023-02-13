@@ -147,8 +147,8 @@ normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
   labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
 
 descrOfBool :: Bool -> Text
-descrOfBool True = "T"
-descrOfBool False = "F"
+descrOfBool True = "1"
+descrOfBool False = "2"
 
 descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
@@ -158,7 +158,7 @@ descrOfOracle oracle =
 
 {- | Return a triple of the function name, the label summary, and the oracle.
 
- The oracle is a string of `T` and `F` characters, representing a path
+ The oracle is a string of `1` and `2` characters, representing a path
  through the control flow graph of the function. For example, if we have a
  function
 
@@ -172,10 +172,11 @@ descrOfOracle oracle =
  }
  ```
 
- then the branch where we return 0 is represented by `T` (since the predicate
- `x == 0` is True), and the branch where we return 1 is represented by `F`.
+ then the branch where we return 0 is usually represented by `1` (since the
+ predicate `x == 0` is True), and the branch where we return 1 is represented
+ by `2`.
 
- Nested control flow results in multiple `T` or `F` characters.
+ Nested control flow results in multiple `1` or `2` characters.
 
  See `normalizedName` for the definition of a floating label. Here, the label
  is floating if it is not a function declaration (i.e. equal to `calledF`),
