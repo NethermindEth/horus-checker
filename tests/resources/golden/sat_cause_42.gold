@@ -4,8 +4,8 @@ Verified
 main:::default
 Verified
 
-main.loop:::T
+main.loop:::1
 Verified
 
-main.loop:::F
+main.loop:::2
 False
