@@ -52,6 +52,10 @@ data AssertionBuilder
   = QFAss (Expr TBool)
   | ExistentialAss ([MemoryVariable] -> Expr TBool)
 
+instance Show AssertionBuilder where
+  show (QFAss e) = "QFAss " <> show e
+  show (ExistentialAss _) = "ExistentialAss"
+
 builderToAss :: [MemoryVariable] -> AssertionBuilder -> Expr TBool
 builderToAss _ (QFAss e) = e
 builderToAss mv (ExistentialAss f) = f mv
