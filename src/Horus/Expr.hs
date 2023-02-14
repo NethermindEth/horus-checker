@@ -58,6 +58,7 @@ import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
 import Data.Singletons (SingI, sing, withSingI)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Typeable (Typeable, eqT, (:~:) (Refl))
 import Data.Vinyl.Core (Rec (..), (<+>))
 import Data.Vinyl.TypeLevel (type (++))
@@ -78,7 +79,20 @@ data Expr (a :: Ty) where
 
 infixl 4 :*:
 
-deriving stock instance Show (Expr a)
+instance Show (Expr a) where
+  show (Felt n) = show n
+  show True = "True"
+  show False = "False"
+  show (Fun name) = T.unpack name
+  show (f :*: x :*: y) =
+    case f of
+      Fun "=" -> show x ++ " == " ++ show y
+      Fun "and" -> "(" ++ show x ++ " " ++ "∧" ++ " " ++ show y ++ ")"
+      Fun "or" -> "(" ++ show x ++ " " ++ "∨" ++ " " ++ show y ++ ")"
+      _ -> "(" ++ show x ++ " " ++ show f ++ " " ++ show y ++ ")"
+  show (f :*: x) = "(" ++ show f ++ " " ++ show x ++ ")"
+  show (ExistsFelt name body) = "(∃" ++ show name ++ ". " ++ show body ++ ")"
+  show (ExitField x) = "exitField " ++ show x
 
 instance Eq (Expr a) where
   Felt a == Felt b = a == b

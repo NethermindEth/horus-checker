@@ -4,6 +4,7 @@ test_file="${base}.cairo"
 printf "# checking %s\n" "$test_file"
 gold_file="${base}.gold"
 compiled_file="${base}.json"
+spec_file="${base}_spec.json"
 temp_file="${base}.temp"
 spec_file="${base}_spec.json"
 
