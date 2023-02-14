@@ -8,3 +8,4 @@ tests/resources/*.bats
 tests/resources/golden/*.temp
 tests/resources/golden/*.json
 horus-compile/
+*.json
