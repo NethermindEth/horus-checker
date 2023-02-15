@@ -12,6 +12,7 @@ import Horus.Expr.Vars (ap, blockTimestamp, callerAddress, contractAddress, fp, 
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
+-- import Debug.Trace (trace)
 
 stdSpecs :: Map ScopedName FuncSpec
 stdSpecs = Map.fromList stdSpecsList

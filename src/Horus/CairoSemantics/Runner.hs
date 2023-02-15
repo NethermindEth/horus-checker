@@ -22,7 +22,7 @@ import Data.Function ((&))
 import Data.Functor (($>))
 import Data.List qualified as List (find, tails)
 import Data.Map qualified as Map (map, null, unionWith)
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (mapMaybe)
 import Data.Singletons (sing)
 import Data.Some (foldSome)
 import Data.Text (Text)
@@ -31,11 +31,11 @@ import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (AssertionType (InstructionSemanticsAssertion, PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
-import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top)
+import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top, reset)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
-import Horus.Expr (Expr (ExitField, Fun), Ty (..), unAnd, (.&&), (.<), (.<=), (.==), (.=>), (.||))
+import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>))
 import Horus.Expr qualified as Expr
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Std (Function (..))
@@ -121,31 +121,8 @@ interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
   exec :: CairoSemanticsF (Impl a) -> Impl a
-  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
+  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType):) >> cont
   exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
-  exec (CheckPoint a cont) = do
-    initAss <- use (eConstraints . csAsserts)
-    initExp <- use (eConstraints . csExpects)
-    eConstraints . csAsserts .= []
-    eConstraints . csExpects .= []
-    r <- cont
-    restAss <- use (eConstraints . csAsserts)
-    restExp <- use (eConstraints . csExpects)
-    eConstraints . csAsserts
-      .= ( ( ExistentialAss
-              ( \mv ->
-                  let restAss' = map (builderToAss mv . fst) restAss
-                      asAtoms = concatMap (\x -> fromMaybe [x] (unAnd x)) restAss'
-                      restExp' = map fst restExp
-                   in (a mv .|| Expr.not (Expr.and (filter (/= a mv) asAtoms)))
-                        .=> Expr.and (restAss' ++ [Expr.not (Expr.and restExp') | not (null restExp')])
-              )
-           , InstructionSemanticsAssertion
-           )
-            : initAss
-         )
-    eConstraints . csExpects .= initExp
-    pure r
   exec (DeclareMem address cont) = do
     memVars <- use (eConstraints . csMemoryVariables)
     case List.find ((address ==) . mv_addrExpr) memVars of
@@ -187,6 +164,8 @@ interpret = iterM exec
     case callstack of
       Nothing -> get >>= cont . digestOfCallStack fNames . (^. csCallStack) . e_constraints
       Just stack -> cont $ digestOfCallStack fNames stack
+  exec (GetMemVars cont) = do
+    use (eConstraints . csMemoryVariables) >>= cont
   exec (GetOracle cont) = do
     get >>= cont . stackTrace . (^. csCallStack) . e_constraints
   exec (IsInlinable label cont) = do
@@ -202,6 +181,7 @@ interpret = iterM exec
       throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
     storage <- use eStorage
     cont (Storage.read storage name args)
+  exec (ResetStack cont) = eConstraints . csCallStack %= reset >> cont
   exec (UpdateStorage newStorage cont) = do
     storageEnabled <- use eStorageEnabled
     unless (storageEnabled || Map.null newStorage) $

@@ -4,8 +4,8 @@ Verified
 test1:::default
 Verified
 
-test1.lab:::1
+test1.lab:::T
 Verified
 
-test1.lab:::2
+test1.lab:::F
 False

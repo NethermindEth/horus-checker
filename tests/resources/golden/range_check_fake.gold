@@ -1,7 +1,7 @@
-max:::1
+max:::T
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
 
-max:::2
+max:::F
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it

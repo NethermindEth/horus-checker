@@ -46,7 +46,6 @@ func stack_top{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
 // @storage_update stack_ptr() := stack_ptr() + 1
 func main{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (res: felt) {
     stack_lit(5);
-    stack_lit(6);
     stack_add();
     let (top) = stack_top();
     return (top,);

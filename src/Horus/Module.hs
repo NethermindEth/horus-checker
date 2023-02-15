@@ -8,6 +8,8 @@ module Horus.Module
   , ModuleSpec (..)
   , PlainSpec (..)
   , richToPlainSpec
+  , isOptimising
+  , dropMain
   )
 where
 
@@ -19,25 +21,27 @@ import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, null, toList)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
-import Horus.CFGBuild (ArcCondition (..), Label (unLabel))
-import Horus.CFGBuild.Runner (CFG (..))
+import Horus.CFGBuild (ArcCondition (..), Vertex (v_label, v_optimisesF), Label (unLabel, Label))
+import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
 import Horus.CallStack (CallStack, calledFOfCallEntry, callerPcOfCallEntry, initialWithFunc, pop, push, stackTrace, top)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
-import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall)
+import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall, ScopedFunction (sf_scopedName))
 import Horus.Instruction (LabeledInst)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
-import Horus.SW.ScopedName (ScopedName (..))
+import Horus.SW.ScopedName (ScopedName (..), toText)
+import Horus.Util (tShow)
 
 data Module = Module
   { m_spec :: ModuleSpec
@@ -45,6 +49,7 @@ data Module = Module
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
   , m_lastPc :: (CallStack, Label)
+  , m_optimisesF :: Maybe (CallStack, Label, ScopedFunction)
   }
   deriving stock (Show)
 
@@ -53,6 +58,9 @@ data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
 
 data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
   deriving stock (Show)
+
+isOptimising :: Module -> Bool
+isOptimising = isJust . m_optimisesF
 
 richToPlainSpec :: FuncSpec -> PlainSpec
 richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
@@ -147,8 +155,8 @@ normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
   labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
 
 descrOfBool :: Bool -> Text
-descrOfBool True = "1"
-descrOfBool False = "2"
+descrOfBool True = "T"
+descrOfBool False = "F"
 
 descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
@@ -156,9 +164,9 @@ descrOfOracle oracle =
     then ""
     else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ oracle
 
-{- | Return a triple of the function name, the label summary, and the oracle.
+{- | Return a quadruple of the function name, the label summary, the oracle and optimisation misc.
 
- The oracle is a string of `1` and `2` characters, representing a path
+ The oracle is a string of `T` and `F` characters, representing a path
  through the control flow graph of the function. For example, if we have a
  function
 
@@ -172,11 +180,10 @@ descrOfOracle oracle =
  }
  ```
 
- then the branch where we return 0 is usually represented by `1` (since the
- predicate `x == 0` is True), and the branch where we return 1 is represented
- by `2`.
+ then the branch where we return 0 is represented by `T` (since the predicate
+ `x == 0` is True), and the branch where we return 1 is represented by `F`.
 
- Nested control flow results in multiple `1` or `2` characters.
+ Nested control flow results in multiple `T` or `F` characters.
 
  See `normalizedName` for the definition of a floating label. Here, the label
  is floating if it is not a function declaration (i.e. equal to `calledF`),
@@ -184,18 +191,23 @@ descrOfOracle oracle =
 
  Note: while we do have the name of the called function in the `Module` type,
  it does not contain the rest of the labels.
+
 -}
-getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text)
-getModuleNameParts idents (Module spec prog oracle calledF _) =
+getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
+getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
   case beginOfModule prog of
-    Nothing -> ("", "empty: " <> pprExpr post, "")
+    Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
       let scopedNames = labelNamesOfPc idents label
           isFloatingLabel = label /= calledF
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
-       in (prefix, labelsSummary, descrOfOracle oracle)
+       in (prefix, labelsSummary, descrOfOracle oracle, optimisingSuffix)
  where
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
+  optimisingSuffix = case optimisesF of
+    Nothing -> ""
+    Just (_, Label l, f) ->
+      "<" <> (toText (ScopedName (dropMain (sn_path (sf_scopedName f)))) <> "@" <> tShow l) <> ">"
 
 data Error
   = ELoopNoInvariant Label
@@ -208,7 +220,7 @@ instance Show Error where
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label) (Bool -> ModuleL b) (b -> a)
+  | forall b. Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -234,7 +246,7 @@ emitModule m = liftF' (EmitModule m ())
 'm' additionally takes a parameter that tells whether 'l' has been
 visited before.
 -}
-visiting :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label) -> (Bool -> ModuleL b) -> ModuleL b
+visiting :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
 visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
 
 throw :: Error -> ModuleL a
@@ -254,58 +266,60 @@ gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
 
 gatherFromSource :: CFG -> Function -> FuncSpec -> ModuleL ()
-gatherFromSource cfg function fSpec =
-  visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich (fu_pc function) ACNone Nothing
+gatherFromSource cfg function fSpec = do
+  let verticesAtFuPc = verticesLabelledBy cfg $ fu_pc function
+  for_ verticesAtFuPc $ \v ->
+    visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing
  where
   visit ::
     Map (NonEmpty Label, Label) Bool ->
     CallStack ->
     [LabeledInst] ->
     SpecBuilder ->
-    Label ->
+    Vertex ->
     ArcCondition ->
     FInfo ->
     ModuleL ()
-  visit oracle callstack acc builder l arcCond f =
-    visiting (stackTrace callstack', oracle, l) $ \alreadyVisited ->
+  visit oracle callstack acc builder v arcCond f =
+    visiting (stackTrace callstack', oracle, v) $ \alreadyVisited ->
       if alreadyVisited then visitLoop builder else visitLinear builder
    where
+    l = v_label v
+
     visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
     visitLoop (SBPlain pre)
       | null assertions = throwError (ELoopNoInvariant l)
       | otherwise = emitPlain pre (Expr.and assertions)
 
     visitLinear SBRich
-      | onFinalNode = emitRich (fs_pre fSpec) (Expr.and $ cfg_assertions cfg ^. ix l)
-      | null assertions = visitArcs oracle' acc builder l
+      | onFinalNode = emitRich (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
+      | null assertions = visitArcs oracle' acc builder v
       | otherwise = extractPlainBuilder fSpec >>= visitLinear
     visitLinear (SBPlain pre)
-      | null assertions = visitArcs oracle' acc builder l
+      | null assertions = visitArcs oracle' acc builder v
       | otherwise = do
           emitPlain pre (Expr.and assertions)
-          visitArcs Map.empty [] (SBPlain (Expr.and assertions)) l
+          visitArcs Map.empty [] (SBPlain (Expr.and assertions)) v
 
     callstack' = case f of
       Nothing -> callstack
       Just (ArcCall fCallerPc fCalledF) -> push (fCallerPc, fCalledF) callstack
       Just ArcRet -> snd $ pop callstack
     oracle' = updateOracle arcCond callstack' oracle
-    assertions = cfg_assertions cfg ^. ix l
-    onFinalNode = null (cfg_arcs cfg ^. ix l)
+    assertions = map snd (cfg_assertions cfg ^. ix v)
+    onFinalNode = null (cfg_arcs cfg ^. ix v)
     emitPlain pre post = emit . MSPlain $ PlainSpec pre post
     emitRich pre post = emit . MSRich $ FuncSpec pre post $ fs_storage fSpec
-    emit spec = emitModule $ Module spec acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l)
 
-    -- Visit all arcs from the current node.
-    --
-    -- This is here because a ret from a function adds a graph arc to
-    -- everything that ever calls it, and then we filter which one we want
-    -- during module generation, thus ignoring some outgoing edges.
-    visitArcs :: Map (NonEmpty Label, Label) Bool -> [LabeledInst] -> SpecBuilder -> Label -> ModuleL ()
-    visitArcs newOracle acc' pre l' = do
-      let outArcs = cfg_arcs cfg ^. ix l'
+    emit spec =
+      emitModule (
+        Module spec acc oracle' (calledFOfCallEntry $ top callstack')
+               (callstack', l) ((callstack', l,) <$> v_optimisesF v))
+
+    visitArcs newOracle acc' pre v' = do
+      let outArcs = cfg_arcs cfg ^. ix v'
       unless (null outArcs) $
-        let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==)
+        let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
             outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
          in for_ outArcs' $ \(lTo, insts, test, f') ->
               visit newOracle callstack' (acc' <> insts) pre lTo test f'

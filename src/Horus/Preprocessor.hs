@@ -163,22 +163,15 @@ instance Show Model where
 
 solve :: Integer -> Text -> PreprocessorL SolverResult
 solve fPrime smtQuery = do
-  combinedRes <- optimizeQuery smtQuery >>= foldlM combineResult (False, Unsat)
-  pure $ case combinedRes of
-    (_, Sat mbModel) -> Sat mbModel
-    (_, Unknown mbReason) -> Unknown mbReason
-    (True, Unsat) -> Unknown $ Just "All solvers failed on at least one goal."
-    (False, Unsat) -> Unsat
+  optimizeQuery smtQuery >>= foldlM combineResult (Unknown Nothing)
  where
-  combineResult :: (Bool, SolverResult) -> Goal -> PreprocessorL (Bool, SolverResult)
-  -- The combined value (Bool, SolverResult) means (was there an unknown, SolverResult so far)
-  combineResult (hadUnknown, Sat mbModel) _ = pure (hadUnknown, Sat mbModel)
-  combineResult (hadUnknown, Unsat) subgoal = do
-    res <- computeResult subgoal
-    pure (hadUnknown, res)
-  combineResult (_, Unknown{}) subgoal = do
-    res <- computeResult subgoal
-    pure (True, res)
+  combineResult (Sat mbModel) _ = pure (Sat mbModel)
+  combineResult Unsat subgoal = do
+    result <- computeResult subgoal
+    pure $ case result of
+      Sat mbModel -> Sat mbModel
+      _ -> Unsat
+  combineResult Unknown{} subgoal = computeResult subgoal
 
   computeResult subgoal = do
     result <- runSolver =<< runZ3 (goalToSExpr subgoal)

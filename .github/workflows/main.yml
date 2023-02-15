@@ -88,6 +88,12 @@ jobs:
           path: ${{ env.pythonLocation }}
           key: ${{ env.pythonLocation }}-${{ env.horus_compile_version }}
 
+      - uses: actions/cache@v2
+        name: Cache ~/.cache/pip
+        with:
+          path: ~/.cache/pip
+          key: "pip-cache"
+
       - name: Build
         run: |
           jobs=$(getconf _NPROCESSORS_ONLN)
