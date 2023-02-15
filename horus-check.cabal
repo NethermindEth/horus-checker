@@ -52,6 +52,8 @@ library
     build-tool-depends:      alex:alex, happy:happy
     exposed-modules:
       Horus.Arguments
+      Horus.CallStack
+      Horus.CFGBuild
       Horus.ContractDefinition
       Horus.ContractInfo
       Horus.FunctionAnalysis
@@ -59,16 +61,16 @@ library
       Horus.Global.Runner
       Horus.Instruction
       Horus.Label
+      Horus.Module
       Horus.Program
+      Horus.SW.ScopedName
       Horus.SW.Std
       Horus.Util
     other-modules:
-      Horus.CFGBuild
       Horus.CFGBuild.Runner
       Horus.CairoSemantics
       Horus.CairoSemantics.Runner
       Horus.Command.SMT
-      Horus.CallStack
       Horus.Expr
       Horus.Expr.SMT
       Horus.Expr.Std
@@ -79,7 +81,6 @@ library
       Horus.JSON.Util
       Horus.Logger
       Horus.Logger.Runner
-      Horus.Module
       Horus.Module.Runner
       Horus.Preprocessor
       Horus.Preprocessor.Runner
@@ -91,7 +92,6 @@ library
       Horus.SW.CairoType.Parser
       Horus.SW.FuncSpec
       Horus.SW.Identifier
-      Horus.SW.ScopedName
       Horus.SW.Storage
       Horus.Z3Util
     build-depends:

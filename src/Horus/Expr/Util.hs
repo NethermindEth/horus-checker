@@ -33,7 +33,9 @@ gatherNonStdFunctions = execWriter . transform_ step
   emit f = tell (Set.singleton (Some f))
 
 gatherLogicalVariables :: Expr a -> Set Text
-gatherLogicalVariables = Set.filter isLogical . Set.map takeName . gatherNonStdFunctions
+gatherLogicalVariables (ExistsFelt name expr) =
+  Set.singleton name `Set.union` gatherLogicalVariables expr
+gatherLogicalVariables expr = Set.filter isLogical . Set.map takeName . gatherNonStdFunctions $ expr
  where
   takeName (Some (Function name)) = name
   isLogical name = "$" `Text.isPrefixOf` name

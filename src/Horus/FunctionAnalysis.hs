@@ -16,6 +16,7 @@ module Horus.FunctionAnalysis
   , storageVarsOfCD
   , isAuxFunc
   , scopedFOfPc
+  , uncheckedScopedFOfPc
   )
 where
 
@@ -45,7 +46,7 @@ import Data.Map qualified as Map
   , toList
   , (!)
   )
-import Data.Maybe (fromMaybe, isNothing, listToMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, isNothing, listToMaybe, mapMaybe, fromJust)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_program, cd_specs, cd_storageVars))
@@ -210,6 +211,9 @@ scopedFOfPc idents label = ScopedFunction <$> scopedName <*> Just label
       , Just pc <- [getFunctionPc ident]
       , pc == label
       ]
+
+uncheckedScopedFOfPc :: Identifiers -> Label -> ScopedFunction
+uncheckedScopedFOfPc idents = fromJust . scopedFOfPc idents
 
 labelIdentifiersOfPc :: Identifiers -> Label -> [Identifier]
 labelIdentifiersOfPc idents lblpc =
