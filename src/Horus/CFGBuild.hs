@@ -1,5 +1,5 @@
 {-# LANGUAGE InstanceSigs #-}
-{-# OPTIONS_GHC -Wno-unused-imports #-}
+
 module Horus.CFGBuild
   ( CFGBuildL (..)
   , ArcCondition (..)
@@ -9,7 +9,7 @@ module Horus.CFGBuild
   , Label (..)
   , CFGBuildF (..)
   , LabeledInst
-  , AnnotationType(..)
+  , AnnotationType (..)
   , mkPre
   , mkPost
   , mkInv
@@ -19,8 +19,8 @@ module Horus.CFGBuild
   )
 where
 
-import Control.Arrow (Arrow(second))
-import Control.Monad (when, unless)
+import Control.Arrow (Arrow (second))
+import Control.Monad (unless, when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Coerce (coerce)
@@ -29,16 +29,16 @@ import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
 import Data.Map qualified as Map (lookup, toList)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Traversable (for)
-import Data.Maybe (isJust)
 import Lens.Micro.GHC ()
 
 import Horus.Expr (Expr (), Ty (..))
 import Horus.Expr qualified as Expr
+import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis
   ( FInfo
   , FuncOp (ArcCall, ArcRet)
@@ -62,8 +62,7 @@ import Horus.Program (Identifiers, Program (..))
 import Horus.SW.FuncSpec (FuncSpec' (fs'_post, fs'_pre))
 import Horus.SW.Identifier (Function (fu_pc), Identifier (IFunction, ILabel))
 import Horus.SW.ScopedName (ScopedName)
-import Horus.Util (appendList, whenJustM, tShow)
-import Horus.Expr.Util (gatherLogicalVariables)
+import Horus.Util (appendList, tShow, whenJustM)
 
 data AnnotationType = APre | APost | AInv
   deriving stock (Show)
@@ -212,26 +211,26 @@ addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
 addArcsFrom :: Set ScopedFunction -> Program -> [LabeledInst] -> Segment -> Vertex -> Bool -> CFGBuildL ()
 addArcsFrom inlinables prog rows seg@(Segment s) vFrom optimiseWithSplit
   | Call <- i_opCode endInst =
-    let callee = uncheckedScopedFOfPc (p_identifiers prog) (uncheckedCallDestination lInst)
-     in do
-      if callee `Set.member` inlinables
-          then do
-            salientCalleeV <- getSalientVertex (sf_pc callee)
-            addArc vFrom salientCalleeV insts ACNone . Just $ ArcCall endPc (sf_pc callee)
-          else do
-            salientLinearV <- getSalientVertex (nextSegmentLabel seg)
-            addArc' vFrom salientLinearV insts
-            svarSpecs <- getSvarSpecs
-            when (optimiseWithSplit && sf_scopedName callee `Set.notMember` svarSpecs) $ do
-              -- Suppose F calls G where G has a precondition. We synthesize an extra module
-              -- Pre(F) -> Pre(G) to check whether Pre(G) holds. The standard module for F
-              -- is then Pre(F) -> Post(F) (conceptually, unless there's a split in the middle, etc.),
-              -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
-              -- been checked by the module induced by the ghost vertex.
-              ghostV <- addOptimizingVertex (nextSegmentLabel seg) callee
-              pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
-              addAssertion ghostV $ quantifyEx pre
-              addArc' vFrom ghostV insts
+      let callee = uncheckedScopedFOfPc (p_identifiers prog) (uncheckedCallDestination lInst)
+       in do
+            if callee `Set.member` inlinables
+              then do
+                salientCalleeV <- getSalientVertex (sf_pc callee)
+                addArc vFrom salientCalleeV insts ACNone . Just $ ArcCall endPc (sf_pc callee)
+              else do
+                salientLinearV <- getSalientVertex (nextSegmentLabel seg)
+                addArc' vFrom salientLinearV insts
+                svarSpecs <- getSvarSpecs
+                when (optimiseWithSplit && sf_scopedName callee `Set.notMember` svarSpecs) $ do
+                  -- Suppose F calls G where G has a precondition. We synthesize an extra module
+                  -- Pre(F) -> Pre(G) to check whether Pre(G) holds. The standard module for F
+                  -- is then Pre(F) -> Post(F) (conceptually, unless there's a split in the middle, etc.),
+                  -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
+                  -- been checked by the module induced by the ghost vertex.
+                  ghostV <- addOptimizingVertex (nextSegmentLabel seg) callee
+                  pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
+                  addAssertion ghostV $ quantifyEx pre
+                  addArc' vFrom ghostV insts
   | Ret <- i_opCode endInst =
       -- Find the function corresponding to `endPc` and lookup its label. If we
       -- found the label, add arcs for each caller.
@@ -248,11 +247,6 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom optimiseWithSplit
       lTo2 <- getSalientVertex $ moveLabel endPc (fromInteger (i_imm endInst))
       addArc vFrom lTo1 insts (ACJnz endPc False) Nothing
       addArc vFrom lTo2 insts (ACJnz endPc True) Nothing
-            -- -- These are the destinations of the two outgoing edges from a
-            -- -- conditional jump: one to the next instruction and the other to
-            -- -- the target of the jump.
-            -- addArc lFrom lTo1 insts (ACJnz endPc False) Nothing
-            -- addArc lFrom lTo2 insts (ACJnz endPc True) Nothing
   | otherwise = do
       lTo <- getSalientVertex $ nextSegmentLabel seg
       addArc' vFrom lTo insts
@@ -276,8 +270,8 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom optimiseWithSplit
 
   quantifyEx :: (AnnotationType, Expr 'TBool) -> (AnnotationType, Expr 'TBool)
   quantifyEx = second $ \expr ->
-    let lvars = gatherLogicalVariables expr in
-    foldr Expr.ExistsFelt expr lvars
+    let lvars = gatherLogicalVariables expr
+     in foldr Expr.ExistsFelt expr lvars
 
 addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
 addAssertions inlinables identifiers = do

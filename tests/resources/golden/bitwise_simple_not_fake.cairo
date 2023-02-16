@@ -9,8 +9,8 @@ func apply_bitwise{bitwise_ptr: BitwiseBuiltin*}(a, b) -> (c: felt, d: felt, e: 
     return (bitwise_ptr.x_and_y, bitwise_ptr.x_xor_y, bitwise_ptr.x_or_y);
 }
 
-func main{bitwise_ptr: BitwiseBuiltin*}(b) -> (c: felt, d: felt, e: felt) {
+func main{bitwise_ptr: BitwiseBuiltin*}(a, b) -> (c: felt, d: felt, e: felt) {
     let fake_ptr = cast(42, BitwiseBuiltin*);
-    let (c, d, e) = apply_bitwise{bitwise_ptr=bitwise_ptr}(24601, b);
+    let (c, d, e) = apply_bitwise{bitwise_ptr=bitwise_ptr}(a, b);
     return (c, d, e);
 }

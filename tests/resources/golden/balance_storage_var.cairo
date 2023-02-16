@@ -6,7 +6,6 @@ from starkware.cairo.common.cairo_builtins import HashBuiltin
 func balance() -> (res: felt) {
 }
 
-// @pre amount == 1
 // @storage_update balance() := balance() + amount
 func increase_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     amount: felt
@@ -16,11 +15,8 @@ func increase_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_chec
     return ();
 }
 
-// @post $Return.res == balance() + 1
-// @storage_update balance() := balance() + 1
+// @post $Return.res == balance()
 func get_balance{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (res: felt) {
-    let (rr) = balance.read();
-    increase_balance(1);
-    let (rrr) = balance.read();
-    return (res=rrr);
+    let (res) = balance.read();
+    return (res=res);
 }

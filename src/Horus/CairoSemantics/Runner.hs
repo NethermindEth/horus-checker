@@ -32,7 +32,7 @@ import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
 import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
-import Horus.CallStack (CallStack, digestOfCallStack, pop, push, stackTrace, top, reset)
+import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>))
@@ -121,7 +121,7 @@ interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
   exec :: CairoSemanticsF (Impl a) -> Impl a
-  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType):) >> cont
+  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
   exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
   exec (DeclareMem address cont) = do
     memVars <- use (eConstraints . csMemoryVariables)

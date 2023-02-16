@@ -1,11 +1,16 @@
+
 id
+Verified
+
+test1 Pre<id|<root>@5>
 Verified
 
 test1:::default
 Verified
 
-test1.lab:::T
+test1.lab:::1
 Verified
 
-test1.lab:::F
+test1.lab:::2
 False
+

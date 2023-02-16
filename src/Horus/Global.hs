@@ -195,12 +195,11 @@ solveModule m = do
   inlinables <- getInlinables
   identifiers <- getIdentifiers
   let (qualifiedFuncName, labelsSummary, oracleSuffix, optimisesF) = getModuleNameParts identifiers m
-      fullyQualifiedFuncName = qualifiedFuncName
-      moduleName = mkLabeledFuncName fullyQualifiedFuncName labelsSummary <> oracleSuffix <> optimisesF
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimisesF
       inlinable = m_calledF m `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
   pure SolvingInfo{
-    si_moduleName = moduleName, si_funcName = fullyQualifiedFuncName,
+    si_moduleName = moduleName, si_funcName = qualifiedFuncName,
     si_result = result, si_inlinable = inlinable, si_optimisesF = m_optimisesF m}
  where
   mkResult :: Text -> GlobalL HorusResult
@@ -279,7 +278,7 @@ solveSMT cs = do
   let preQuery = makeModel True cs fPrime
   res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
   preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
-  
+
   -- Convert the `SolverResult` to a `HorusResult`.
   --
   -- Note that the special case where the normal query is `Unsat` *and* the
@@ -315,10 +314,11 @@ appendMissingDefaultOracleSuffixes si@(SolvingInfo moduleName funcName result in
 -}
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
-collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable _ : _)
-  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result inlinable Nothing]
+collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
+  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
   | otherwise = map appendMissingDefaultOracleSuffixes infos
+  where reportInlinable = all si_inlinable infos
 
 {- | Return a solution of SMT queries corresponding with the contract.
 

@@ -1,4 +1,4 @@
-module Horus.SW.Storage (Storage, read, getWrites, parse, equivalenceExpr, writeSvars) where
+module Horus.SW.Storage (Storage, read, getWrites, parse, equivalenceExpr) where
 
 import Prelude hiding (read)
 
@@ -6,9 +6,9 @@ import Data.Aeson (FromJSON (..), Value, withObject, (.:))
 import Data.Aeson.Types (Parser)
 import Data.Coerce (coerce)
 import Data.Map (Map)
-import Data.Map qualified as Map (findWithDefault, toList, foldrWithKey)
+import Data.Map qualified as Map (findWithDefault, toList)
 
-import Horus.Expr (Expr, Ty (..), (.==), (.&&))
+import Horus.Expr (Expr, Ty (..), (.==))
 import Horus.Expr qualified as Expr
 import Horus.JSON.Util (HSExpr (..))
 import Horus.SW.ScopedName (ScopedName)
@@ -38,17 +38,6 @@ buildReadChain readAt baseCase writes = go baseCase (reverse writes)
     | length args /= arity = error "buildReadChain: a storage var is accessed with a wrong number of arguments."
     | otherwise = go (Expr.ite (Expr.and (zipWith (.==) readAt args)) value acc) rest
   arity = length readAt
-
-writeSvar :: Storage -> ScopedName -> [([Expr TFelt], Expr TFelt)] -> Expr TBool
-writeSvar _ _ [] = Expr.True
-writeSvar storage name ((args, _) : rest) = 
-  lhs .== rhs .&& writeSvar storage name rest
-  where
-    lhs = read storage name args 
-    rhs = Expr.apply (Expr.Fun (tShow name)) args
-
-writeSvars :: Storage -> Expr TBool
-writeSvars storage = Map.foldrWithKey (\name writes acc -> acc .&& writeSvar storage name writes) Expr.True storage
 
 getWrites :: Storage -> [(ScopedName, [Expr TFelt], Expr TFelt)]
 getWrites storage = concatMap getWritesForName (Map.toList storage)

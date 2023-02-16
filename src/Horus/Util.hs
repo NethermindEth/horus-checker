@@ -83,4 +83,3 @@ atMay (x : xs) n
   | n < 0 = Nothing
   | n == 0 = Just x
   | otherwise = atMay xs $ n - 1
-

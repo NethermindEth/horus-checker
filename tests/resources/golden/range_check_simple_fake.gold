@@ -1,5 +1,10 @@
+
 apply_range_check
 Verified
 
-main
+main Pre<apply_range_check|<root>@10>
+Verified
+
+main:::default
 False
+

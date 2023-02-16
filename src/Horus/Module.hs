@@ -20,8 +20,8 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
-import Data.Map qualified as Map (elems, empty, insert, null, toList)
-import Data.Maybe (isJust)
+import Data.Map qualified as Map (elems, empty, insert, null, toList, map)
+import Data.Maybe (isJust, isNothing)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
@@ -29,7 +29,7 @@ import Text.Printf (printf)
 
 import Horus.CFGBuild (ArcCondition (..), Vertex (v_label, v_optimisesF), Label (unLabel, Label))
 import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
-import Horus.CallStack (CallStack, calledFOfCallEntry, callerPcOfCallEntry, initialWithFunc, pop, push, stackTrace, top)
+import Horus.CallStack (CallStack, calledFOfCallEntry, callerPcOfCallEntry, initialWithFunc, pop, push, stackTrace, top, digestOfCallStack)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
@@ -42,6 +42,7 @@ import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 import Horus.Util (tShow)
+import Horus.ContractInfo (pcToFun)
 
 data Module = Module
   { m_spec :: ModuleSpec
@@ -155,8 +156,8 @@ normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
   labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
 
 descrOfBool :: Bool -> Text
-descrOfBool True = "T"
-descrOfBool False = "F"
+descrOfBool True = "1"
+descrOfBool False = "2"
 
 descrOfOracle :: Map (NonEmpty Label, Label) Bool -> Text
 descrOfOracle oracle =
@@ -166,7 +167,7 @@ descrOfOracle oracle =
 
 {- | Return a quadruple of the function name, the label summary, the oracle and optimisation misc.
 
- The oracle is a string of `T` and `F` characters, representing a path
+ The oracle is a string of `1` and `2` characters, representing a path
  through the control flow graph of the function. For example, if we have a
  function
 
@@ -183,7 +184,7 @@ descrOfOracle oracle =
  then the branch where we return 0 is represented by `T` (since the predicate
  `x == 0` is True), and the branch where we return 1 is represented by `F`.
 
- Nested control flow results in multiple `T` or `F` characters.
+ Nested control flow results in multiple `1` or `2` characters.
 
  See `normalizedName` for the definition of a floating label. Here, the label
  is floating if it is not a function declaration (i.e. equal to `calledF`),
@@ -199,15 +200,17 @@ getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
     Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
       let scopedNames = labelNamesOfPc idents label
-          isFloatingLabel = label /= calledF
+          isFloatingLabel = label /= calledF && isNothing optimisesF
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, optimisingSuffix)
  where
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
   optimisingSuffix = case optimisesF of
     Nothing -> ""
-    Just (_, Label l, f) ->
-      "<" <> (toText (ScopedName (dropMain (sn_path (sf_scopedName f)))) <> "@" <> tShow l) <> ">"
+    Just (callstack, Label l, f) ->
+      let fName = toText . ScopedName . dropMain . sn_path . sf_scopedName $ f
+          stack = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack in 
+      " Pre<" <> fName <> "|" <> stack <> "@" <> tShow l <> ">"
 
 data Error
   = ELoopNoInvariant Label

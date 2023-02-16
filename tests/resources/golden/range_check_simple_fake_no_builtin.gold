@@ -1,6 +1,11 @@
+
 apply_range_check
 Verified
 
-main
+main Pre<apply_range_check|<root>@9>
+Verified
+
+main:::default
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 0) that does require it
+
