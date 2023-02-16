@@ -1,11 +1,13 @@
+
 f
 Verified
 
-main:::default
+main
 Verified
 
-main.loop:::T
+main.loop
 Verified
 
-main.loop:::F
+main.loop:::2
 False
+

@@ -26,17 +26,12 @@ import Paths_horus_check (version)
 import Text.ParserCombinators.ReadP (readP_to_S)
 
 import Horus.Arguments (Arguments (..), argParser, fileArgument, specFileArgument)
-import Horus.CallStack (stackTrace)
 import Horus.ContractDefinition (ContractDefinition, cdSpecs, cd_version)
 import Horus.ContractInfo (mkContractInfo)
-import Horus.FunctionAnalysis (ScopedFunction (sf_scopedName))
 import Horus.Global (HorusResult (..), SolvingInfo (..), cfg_version, solveContract)
 import Horus.Global.Runner qualified as Global (Env (..), run)
-import Horus.Module (dropMain)
-import Horus.SW.ScopedName (toText, sn_path, ScopedName (..))
 import Horus.SW.Std (stdSpecs)
 import Horus.Util (tShow)
-import Horus.CFGBuild (Label(..))
 
 type EIO = ExceptT Text IO
 

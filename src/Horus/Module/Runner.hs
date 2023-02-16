@@ -15,10 +15,10 @@ import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
 
 import Data.List.NonEmpty (NonEmpty)
+import Horus.CFGBuild (Vertex)
 import Horus.Label (Label (..))
 import Horus.Module (Error, Module (..), ModuleF (..), ModuleL (..))
 import Horus.Util (tShow)
-import Horus.CFGBuild (Vertex)
 
 type Impl =
   ReaderT
