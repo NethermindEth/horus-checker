@@ -1478,6 +1478,89 @@ Apart from `GlobalL`, there are several other sub-DSLs, which include:
   for a given module.
 * `PreprocessorL` -- preprocesses and runs SMT queries.
 
+### `CairoSemanticsL`
+
+As mentioned above, the purpose of the `CairoSemanticsL` eDSL is to construct
+the set of constraints which we will eventually transform into a solver query.
+
+At the time of writing, this is represented in a record type called
+`ConstraintsState`, which looks like this:
+
+```haskell
+data ConstraintsState = ConstraintsState
+  { cs_memoryVariables :: [MemoryVariable]
+  , cs_asserts :: [(AssertionBuilder, AssertionType)]
+  , cs_expects :: [(Expr TBool, AssertionType)]
+  , cs_nameCounter :: Int
+  , cs_callStack :: CallStack
+  }
+```
+
+So the asserts and expects are basically boolean expressions, and the
+preconditions and postconditions are encoded here. We have a list of memory
+variables as well. A memory variable is defined as follows:
+
+```haskell
+data MemoryVariable = MemoryVariable
+  { mv_varName :: Text
+  , mv_addrName :: Text
+  , mv_addrExpr :: Expr TFelt
+  }
+  deriving (Show)
+```
+
+We have a variable name, an address name, and an address expression, which
+is a felt. This is just an association between some variable name and an
+address in memory, along with its contents.
+
+When we print a memory variable, we see something like this:
+```console
+MEM!27 : (ap!<112=addr/root>@5 + 35)
+```
+The `27` in `MEM!27` is just a way to identify distinct memory variables. The
+`ap` stands for [allocation
+pointer](https://starknet.io/docs/how_cairo_works/cairo_intro.html#registers),
+and this indicates that this is the address in memory of some felt pushed on to
+the stack within a function body. The `@5` indicates the AP tracking group of
+this memory variable. The `+ 35` is the offset, specifically the offset from
+the beginning of the function context. Thus, an offset of `+ 0` indicates the
+first thing pushed onto the memory stack within that context.
+
+Here's an example:
+```cairo
+func foo:
+  [ap] = 0, ap++;  // <- this will be <foo/root>@x + 0
+  [ap] = 42, ap++; // <- this will be <foo/root>@x + 1
+  call bar;        // <- ^ now we're fp<bar/foo/root> + 0 and e.g. fp<bar/foo/root< - 3 = <foo/root>@x + 1 (remember call pushes 2 things on the stack)
+```
+
+The stuff in angle brackets, `<112=addr/root>`, is the current execution
+context, i.e. the stack frame. Each function call gets its own stack frame. The
+`addr/root` part is a representation of the call stack itself, where `root` is
+the execution context of top-level functions and subsequent stack frames are
+prepended, delimited with a `/`. The `112` is the program counter value, which
+tells us the instruction at which the current function was invoked.
+
+For example, consider:
+```cairo
+func foo [inlinable]             		root
+func bar [inlinable]
+
+func baz:
+  call bar -- inlining, push bar -> bar/root
+    ... (body of bar)
+    ret                 pop      -> root
+  ...
+  call foo -- inlining, push foo -> foo/root
+    ... (body of foo)
+    ret                 pop      -> root
+  ...
+```
+
+The stuff in the right-hand column is the context we're executing within. So
+when you refer to memory cells that have `<foo/root>`, you're referring to them
+from within the inlined function `foo`.
+
 ### Glossary
 
 * **contract** - a Starknet smart contract.
