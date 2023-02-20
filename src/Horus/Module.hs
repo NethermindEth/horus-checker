@@ -20,21 +20,22 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
-import Data.Map qualified as Map (elems, empty, insert, null, toList, map)
-import Data.Maybe (isJust, isNothing)
+import Data.Map qualified as Map (elems, empty, insert, map, null, toList)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
-import Horus.CFGBuild (ArcCondition (..), Vertex (v_label, v_optimisesF), Label (unLabel, Label))
+import Horus.CFGBuild (ArcCondition (..), Label (Label, unLabel), Vertex (v_label, v_optimisesF))
 import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
-import Horus.CallStack (CallStack, calledFOfCallEntry, callerPcOfCallEntry, initialWithFunc, pop, push, stackTrace, top, digestOfCallStack)
+import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, stackTrace, top)
+import Horus.ContractInfo (pcToFun)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
-import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall, ScopedFunction (sf_scopedName))
+import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
 import Horus.Instruction (LabeledInst)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
@@ -42,7 +43,6 @@ import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 import Horus.Util (tShow)
-import Horus.ContractInfo (pcToFun)
 
 data Module = Module
   { m_spec :: ModuleSpec
@@ -192,7 +192,6 @@ descrOfOracle oracle =
 
  Note: while we do have the name of the called function in the `Module` type,
  it does not contain the rest of the labels.
-
 -}
 getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
 getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
@@ -200,7 +199,7 @@ getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
     Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
       let scopedNames = labelNamesOfPc idents label
-          isFloatingLabel = label /= calledF && isNothing optimisesF
+          isFloatingLabel = label /= calledF
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, optimisingSuffix)
  where
@@ -209,8 +208,8 @@ getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
     Nothing -> ""
     Just (callstack, Label l, f) ->
       let fName = toText . ScopedName . dropMain . sn_path . sf_scopedName $ f
-          stack = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack in 
-      " Pre<" <> fName <> "|" <> stack <> "@" <> tShow l <> ">"
+          stack = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
+       in " Pre<" <> fName <> "|" <> stack <> "@" <> tShow l <> ">"
 
 data Error
   = ELoopNoInvariant Label
@@ -315,9 +314,15 @@ gatherFromSource cfg function fSpec = do
     emitRich pre post = emit . MSRich $ FuncSpec pre post $ fs_storage fSpec
 
     emit spec =
-      emitModule (
-        Module spec acc oracle' (calledFOfCallEntry $ top callstack')
-               (callstack', l) ((callstack', l,) <$> v_optimisesF v))
+      emitModule
+        ( Module
+            spec
+            acc
+            oracle'
+            (fu_pc function)
+            (callstack', l)
+            ((callstack',l,) <$> v_optimisesF v)
+        )
 
     visitArcs newOracle acc' pre v' = do
       let outArcs = cfg_arcs cfg ^. ix v'

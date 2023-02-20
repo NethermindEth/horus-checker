@@ -2,10 +2,13 @@
 f
 Verified
 
-main
+main:::default
 Verified
 
-main.loop
+main.loop:::1
+Verified
+
+main.loop:::2 Pre<f|<root>@23>
 Verified
 
 main.loop:::2
