@@ -25,7 +25,7 @@ import Data.Text qualified as Text (isPrefixOf)
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildL, LabeledInst, buildCFG, Label)
+import Horus.CFGBuild (CFGBuildL, Label, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
@@ -198,9 +198,14 @@ solveModule m = do
       moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimisesF
       inlinable = m_calledF m `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
-  pure SolvingInfo{
-    si_moduleName = moduleName, si_funcName = qualifiedFuncName,
-    si_result = result, si_inlinable = inlinable, si_optimisesF = m_optimisesF m}
+  pure
+    SolvingInfo
+      { si_moduleName = moduleName
+      , si_funcName = qualifiedFuncName
+      , si_result = result
+      , si_inlinable = inlinable
+      , si_optimisesF = m_optimisesF m
+      }
  where
   mkResult :: Text -> GlobalL HorusResult
   mkResult moduleName = printingErrors $ do
@@ -318,7 +323,8 @@ collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
   | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
   | otherwise = map appendMissingDefaultOracleSuffixes infos
-  where reportInlinable = all si_inlinable infos
+ where
+  reportInlinable = all si_inlinable infos
 
 {- | Return a solution of SMT queries corresponding with the contract.
 
