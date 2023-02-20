@@ -11,7 +11,8 @@ func state(i: felt) -> (res: State) {
 }
 
 // @storage_update state(0).res.a := 1
-func frob{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() {
+// @storage_update state(0).res.b := 2
+func frob{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(x: felt) {
     let old = state.read(0);
     state.write(0, State(0, 0));
     return ();

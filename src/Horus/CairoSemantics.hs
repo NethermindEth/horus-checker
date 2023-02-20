@@ -21,6 +21,7 @@ import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
 import Data.Set qualified as Set (Set, member)
 import Data.Text (Text)
+import Data.Text qualified as T
 
 import Horus.CallStack as CS (CallEntry, CallStack)
 import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
@@ -65,12 +66,20 @@ import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, tShow, whenJust, whenJustM)
 
+import Debug.Trace (traceM)
+import Debug.Pretty.Simple (pTraceM)
+
+traceM' :: (Applicative f, Show a) => String -> a -> f ()
+traceM' s x = pTraceM (s ++ ": " ++ show x)
+
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
   , mv_addrName :: Text
   , mv_addrExpr :: Expr TFelt
   }
-  deriving (Show)
+
+instance Show MemoryVariable where
+  show (MemoryVariable var _ expr) = T.unpack var ++ " : " ++ show expr
 
 data AssertionType
   = PreAssertion
@@ -256,6 +265,7 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec mdl plainSpec
   accumulatedStorage <- getStorage
+  traceM' "accumulatedStorage" accumulatedStorage
   expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec

@@ -28,7 +28,7 @@ import Horus.SW.FuncSpec
   )
 import Horus.SW.Identifier (Function (..), Identifier (..), Member (..), Struct (..), getFunctionPc)
 import Horus.SW.ScopedName (ScopedName (..), fromText)
-import Horus.SW.Std (mkReadSpec, mkWriteSpec)
+import Horus.SW.Std (mkReadSpecs, mkWriteSpecs)
 import Horus.Util (maybeToError, safeLast, tShow)
 
 data ContractInfo = ContractInfo
@@ -182,15 +182,17 @@ mkContractInfo cd = do
   allSpecs :: Map ScopedName FuncSpec
   allSpecs = Map.union (cd_specs cd) storageVarsSpecs
 
+  insertReadWriteSpecs :: ScopedName -> (Int, Int) -> Map ScopedName FuncSpec -> Map ScopedName FuncSpec
+  insertReadWriteSpecs name (arity, coarity) specsByName = foldr insert' readSpecsByName writeSpecs
+   where
+    insert' :: (ScopedName, FuncSpec) -> Map ScopedName FuncSpec -> Map ScopedName FuncSpec
+    insert' = uncurry Map.insert
+    readSpecs = mkReadSpecs name (arity, coarity)
+    writeSpecs = mkWriteSpecs name (arity, coarity)
+    readSpecsByName = foldr insert' specsByName readSpecs
+
   storageVarsSpecs :: Map ScopedName FuncSpec
-  storageVarsSpecs =
-    Map.foldrWithKey
-      ( \name arity m ->
-          Map.insert (name <> "read") (mkReadSpec name arity) $
-            Map.insert (name <> "write") (mkWriteSpec name arity) m
-      )
-      Map.empty
-      (cd_storageVars cd)
+  storageVarsSpecs = Map.foldrWithKey insertReadWriteSpecs Map.empty (cd_storageVars cd)
 
   getInvariant :: ScopedName -> Maybe (Expr TBool)
   getInvariant name = Map.lookup name (cd_invariants cd)

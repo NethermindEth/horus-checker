@@ -48,6 +48,11 @@ import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
 import Horus.Util (tShow, unlessM)
 
+import Debug.Trace (trace)
+
+trace' :: Show a => String -> a -> a
+trace' s x = trace (s ++ ": " ++ show x) x
+
 data AssertionBuilder
   = QFAss (Expr TBool)
   | ExistentialAss ([MemoryVariable] -> Expr TBool)
@@ -205,7 +210,7 @@ interpret = iterM exec
     unlessM (use eStorageEnabled) $
       throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
     storage <- use eStorage
-    cont (Storage.read storage name args)
+    cont (Storage.read (trace' "storage" storage) name args)
   exec (UpdateStorage newStorage cont) = do
     storageEnabled <- use eStorageEnabled
     unless (storageEnabled || Map.null newStorage) $

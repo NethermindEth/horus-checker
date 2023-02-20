@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedLists #-}
 
-module Horus.SW.Std (FuncSpec (..), stdSpecs, trustedStdFuncs, mkReadSpec, mkWriteSpec, stdSpecsList) where
+module Horus.SW.Std (FuncSpec (..), stdSpecs, trustedStdFuncs, mkReadSpecs, mkWriteSpecs, stdSpecsList) where
 
 import Data.Map (Map)
 import Data.Map qualified as Map (fromList)
@@ -10,29 +10,30 @@ import Horus.Expr (Expr (ExitField), (.&&), (.<), (.<=), (.==))
 import Horus.Expr qualified as Expr
 import Horus.Expr.Vars (ap, blockTimestamp, callerAddress, contractAddress, fp, memory, prime, rcBound)
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
-import Horus.SW.ScopedName (ScopedName)
+import Horus.SW.ScopedName (ScopedName (..))
 import Horus.Util (tShow)
-
-import Debug.Trace (trace)
-
-traceAs :: Show a => String -> a -> a
-traceAs s x = trace (s ++ ": " ++ show x) x
 
 stdSpecs :: Map ScopedName FuncSpec
 stdSpecs = Map.fromList stdSpecsList
 
-mkReadSpec :: ScopedName -> Int -> FuncSpec
-mkReadSpec name arity = emptyFuncSpec{fs_post = memory (ap - 1) .== var}
+mkReadSpecs :: ScopedName -> (Int, Int) -> [(ScopedName, FuncSpec)]
+mkReadSpecs name (arity, coarity) = [(name <> ScopedName (["read", tShow i] :: [Text]), mkReadSpec name arity i) | i <- [0 .. coarity - 1]]
+
+mkWriteSpecs :: ScopedName -> (Int, Int) -> [(ScopedName, FuncSpec)]
+mkWriteSpecs name (arity, coarity) = [(name <> ScopedName (["write", tShow i] :: [Text]), mkWriteSpec name arity i) | i <- [0 .. coarity - 1]]
+
+mkReadSpec :: ScopedName -> Int -> Int -> FuncSpec
+mkReadSpec name arity returnTupleIdx = emptyFuncSpec{fs_post = memory (ap - 1) .== var}
  where
   offsets = [-3 - arity + 1 .. -3]
-  args = [memory (fp + fromIntegral offset) | offset <- offsets]
-  var = Expr.apply (Expr.Fun (tShow (traceAs "svar read name" name))) args
+  args = [memory (fp + fromIntegral offset) | offset <- offsets] ++ [fromIntegral returnTupleIdx]
+  var = Expr.apply (Expr.Fun (tShow name)) args
 
-mkWriteSpec :: ScopedName -> Int -> FuncSpec
-mkWriteSpec name arity = emptyFuncSpec{fs_storage = [(name, [(args, memory (fp - 3))])]}
+mkWriteSpec :: ScopedName -> Int -> Int -> FuncSpec
+mkWriteSpec name arity returnTupleIdx = emptyFuncSpec{fs_storage = [(name, [(args, memory (fp - 3))])]}
  where
   offsets = [-4 - arity + 1 .. -4]
-  args = [memory (fp + fromIntegral offset) | offset <- offsets]
+  args = [memory (fp + fromIntegral offset) | offset <- offsets] ++ [fromIntegral returnTupleIdx]
 
 {- | A list of names of trusted standard library functions.
 These functions will not be checked against their specifications.
