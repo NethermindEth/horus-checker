@@ -36,9 +36,8 @@ import Horus.Expr.Vars (ap, fp)
 import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
 import Horus.Instruction (LabeledInst, uncheckedCallDestination)
 import Horus.Label (moveLabel)
-import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
-import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
+import Horus.SW.Identifier (Function (..), Identifier, getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 
 data Module = Module
@@ -61,7 +60,7 @@ beginOfModule :: [LabeledInst] -> Maybe Label
 beginOfModule [] = Nothing
 beginOfModule ((lbl, _) : _) = Just lbl
 
-labelNamesOfPc :: Identifiers -> Label -> [ScopedName]
+labelNamesOfPc :: Map ScopedName Identifier -> Label -> [ScopedName]
 labelNamesOfPc idents lblpc =
   [ name
   | (name, ident) <- Map.toList idents
@@ -186,7 +185,7 @@ descrOfOracle oracle =
  Note: while we do have the name of the called function in the `Module` type,
  it does not contain the rest of the labels.
 -}
-getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
+getModuleNameParts :: Map ScopedName Identifier -> Module -> (Text, Text, Text, Text)
 getModuleNameParts idents (Module spec prog oracle calledF _ mbPreCheckedFuncAndCallStack) =
   case beginOfModule prog of
     Nothing -> ("", "empty: " <> pprExpr post, "", "")

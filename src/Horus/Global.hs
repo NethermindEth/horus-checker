@@ -18,6 +18,7 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
 import Data.Graph (reachable)
 import Data.List (groupBy, partition)
+import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
@@ -45,9 +46,9 @@ import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
-import Horus.Program (Identifiers, Program (p_prime))
+import Horus.Program (Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
-import Horus.SW.Identifier (Function (..))
+import Horus.SW.Identifier (Function (..), Identifier)
 import Horus.SW.ScopedName (ScopedName ())
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
@@ -71,7 +72,7 @@ data GlobalF a
   | GetCallee LabeledInst (ScopedFunction -> a)
   | GetConfig (Config -> a)
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
-  | GetIdentifiers (Identifiers -> a)
+  | GetIdentifiers (Map ScopedName Identifier -> a)
   | GetInlinable (Set ScopedFunction -> a)
   | GetLabelledInstrs ([LabeledInst] -> a)
   | GetProgram (Program -> a)
@@ -129,7 +130,7 @@ getProgram = liftF' (GetProgram id)
 getSources :: GlobalL [(Function, ScopedName, FuncSpec)]
 getSources = liftF' (GetSources id)
 
-getIdentifiers :: GlobalL Identifiers
+getIdentifiers :: GlobalL (Map ScopedName Identifier)
 getIdentifiers = liftF' (GetIdentifiers id)
 
 setConfig :: Config -> GlobalL ()
@@ -330,8 +331,20 @@ collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
  where
   reportInlinable = all si_inlinable infos
 
-{- | Return a solution of SMT queries corresponding with the contract.
+getUserAnnotatedSources :: Program -> Set ScopedFunction -> [LabeledInst] -> Set ScopedFunction
+getUserAnnotatedSources program inlinableFs rows = Set.fromList nonwrapperFunctions \\ inlinableFs \\ calledByWrappers
+ where
+  functionsWithBodies = functionsOf rows program
+  functions = Map.keys functionsWithBodies
+  (cg, vToLbl, lblToV) = graphOfCG . callgraph . Map.mapKeys sf_pc $ functionsWithBodies
+  (wrapperFunctions, nonwrapperFunctions) = partition isWrapper functions
+  reachableLabelsFromWrappers =
+    Set.fromList
+      . concatMap (concatMap ((^. _3) . vToLbl) . reachable cg . fromJust . lblToV . sf_pc)
+      $ wrapperFunctions
+  calledByWrappers = Set.fromList [sf | sf <- functions, sf_pc sf `Set.member` reachableLabelsFromWrappers]
 
+{- | Return a solution of SMT queries corresponding with the contract.
 
   For the purposes of reporting results,
   we also remember which SMT query corresponding to a function was inlined.
@@ -351,16 +364,12 @@ solveContract = do
   let fs = toAscList inlinables
   cfgs <- for fs $ \f -> runCFGBuildL (buildCFG lInstructions $ inlinables \\ singleton f)
   for_ cfgs verbosePrint
-  sources <- userAnnotatedSources inlinables lInstructions
+  program <- getProgram
+  let sources = getUserAnnotatedSources program inlinables lInstructions
   modules <- concat <$> for ((cfg, (`elem` sources)) : zip cfgs (map (==) fs)) makeModules
 
   identifiers <- getIdentifiers
-  let isUntrusted :: Module -> Bool
-      isUntrusted m = labeledFuncName `notElem` trustedStdFuncs
-       where
-        (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
-        labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
-  infos <- for (filter isUntrusted modules) solveModule
+  infos <- for (filter (isUntrusted identifiers) modules) solveModule
   pure $
     ( concatMap collapseAllUnsats
         . groupBy sameFuncName
@@ -368,22 +377,10 @@ solveContract = do
     )
       infos
  where
-  userAnnotatedSources :: Set ScopedFunction -> [LabeledInst] -> GlobalL (Set ScopedFunction)
-  userAnnotatedSources inlinableFs rows =
-    getProgram >>= \prog ->
-      let functionsWithBodies = functionsOf rows prog
-          functions = Map.keys functionsWithBodies
-          (cg, vToLbl, lblToV) = graphOfCG . callgraph . Map.mapKeys sf_pc $ functionsWithBodies
-          (wrapperFunctions, nonwrapperFunctions) = partition isWrapper functions
-          reachableLabelsFromWrappers =
-            Set.fromList
-              . concatMap (concatMap ((^. _3) . vToLbl) . reachable cg . fromJust . lblToV . sf_pc)
-              $ wrapperFunctions
-          calledByWrappers =
-            Set.fromList
-              [ sf | sf <- functions, sf_pc sf `Set.member` reachableLabelsFromWrappers
-              ]
-       in pure (Set.fromList nonwrapperFunctions \\ inlinableFs \\ calledByWrappers)
+  isUntrusted :: Map ScopedName Identifier -> Module -> Bool
+  isUntrusted identifiers m = mkLabeledFuncName qualifiedFuncName labelsSummary `notElem` trustedStdFuncs
+   where
+    (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
 
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
   sameFuncName (SolvingInfo _ nameA _ _ _) (SolvingInfo _ nameB _ _ _) = nameA == nameB

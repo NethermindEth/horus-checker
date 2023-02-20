@@ -1,5 +1,5 @@
 module Horus.FunctionAnalysis
-  ( pcToFunOfProg
+  ( mapScopedFuncsByPc
   , callersOf
   , programLabels
   , inlinableFuns
@@ -30,25 +30,8 @@ import Data.Coerce (coerce)
 import Data.Function ((&))
 import Data.Graph (Graph, Vertex, graphFromEdges, reachable)
 import Data.List (foldl', sort, union)
+import Data.Map (Map)
 import Data.Map qualified as Map
-  ( Map
-  , assocs
-  , difference
-  , elems
-  , empty
-  , filterWithKey
-  , foldrWithKey
-  , fromList
-  , insertWith
-  , keys
-  , lookup
-  , map
-  , mapKeys
-  , mapMaybe
-  , member
-  , toList
-  , (!)
-  )
 import Data.Maybe (fromJust, fromMaybe, isNothing, listToMaybe, mapMaybe)
 import Data.Text (Text)
 
@@ -65,7 +48,6 @@ import Horus.Label (Label (..))
 import Horus.Program
   ( DebugInfo (di_instructionLocations)
   , ILInfo (il_accessibleScopes)
-  , Identifiers
   , Program (p_debugInfo, p_identifiers)
   )
 import Horus.SW.Identifier (Function (..), Identifier (..), getFunctionPc, getLabelPc)
@@ -127,34 +109,34 @@ cyclicVerts cg =
   let (graph, vertToNode, _) = graphOfCG cg
    in map ((\(lbl, _, _) -> lbl) . vertToNode) (cycles graph)
 
-pcToFunOfProg :: Program -> Map.Map Label ScopedFunction
-pcToFunOfProg prog = Map.mapMaybe (go <=< ilInfoToFun) ilInfoOfLabel
+{- | Send every PC in a `Program` to the `ScopedFunction` to which it belongs.
+
+ The last accessible scope of the given label is the function said label belongs to.
+-}
+mapScopedFuncsByPc :: Program -> Map.Map Label ScopedFunction
+mapScopedFuncsByPc prog = Map.mapMaybe (getScopedFuncFromScopedName <=< safeLast) accessibleScopesByFunPc
  where
-  -- The last accessible scope of the given label is the function said label belongs to.
   idents = p_identifiers prog
-  ilInfoOfLabel = di_instructionLocations (p_debugInfo prog)
+  accessibleScopesByFunPc = (Map.map il_accessibleScopes . di_instructionLocations) (p_debugInfo prog)
 
-  ilInfoToFun :: ILInfo -> Maybe Label
-  ilInfoToFun ilInfo =
-    safeLast (il_accessibleScopes ilInfo) >>= getFunctionPc . (idents Map.!)
+  getScopedFuncFromScopedName :: ScopedName -> Maybe ScopedFunction
+  getScopedFuncFromScopedName = scopedFOfPc idents <=< getFunctionPc . (idents Map.!)
 
-  go :: Label -> Maybe ScopedFunction
-  go label = ScopedFunction <$> fNameOfPc idents label <*> Just label
+fNameOfPc :: Map ScopedName Identifier -> Label -> Maybe ScopedName
+fNameOfPc idents pc = listToMaybe [name | (name, ident) <- Map.toList idents, Just pc == getFunctionPc ident]
 
-fNameOfPc :: Identifiers -> Label -> Maybe ScopedName
-fNameOfPc idents lblpc = listToMaybe fLblsAtPc
- where
-  fLblsAtPc = [name | (name, ident) <- Map.toList idents, Just lblpc == getFunctionPc ident]
+scopedFOfPc :: Map ScopedName Identifier -> Label -> Maybe ScopedFunction
+scopedFOfPc idents label = ScopedFunction <$> fNameOfPc idents label <*> Just label
 
 functionsOf :: [LabeledInst] -> Program -> Map.Map ScopedFunction [LabeledInst]
 functionsOf rows prog =
   Map.map (map (\pc -> (pc, Map.fromList rows Map.! pc))) . Map.map sort . invert $
-    pcToFunOfProg prog
+    mapScopedFuncsByPc prog
 
-funLabels :: Identifiers -> [Label]
+funLabels :: Map ScopedName Identifier -> [Label]
 funLabels identifiers = identifiers & Map.elems & mapMaybe getFunctionPc & coerce
 
-namedLabels :: Identifiers -> [Label]
+namedLabels :: Map ScopedName Identifier -> [Label]
 namedLabels identifiers = identifiers & Map.elems & mapMaybe getLabelPc & coerce
 
 jumpLabels :: [LabeledInst] -> [Label]
@@ -166,7 +148,7 @@ retLabels rows = [pc | (pc, inst) <- rows, isRet inst]
 callLabels :: [LabeledInst] -> [Label]
 callLabels rows = concat [[pc, getNextPc i] | i@(pc, inst) <- rows, isCall inst]
 
-programLabels :: [LabeledInst] -> Identifiers -> [Label]
+programLabels :: [LabeledInst] -> Map ScopedName Identifier -> [Label]
 programLabels rows idents =
   sort
     ( funLabels idents
@@ -204,21 +186,10 @@ labelOfIdent (ILabel l) = Just l
 labelOfIdent (IFunction (Function l _)) = Just l
 labelOfIdent _ = Nothing
 
-scopedFOfPc :: Identifiers -> Label -> Maybe ScopedFunction
-scopedFOfPc idents label = ScopedFunction <$> scopedName <*> Just label
- where
-  scopedName =
-    listToMaybe $
-      [ name
-      | (name, ident) <- Map.toList idents
-      , Just pc <- [getFunctionPc ident]
-      , pc == label
-      ]
-
-uncheckedScopedFOfPc :: Identifiers -> Label -> ScopedFunction
+uncheckedScopedFOfPc :: Map ScopedName Identifier -> Label -> ScopedFunction
 uncheckedScopedFOfPc idents = fromJust . scopedFOfPc idents
 
-labelIdentifiersOfPc :: Identifiers -> Label -> [Identifier]
+labelIdentifiersOfPc :: Map ScopedName Identifier -> Label -> [Identifier]
 labelIdentifiersOfPc idents lblpc =
   [ ident
   | (_, ident) <- Map.toList idents

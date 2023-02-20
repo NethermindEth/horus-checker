@@ -26,7 +26,8 @@ import Data.Foldable (forM_, for_, toList)
 import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
-import Data.Map qualified as Map (lookup, toList)
+import Data.Map (Map)
+import Data.Map qualified as Map
 import Data.Maybe (isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
@@ -42,7 +43,7 @@ import Horus.FunctionAnalysis
   , FuncOp (ArcCall, ArcRet)
   , ScopedFunction (ScopedFunction, sf_pc, sf_scopedName)
   , callersOf
-  , pcToFunOfProg
+  , mapScopedFuncsByPc
   , programLabels
   , sizeOfCall
   , uncheckedScopedFOfPc
@@ -56,7 +57,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), moveLabel)
-import Horus.Program (Identifiers, Program (..))
+import Horus.Program (Program (..))
 import Horus.SW.FuncSpec (FuncSpec' (fs'_post, fs'_pre))
 import Horus.SW.Identifier (Function (fu_pc), Identifier (IFunction, ILabel))
 import Horus.SW.ScopedName (ScopedName)
@@ -97,7 +98,7 @@ data CFGBuildF a
   = AddVertex Label (Maybe ScopedFunction) (Vertex -> a)
   | AddArc Vertex Vertex [LabeledInst] ArcCondition FInfo a
   | AddAssertion Vertex (AnnotationType, Expr TBool) a
-  | AskIdentifiers (Identifiers -> a)
+  | AskIdentifiers (Map ScopedName Identifier -> a)
   | AskProgram (Program -> a)
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetInvariant ScopedName (Maybe (Expr TBool) -> a)
@@ -131,7 +132,7 @@ addArc vFrom vTo insts test f = liftF' (AddArc vFrom vTo insts test f ())
 addAssertion :: Vertex -> (AnnotationType, Expr TBool) -> CFGBuildL ()
 addAssertion v assertion = liftF' (AddAssertion v assertion ())
 
-askIdentifiers :: CFGBuildL Identifiers
+askIdentifiers :: CFGBuildL (Map ScopedName Identifier)
 askIdentifiers = liftF' (AskIdentifiers id)
 
 askProgram :: CFGBuildL Program
@@ -239,7 +240,7 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
   | Ret <- i_opCode endInst =
       -- Find the function corresponding to `endPc` and lookup its label. If we
       -- found the label, add arcs for each caller.
-      let mbOwnerPc = sf_pc <$> Map.lookup endPc (pcToFunOfProg prog)
+      let mbOwnerPc = sf_pc <$> Map.lookup endPc (mapScopedFuncsByPc prog)
        in forM_ mbOwnerPc addRetArcs
   | JumpAbs <- i_pcUpdate endInst = do
       vTo <- getSalientVertex . Label . fromInteger $ i_imm endInst
@@ -318,7 +319,7 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
      in foldr Expr.ExistsFelt expr lvars
 
 -- | This function labels appropriate vertices (at 'ret'urns) with their respective postconditions.
-addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
+addAssertions :: Set ScopedFunction -> Map ScopedName Identifier -> CFGBuildL ()
 addAssertions inlinables identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> case def of
     IFunction f ->

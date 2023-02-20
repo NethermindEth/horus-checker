@@ -16,7 +16,7 @@ import Horus.Expr (Expr, Ty (..))
 import Horus.FunctionAnalysis (ScopedFunction (..), inlinableFuns, mkGeneratedNames, storageVarsOfCD)
 import Horus.Instruction (LabeledInst, callDestination, isRet, labelInstructions, readAllInstructions, toSemiAsmUnsafe)
 import Horus.Label (Label)
-import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..), sizeOfType)
+import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Program (..), sizeOfType)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.CairoType (CairoType (..))
@@ -34,7 +34,7 @@ import Horus.Util (maybeToError, safeLast, tShow)
 data ContractInfo = ContractInfo
   { ci_contractDef :: ContractDefinition
   , ci_inlinables :: Set ScopedFunction
-  , ci_identifiers :: Identifiers
+  , ci_identifiers :: Map ScopedName Identifier
   , ci_functions :: Map Label ScopedFunction
   , ci_labelledInstrs :: [LabeledInst]
   , ci_program :: Program

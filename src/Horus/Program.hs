@@ -4,7 +4,6 @@ module Horus.Program
   , ILInfo (..)
   , FlowTrackingData (..)
   , ApTracking (..)
-  , Identifiers
   , sizeOfType
   )
 where
@@ -27,12 +26,10 @@ import Horus.SW.Identifier (Identifier (..), Struct (..))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (tShow)
 
-type Identifiers = Map ScopedName Identifier
-
 data Program = Program
   { p_builtins :: [String]
   , p_code :: [Integer]
-  , p_identifiers :: Identifiers
+  , p_identifiers :: Map ScopedName Identifier
   , p_mainScope :: String
   , p_prime :: Integer
   , p_debugInfo :: DebugInfo
@@ -94,7 +91,7 @@ parseHexInteger ('0' : 'x' : rest)
   | [(res, "")] <- readHex rest = pure res
 parseHexInteger arg = fail ("Can't parse '" <> arg <> "' as hex")
 
-sizeOfType :: MonadError Text m => CairoType -> Identifiers -> m Int
+sizeOfType :: MonadError Text m => CairoType -> Map ScopedName Identifier -> m Int
 sizeOfType TypeFelt _ = pure 1
 sizeOfType TypeCodeoffset _ = pure 1
 sizeOfType (TypePointer _) _ = pure 1
