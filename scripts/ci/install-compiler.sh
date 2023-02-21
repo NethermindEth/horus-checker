@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-versions=$(pip install horus-compile== --extra-index-url http://139.162.29.35/ --trusted-host 139.162.29.35 2>&1 \
+versions=$(pip install horus-compile== 2>&1 \
 | grep -oE '(\(.*\))' \
 | awk -F:\  '{print$NF}' \
 | sed -E 's/( |\))//g' \
@@ -45,4 +45,4 @@ done
 
 lastversion=${filtered[-1]}
 
-pip install horus-compile==${lastversion} --extra-index-url http://${USER}:${PASS}@139.162.29.35/ --trusted-host 139.162.29.35
+pip install horus-compile==${lastversion}
