@@ -2,7 +2,7 @@
 apply_range_check
 Verified
 
-main Pre<apply_range_check|<root>@10>
+main Pre<apply_range_check|<8=apply_range_check/root>>
 Verified
 
 main:::default

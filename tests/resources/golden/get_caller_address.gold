@@ -1,5 +1,5 @@
 
-test_invalid_1 Pre<starkware.starknet.common.syscalls.get_caller_address|<root>@14>
+test_invalid_1 Pre<starkware.starknet.common.syscalls.get_caller_address|<12=get_caller_address/root>>
 Verified
 
 test_invalid_1:::default

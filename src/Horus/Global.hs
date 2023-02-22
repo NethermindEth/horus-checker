@@ -25,7 +25,7 @@ import Data.Text qualified as Text (isPrefixOf)
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
-import Horus.CFGBuild (CFGBuildL, Label, LabeledInst, buildCFG)
+import Horus.CFGBuild (CFGBuildL, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
 import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
 import Horus.CairoSemantics.Runner
@@ -166,7 +166,7 @@ data SolvingInfo = SolvingInfo
   , si_funcName :: Text
   , si_result :: HorusResult
   , si_inlinable :: Bool
-  , si_optimisesF :: Maybe (CallStack, Label, ScopedFunction)
+  , si_optimisesF :: Maybe (CallStack, ScopedFunction)
   }
   deriving (Eq, Show)
 

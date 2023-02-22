@@ -2,7 +2,7 @@
 transfer
 Verified
 
-main Pre<transfer|<root>@8> [inlined]
+main Pre<transfer|<6=transfer/root>> [inlined]
 False
 
 main:::default [inlined]
