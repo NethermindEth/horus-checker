@@ -27,7 +27,7 @@ import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
-import Horus.CFGBuild (ArcCondition (..), Label (Label, unLabel), Vertex (v_label, v_optimisesF))
+import Horus.CFGBuild (ArcCondition (..), Label (unLabel), Vertex (v_label, v_optimisesF))
 import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
 import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, stackTrace, top)
 import Horus.ContractInfo (pcToFun)
@@ -36,13 +36,12 @@ import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
 import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
-import Horus.Instruction (LabeledInst)
+import Horus.Instruction (LabeledInst, uncheckedCallDestination)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
-import Horus.Util (tShow)
 
 data Module = Module
   { m_spec :: ModuleSpec
@@ -50,7 +49,7 @@ data Module = Module
   , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
   , m_calledF :: Label
   , m_lastPc :: (CallStack, Label)
-  , m_optimisesF :: Maybe (CallStack, Label, ScopedFunction)
+  , m_optimisesF :: Maybe (CallStack, ScopedFunction)
   }
   deriving stock (Show)
 
@@ -206,10 +205,10 @@ getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
   optimisingSuffix = case optimisesF of
     Nothing -> ""
-    Just (callstack, Label l, f) ->
+    Just (callstack, f) ->
       let fName = toText . ScopedName . dropMain . sn_path . sf_scopedName $ f
           stack = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
-       in " Pre<" <> fName <> "|" <> stack <> "@" <> tShow l <> ">"
+       in " Pre<" <> fName <> "|" <> stack <> ">"
 
 data Error
   = ELoopNoInvariant Label
@@ -311,18 +310,19 @@ gatherFromSource cfg function fSpec = do
     assertions = map snd (cfg_assertions cfg ^. ix v)
     onFinalNode = null (cfg_arcs cfg ^. ix v)
     emitPlain pre post = emit . MSPlain $ PlainSpec pre post
-    emitRich pre post = emit . MSRich $ FuncSpec pre post $ fs_storage fSpec
+    emitRich pre post = emit . MSRich . FuncSpec pre post $ fs_storage fSpec
 
     emit spec =
       emitModule
-        ( Module
-            spec
-            acc
-            oracle'
-            (fu_pc function)
-            (callstack', l)
-            ((callstack',l,) <$> v_optimisesF v)
+        ( Module spec acc oracle' (fu_pc function) (callstack', l) executionContextOfOptimisedF
         )
+     where
+      optimisingStackFrame = (fCallerPc, fCalledF)
+       where
+        laballedCall@(fCallerPc, _) = last acc
+        fCalledF = uncheckedCallDestination laballedCall
+      executionContextOfOptimisedF =
+        (push optimisingStackFrame callstack',) <$> v_optimisesF v
 
     visitArcs newOracle acc' pre v' = do
       let outArcs = cfg_arcs cfg ^. ix v'

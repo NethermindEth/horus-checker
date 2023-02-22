@@ -2,26 +2,26 @@
 inc
 Verified
 
-main Pre<inc|<root>@75>
+main Pre<inc|<73=inc/root>>
 Verified
 
-main Pre<tt|<root>@77>
+main Pre<tt|<75=tt/root>>
 False
 
-main Pre<inc|<root>@84>
+main Pre<inc|<82=inc/root>>
 Verified
 
-main Pre<tt|<root>@86>
-False
-
-main Pre<inc|<root>@93>
+main Pre<tt|<84=tt/root>>
 Verified
 
-main Pre<tt|<root>@95>
+main Pre<inc|<91=inc/root>>
 Verified
 
-main Pre<tt|<root>@104>
-False
+main Pre<tt|<93=tt/root>>
+Verified
+
+main Pre<tt|<102=tt/root>>
+Verified
 
 main:::default
 Verified

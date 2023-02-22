@@ -23,7 +23,7 @@ import Data.Maybe (fromMaybe, isJust)
 import Data.Set qualified as Set (Set, member)
 import Data.Text (Text)
 import Data.Traversable (for)
-import Lens.Micro ((^.), _3)
+import Lens.Micro ((^.), _1)
 
 import Horus.CallStack as CS (CallEntry, CallStack)
 import Horus.Expr (Cast (..), Expr (ExistsFelt, (:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
@@ -382,7 +382,7 @@ withExecutionCtx ctx action = do
 mkInstructionConstraints ::
   LabeledInst ->
   Label ->
-  Maybe (CallStack, Label, ScopedFunction) ->
+  Maybe (CallStack, ScopedFunction) ->
   Map (NonEmpty Label, Label) Bool ->
   CairoSemanticsL (Maybe (Expr TFelt))
 mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc optimisingF jnzOracle = do
@@ -403,7 +403,7 @@ mkCallConstraints ::
   Label ->
   Label ->
   Expr TFelt ->
-  Maybe (CallStack, Label, ScopedFunction) ->
+  Maybe (CallStack, ScopedFunction) ->
   ScopedFunction ->
   CairoSemanticsL (Maybe (Expr TFelt))
 mkCallConstraints pc nextPc fp optimisingF f = do
@@ -417,7 +417,12 @@ mkCallConstraints pc nextPc fp optimisingF f = do
   -- Considering we have already pushed the stackFrame by now, we need to make sure that either
   -- the function is inlinable and we'll encounter a 'ret', or we need to pop right away
   -- once we encode semantics of the function.
-  if Just f == ((^. _3) <$> optimisingF)
+
+  -- Determine whether the current function matches the function being optimised exactly -
+  -- this necessitates comparing execution traces.
+  executionContext <- getStackTraceDescr
+  optimisedFExecutionContext <- getStackTraceDescr' ((^. _1) <$> optimisingF)
+  if isJust optimisingF && executionContext == optimisedFExecutionContext
     then Just <$> getFp <* pop
     else do
       -- This is reachable unless the module is optimizing, in which case the precondition
@@ -475,7 +480,7 @@ mkApConstraints apEnd insts = do
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
-mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, Label, ScopedFunction) -> CairoSemanticsL ()
+mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
 mkBuiltinConstraints apEnd insts optimisesF =
   unless (isJust optimisesF) $ do
     fp <- getFp
