@@ -1,7 +1,7 @@
-module Horus.Command.SMT (declare, assert) where
+module Horus.Command.SMT (declare, assert, comment) where
 
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import SimpleSMT qualified as SMT
 import Text.Printf (printf)
 
@@ -10,6 +10,7 @@ import Horus.Expr.SMT qualified as Expr (toSMT)
 import Horus.Expr.Std (Function (..))
 import Horus.Expr.Type (Ty (..))
 import Horus.Expr.Type.SMT qualified as Ty (toSMT)
+import SimpleSMT (SExpr (Atom))
 
 declare :: forall ty. Function ty -> Text
 declare (Function name) = pack (printf "(declare-fun %s (%s) %s)" name args res)
@@ -20,3 +21,6 @@ declare (Function name) = pack (printf "(declare-fun %s (%s) %s)" name args res)
 
 assert :: Integer -> Expr TBool -> Text
 assert fPrime e = pack (printf "(assert %s)" (SMT.showsSExpr (Expr.toSMT fPrime e) ""))
+
+comment :: Text -> Text
+comment text = pack (printf "; %s" (SMT.showsSExpr (Atom (unpack text)) ""))

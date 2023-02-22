@@ -41,7 +41,7 @@ import Horus.Expr.Vars
   , pattern StorageVar
   )
 import Horus.Expr.Vars qualified as Vars
-import Horus.FunctionAnalysis (ScopedFunction (sf_pc))
+import Horus.FunctionAnalysis (ScopedFunction (sf_pc, sf_scopedName))
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -53,18 +53,20 @@ import Horus.Instruction
   , getNextPcInlinedWithFallback
   , isCall
   , isRet
+  , toSemiAsmUnsafe
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
 import Horus.Module (Module (..), apEqualsFp, isPreChecking)
 import Horus.Program (ApTracking (..))
+import Horus.SMTHygiene (AssertionMisc, commentAbove, commentBelow, commentRight, emptyMisc, magicHygieneConstant)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
 import Horus.SW.FuncSpec (FuncSpec (..), FuncSpec', toFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
-import Horus.SW.Storage qualified as Storage (equivalenceExpr)
+import Horus.SW.Storage qualified as Storage
 import Horus.Util (enumerate, safeLast, tShow, whenJust, whenJustM)
 
 data MemoryVariable = MemoryVariable
@@ -78,10 +80,11 @@ data AssertionType
   = PreAssertion
   | PostAssertion
   | InstructionSemanticsAssertion
+  | ApConstraintAssertion
   deriving (Eq, Show)
 
 data CairoSemanticsF a
-  = Assert' (Expr TBool) AssertionType a
+  = Assert' (Expr TBool) AssertionType AssertionMisc a
   | Expect' (Expr TBool) AssertionType a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
   | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
@@ -89,6 +92,7 @@ data CairoSemanticsF a
   | GetBuiltinOffsets Label Builtin (Maybe BuiltinOffsets -> a)
   | GetCallee LabeledInst (ScopedFunction -> a)
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
+  | GetCurrentF (ScopedFunction -> a)
   | GetFunPc Label (Label -> a)
   | GetInlinable (Set.Set ScopedFunction -> a)
   | GetMemVars ([MemoryVariable] -> a)
@@ -109,8 +113,8 @@ deriving instance Functor CairoSemanticsF
 
 type CairoSemanticsL = F CairoSemanticsF
 
-assert' :: AssertionType -> Expr TBool -> CairoSemanticsL ()
-assert' assType a = liftF (Assert' a assType ())
+assert' :: AssertionType -> AssertionMisc -> Expr TBool -> CairoSemanticsL ()
+assert' assType misc a = liftF (Assert' a assType misc ())
 
 expect' :: Expr TBool -> CairoSemanticsL ()
 expect' a = liftF (Expect' a PostAssertion ())
@@ -126,6 +130,9 @@ getBuiltinOffsets l b = liftF (GetBuiltinOffsets l b id)
 
 getCallee :: LabeledInst -> CairoSemanticsL ScopedFunction
 getCallee call = liftF (GetCallee call id)
+
+getCurrentF :: CairoSemanticsL ScopedFunction
+getCurrentF = liftF (GetCurrentF id)
 
 getFuncSpec :: ScopedFunction -> CairoSemanticsL FuncSpec'
 getFuncSpec name = liftF (GetFuncSpec name id)
@@ -162,10 +169,27 @@ getStorage :: CairoSemanticsL Storage
 getStorage = liftF (GetStorage id)
 
 assert :: Expr TBool -> CairoSemanticsL ()
-assert a = assert' InstructionSemanticsAssertion =<< memoryRemoval a
+assert a = assert' InstructionSemanticsAssertion emptyMisc =<< memoryRemoval a
 
-assertPre :: Expr TBool -> CairoSemanticsL ()
-assertPre a = assert' PreAssertion =<< memoryRemoval a
+_assertWithComment :: Expr TBool -> Text -> CairoSemanticsL ()
+_assertWithComment a text =
+  assert' InstructionSemanticsAssertion (commentRight text emptyMisc) =<< memoryRemoval a
+
+assertWithComment' :: Expr TBool -> AssertionMisc -> CairoSemanticsL ()
+assertWithComment' a misc =
+  assert' InstructionSemanticsAssertion misc =<< memoryRemoval a
+
+_assertPre :: Expr TBool -> CairoSemanticsL ()
+_assertPre = assertPreWithComment' emptyMisc
+
+commentHere' :: Text -> CairoSemanticsL ()
+commentHere' = assertWithComment' magicHygieneConstant . flip commentRight emptyMisc
+
+assertApConstraint :: Expr TBool -> CairoSemanticsL ()
+assertApConstraint a = assert' ApConstraintAssertion emptyMisc =<< memoryRemoval a
+
+assertPreWithComment' :: AssertionMisc -> Expr TBool -> CairoSemanticsL ()
+assertPreWithComment' misc a = assert' PreAssertion misc =<< memoryRemoval a
 
 expect :: Expr TBool -> CairoSemanticsL ()
 expect a = expect' =<< memoryRemoval a
@@ -289,7 +313,7 @@ moduleEndAp mdl =
  contain a storage update.
 -}
 encodeModule :: Module -> CairoSemanticsL ()
-encodeModule mdl@(Module (FuncSpec pre post storage) instrs oracle _ _ mbPreCheckedFuncWithCallStack) = do
+encodeModule mdl@(Module (FuncSpec (pre, preDesc) (post, _) storage) instrs oracle _ _ mbPreCheckedFuncWithCallStack) = do
   enableStorage
   fp <- getFp
   apEnd <- moduleEndAp mdl
@@ -297,7 +321,9 @@ encodeModule mdl@(Module (FuncSpec pre post storage) instrs oracle _ _ mbPreChec
 
   apStart <- moduleStartAp mdl
   assert (fp .<= apStart)
-  assertPre =<< prepare' apStart fp (pre .&& apEqualsFp)
+  assertPreWithComment' (commentAbove ("Module pre: " <> preDesc) emptyMisc)
+    =<< prepare' apStart fp (pre .&& apEqualsFp)
+
   -- The last FP might be influenced in the optimizing case, we need to grab it as propagated
   -- by the encoding of the semantics of the call.
   lastFp <-
@@ -406,19 +432,23 @@ mkInstructionConstraints ::
   Map (NonEmpty Label, Label) Bool ->
   (Int, LabeledInst) ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lInst@(pc, Instruction{..})) = do
+mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lInst@(pc, inst@Instruction{..})) = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
     Call -> mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack =<< getCallee lInst
-    AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst) $> Nothing
+    AssertEqual ->
+      getRes fp lInst >>= \res ->
+        assertWithComment' (res .== dst) (commentRight (toSemiAsmUnsafe inst) emptyMisc) $> Nothing
     Nop -> do
       stackTrace <- getOracle
       case jnzOracle Map.!? (stackTrace, pc) of
         Just False -> assert (dst .== 0) $> Nothing
         Just True -> assert (dst ./= 0) $> Nothing
         Nothing -> pure Nothing
-    Ret -> pop $> Nothing
+    Ret -> do
+      currentF <- getCurrentF
+      commentHere' ("Inlining ended: " <> tShow (sf_scopedName currentF)) >> pop $> Nothing
  where
   nextPc = getNextPcInlinedWithFallback instrs idx
 
@@ -435,7 +465,10 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
   saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
   setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
-  assert (Expr.and [nextAp, saveOldFp, setNextPc])
+  canInline <- isInlinable f
+  assertWithComment'
+    (Expr.and [nextAp, saveOldFp, setNextPc])
+    (commentAbove (describeCall canInline <> tShow (sf_scopedName f)) emptyMisc)
   push stackFrame
   -- Considering we have already pushed the stackFrame by now, we need to make sure that either
   -- the function is inlinable and we'll encounter a 'ret', or we need to pop right away
@@ -448,7 +481,7 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
     -- of the function being invoked must not be considered.
     guardWith (isInlinable f) (pure Nothing) $ do
       -- An inlined function will have a 'ret' at some point, do not pop here.
-      (FuncSpec pre post storage) <- getFuncSpec f <&> toFuncSpec
+      (FuncSpec (pre, preDesc) (post, postDesc) storage) <- getFuncSpec f <&> toFuncSpec
       let pre' = suffixLogicalVariables lvarSuffix pre
           post' = suffixLogicalVariables lvarSuffix post
       preparedPre <- prepare nextPc calleeFp =<< storageRemoval pre'
@@ -462,13 +495,22 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
       -- However, pre will be checked in a separate 'optimising' module and we can therefore simply
       -- assert it holds here. If it does not, the corresponding pre-checking module will fail,
       -- thus failing the judgement for the entire function.
-      assert preparedPre
-      assert preparedPost
+      assertWithComment'
+        preparedPre
+        (commentAbove ("Pre of: " <> functionName <> " | " <> preDesc) emptyMisc)
+      assertWithComment'
+        preparedPost
+        ( commentBelow
+            ("Finished abstracting function: " <> functionName)
+            (commentAbove ("Post of: " <> functionName <> " | " <> postDesc) emptyMisc)
+        )
       pure Nothing
  where
   lvarSuffix = "+" <> tShowLabel pc
   calleePc = sf_pc f
   stackFrame = (pc, calleePc)
+  functionName = tShow (sf_scopedName f)
+  describeCall inl = if inl then "Inlining function: " else "Abstracting function: "
   -- Determine whether the current function matches the function being optimised exactly -
   -- this necessitates comparing execution traces.
   isModuleCheckingPre = do
@@ -498,15 +540,15 @@ mkApConstraints apEnd insts = do
       ap2 <- getAp pcNext
       fp <- getFp
       getApIncrement fp lInst >>= \case
-        Just apIncrement -> assert (ap1 + apIncrement .== ap2)
-        Nothing | not isNewStackframe -> assert (ap1 .< ap2)
+        Just apIncrement -> assertApConstraint (ap1 + apIncrement .== ap2)
+        Nothing | not isNewStackframe -> assertApConstraint (ap1 .< ap2)
         Nothing -> pure ()
   lastAp <- getAp lastPc
   when (isRet lastInst) pop
   fp <- getFp
   getApIncrement fp lastLInst >>= \case
-    Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
-    Nothing -> assert (lastAp .< apEnd)
+    Just lastApIncrement -> assertApConstraint (lastAp + lastApIncrement .== apEnd)
+    Nothing -> assertApConstraint (lastAp .< apEnd)
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 

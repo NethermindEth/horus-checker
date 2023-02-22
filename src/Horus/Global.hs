@@ -274,7 +274,7 @@ removeMathSAT m run = do
   instUsesLvars i = falseIfError $ do
     callee <- getCallee i
     spec <- getFuncSpec callee
-    let lvars = gatherLogicalVariables (fromMaybe Expr.True (fs'_pre spec))
+    let lvars = gatherLogicalVariables . fst $ fromMaybe (Expr.True, "True") (fs'_pre spec)
     pure (not (null lvars))
 
   falseIfError a = a `catchError` const (pure False)

@@ -13,6 +13,7 @@ module Horus.CFGBuild
   , mkInv
   , Vertex (..)
   , getVerts
+  , isOptimising
   , isPreCheckingVertex
   )
 where
@@ -80,6 +81,9 @@ data Vertex = Vertex
   , v_preCheckedF :: Maybe ScopedFunction
   }
   deriving (Show)
+
+isOptimising :: Vertex -> Bool
+isOptimising = isJust . v_preCheckedF
 
 instance Eq Vertex where
   (==) lhs rhs = v_name lhs == v_name rhs
@@ -273,7 +277,7 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
     -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
     -- been checked by the module induced by the ghost vertex.
     ghostV <- addOptimisingVertex (nextSegmentLabel seg) callee
-    pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
+    pre <- maybe (mkPre Expr.True) (mkPre . fst) . fs'_pre <$> getFuncSpec callee
 
     -- Important note on the way we deal with logical variables. These are @declare-d and
     -- their values can be bound in preconditions. They generate existentials which only occur
@@ -333,7 +337,7 @@ addAssertions inlinables identifiers = do
               (Nothing, Nothing) ->
                 when (fu_pc f `Set.notMember` Set.map sf_pc inlinables) $
                   for_ retVs (`addAssertion` mkPost Expr.True)
-              _ -> for_ retVs (`addAssertion` maybe (mkPost Expr.True) mkPost post)
+              _ -> for_ retVs (`addAssertion` maybe (mkPost Expr.True) (mkPost . fst) post)
     ILabel pc ->
       whenJustM (getInvariant idName) $ \inv ->
         getSalientVertex pc >>= (`addAssertion` mkInv inv)

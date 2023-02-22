@@ -16,22 +16,23 @@ import Control.Monad.Reader
   , asks
   , runReaderT
   )
-import Control.Monad.State (MonadState (get), State, runState)
+import Control.Monad.State (MonadState (get), State, gets, runState)
 import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
+import Data.List (partition)
 import Data.List qualified as List (find, tails)
-import Data.Map qualified as Map (map, null, unionWith)
+import Data.Map qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Singletons (sing)
 import Data.Some (foldSome)
 import Data.Text (Text)
 import Data.Text qualified as Text (intercalate)
-import Lens.Micro (Lens', (%~), (<&>), (^.))
+import Lens.Micro (Lens', (%~), (<&>), (^.), _1, _2)
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CairoSemantics (AssertionType (ApConstraintAssertion, PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
@@ -43,6 +44,7 @@ import Horus.Expr.Type (STy (..))
 import Horus.Expr.Util (gatherNonStdFunctions)
 import Horus.Expr.Vars (prime, rcBound)
 import Horus.FunctionAnalysis (ScopedFunction (sf_scopedName))
+import Horus.SMTHygiene (AssertionMisc, commentBelow, encodeRestriction, withEmptyMisc)
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
@@ -61,7 +63,7 @@ builderToAss mv (ExistentialAss f) = f mv
 -- inlined.
 data ConstraintsState = ConstraintsState
   { cs_memoryVariables :: [MemoryVariable]
-  , cs_asserts :: [(AssertionBuilder, AssertionType)]
+  , cs_asserts :: [(AssertionBuilder, AssertionType, AssertionMisc)]
   , cs_expects :: [(Expr TBool, AssertionType)]
   , cs_nameCounter :: Int
   , cs_callStack :: CallStack
@@ -70,7 +72,7 @@ data ConstraintsState = ConstraintsState
 csMemoryVariables :: Lens' ConstraintsState [MemoryVariable]
 csMemoryVariables lMod g = fmap (\x -> g{cs_memoryVariables = x}) (lMod (cs_memoryVariables g))
 
-csAsserts :: Lens' ConstraintsState [(AssertionBuilder, AssertionType)]
+csAsserts :: Lens' ConstraintsState [(AssertionBuilder, AssertionType, AssertionMisc)]
 csAsserts lMod g = fmap (\x -> g{cs_asserts = x}) (lMod (cs_asserts g))
 
 csExpects :: Lens' ConstraintsState [(Expr TBool, AssertionType)]
@@ -121,7 +123,7 @@ interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
  where
   exec :: CairoSemanticsF (Impl a) -> Impl a
-  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
+  exec (Assert' a assType misc cont) = eConstraints . csAsserts %= ((QFAss a, assType, misc) :) >> cont
   exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
   exec (DeclareMem address cont) = do
     memVars <- use (eConstraints . csMemoryVariables)
@@ -151,6 +153,10 @@ interpret = iterM exec
   exec (GetCallee inst cont) = do
     ci <- ask
     ci_getCallee ci inst >>= cont
+  exec (GetCurrentF cont) = do
+    (_, calledF) <- gets $ top . (^. csCallStack) . e_constraints
+    ci <- ask
+    cont (ci_functions ci Map.! calledF)
   exec (GetFuncSpec name cont) = do
     ci <- ask
     ci_getFuncSpec ci name & cont
@@ -200,9 +206,9 @@ debugFriendlyModel ConstraintsState{..} =
       [ ["# Memory"]
       , memoryPairs
       , ["# Assert"]
-      , map (pprExpr . builderToAss cs_memoryVariables . fst) cs_asserts
+      , map (pprExpr . builderToAss cs_memoryVariables . (^. _1)) cs_asserts
       , ["# Expect"]
-      , map (pprExpr . fst) cs_expects
+      , map (pprExpr . (^. _1)) cs_expects
       ]
  where
   memoryPairs =
@@ -222,10 +228,10 @@ restrictMemTail (mv0 : rest) =
 
 makeModel :: Bool -> ConstraintsState -> Integer -> Text
 makeModel checkPreOnly ConstraintsState{..} fPrime =
-  Text.intercalate "\n" (decls <> map (Command.assert fPrime) restrictions)
+  Text.intercalate "\n" (decls <> map (encodeRestriction fPrime) restrictions)
  where
   functions =
-    toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
+    toList (foldMap (gatherNonStdFunctions . fst) generalRestrictions <> gatherNonStdFunctions prime)
   decls = map (foldSome Command.declare) functions
   rangeRestrictions = mapMaybe (foldSome restrictRange) functions
   memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
@@ -233,17 +239,32 @@ makeModel checkPreOnly ConstraintsState{..} fPrime =
     [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
 
   -- If checking @pre only, only take `PreAssertion`s, no postconditions.
-  allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . snd) cs_asserts else cs_asserts
+  allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . (^. _2)) cs_asserts else cs_asserts
   allowedExpects = if checkPreOnly then [] else cs_expects
+
+  allowedAssertsWithApRegion = delineateApAssertions allowedAsserts
 
   generalRestrictions =
     concat
-      [ memRestrictions
-      , addrRestrictions
-      , map (builderToAss cs_memoryVariables . fst) allowedAsserts
-      , [Expr.not (Expr.and (map fst allowedExpects)) | not (null allowedExpects)]
+      [ sansMiscInfo memRestrictions
+      , sansMiscInfo addrRestrictions
+      , [(builderToAss cs_memoryVariables builder, misc) | (builder, _, misc) <- allowedAssertsWithApRegion]
+      , sansMiscInfo [Expr.not (Expr.and (map (^. _1) allowedExpects)) | not (null allowedExpects)]
       ]
-  restrictions = rangeRestrictions <> generalRestrictions
+  restrictions = sansMiscInfo rangeRestrictions <> generalRestrictions
+
+  sansMiscInfo = map withEmptyMisc
+
+  delineateApAssertions asserts =
+    let (anteAp, postAp) = partition ((/= ApConstraintAssertion) . (^. _2)) asserts
+     in commentRegion anteAp "Begin AP constraints." ++ commentRegion postAp "End AP constraints."
+   where
+    commentRegion region msg =
+      if null region
+        then region
+        else
+          let (ass, assType, assMisc) = last region
+           in init region ++ [(ass, assType, commentBelow msg assMisc)]
 
   restrictRange :: forall ty. Function ty -> Maybe (Expr TBool)
   restrictRange (Function name) = case sing @ty of

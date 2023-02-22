@@ -189,7 +189,7 @@ descrOfOracle oracle =
 getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
 getModuleNameParts idents (Module spec prog oracle calledF _ mbPreCheckedFuncAndCallStack) =
   case beginOfModule prog of
-    Nothing -> ("", "empty: " <> pprExpr post, "", "")
+    Nothing -> ("", "empty: " <> pprExpr (fst post), "", "")
     Just label ->
       let scopedNames = labelNamesOfPc idents label
           isFloatingLabel = label /= calledF
@@ -248,12 +248,12 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Error -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
-data SpecBuilder = SBRich | SBPlain (Expr TBool)
+data SpecBuilder = SBRich | SBPlain (Expr TBool, Text)
 
 extractPlainBuilder :: FuncSpec -> ModuleL SpecBuilder
-extractPlainBuilder (FuncSpec pre _ storage)
+extractPlainBuilder (FuncSpec (pre, preDesc) _ storage)
   | not (null storage) = throwError EInvariantWithSVarUpdateSpec
-  | otherwise = pure (SBPlain (pre .&& (ap .== fp)))
+  | otherwise = pure (SBPlain (pre .&& (ap .== fp), preDesc))
 
 gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
@@ -323,18 +323,18 @@ visit cfg fSpec function oracle callstack acc builder v@(Vertex _ label preCheck
   visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
   visitLoop (SBPlain pre)
     | null assertions = throwError (ELoopNoInvariant label)
-    | otherwise = emit pre (Expr.and assertions)
+    | otherwise = emit pre (Expr.and assertions, "")
 
   visitLinear :: SpecBuilder -> ModuleL ()
   visitLinear SBRich
-    | onFinalNode = emit (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
+    | onFinalNode = emit (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v), "")
     | null assertions = visitArcs cfg fSpec function callstack' oracle' acc builder v
     | otherwise = extractPlainBuilder fSpec >>= visitLinear
   visitLinear (SBPlain pre)
     | null assertions = visitArcs cfg fSpec function callstack' oracle' acc builder v
     | otherwise = do
-        emit pre (Expr.and assertions)
-        visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions)) v
+        emit pre (Expr.and assertions, "")
+        visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions, "")) v
 
   callstack' = case f of
     Nothing -> callstack
@@ -349,7 +349,7 @@ visit cfg fSpec function oracle callstack acc builder v@(Vertex _ label preCheck
   preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
   preCheckingContext = (push preCheckingStackFrame callstack',) <$> preCheckedF
 
-  emit :: Expr TBool -> Expr TBool -> ModuleL ()
+  emit :: (Expr TBool, Text) -> (Expr TBool, Text) -> ModuleL ()
   emit pre post = emitModule (Module spec acc oracle' pc (callstack', label) preCheckingContext)
    where
     pc = fu_pc function

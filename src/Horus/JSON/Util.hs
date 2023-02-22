@@ -31,5 +31,5 @@ instance Typeable a => FromJSON (HSourcedSExpr a) where
     HSourcedSExpr
       <$> do
         sourceLst <- v .: "source"
-        pure $ Text.intercalate "\n" sourceLst
+        pure $ Text.intercalate " | " sourceLst
       <*> v .: "sexpr"

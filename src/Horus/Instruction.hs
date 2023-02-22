@@ -245,7 +245,7 @@ toSemiAsm Instruction{..} = do
   withRes f = fmap f getRes
   dst = mem (printReg i_dstRegister `add` i_dstOffset)
   mbApPP = case i_apUpdate of
-    Add1 -> "; ap++"
+    Add1 -> ", ap++"
     _ -> ""
   getRes = case i_resLogic of
     Op1 -> pure op1
