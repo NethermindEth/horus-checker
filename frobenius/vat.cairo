@@ -182,8 +182,6 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
     return ();
 }
 
-// pre _can(u, get_caller_address()) == 1
-// pre u == get_caller_address()
 // @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
 // @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
 // @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
@@ -192,7 +190,7 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 @external
 func frob{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
+}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) -> (Art: felt, ink: felt, tab: felt, debt: felt, art: felt) {
     alloc_locals;
 
     // We comment these out because we have converted `dink`, `dart` parameters to felts.
@@ -205,8 +203,6 @@ func frob{
     let (urn_ink) = _urns_ink.read(i, u);
     let (urn_art) = _urns_art.read(i, u);
     let (local ilk_rate) = _ilks_rate.read(i);
-    let (local ilk_line) = _ilks_line.read(i);
-    let (local ilk_spot) = _ilks_spot.read(i);
     let (local ilk_dust) = _ilks_dust.read(i);
     let (local ilk_Art) = _ilks_Art.read(i);
 
@@ -229,6 +225,21 @@ func frob{
     let debt = debt + dtab;
     _debt.write(debt);
 
+    return (Art=Art, ink=ink, tab=tab, debt=debt, art=art);
+}
+
+// @pre True
+// @post True
+@external
+func frob2{
+    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
+}(i: felt, dink: felt, dart: felt, Art: felt, ink: felt, tab: felt, debt: felt) {
+    alloc_locals;
+
+    let (local ilk_rate) = _ilks_rate.read(i);
+    let (local ilk_line) = _ilks_line.read(i);
+    let (local ilk_spot) = _ilks_spot.read(i);
+
     // either debt has decreased, or debt ceilings are not exceeded
     with_attr error_message("Vat/ceiling-exceeded") {
         let debt_decreased = is_le(dart, 0);
@@ -249,30 +260,22 @@ func frob{
         assert_either(less_risky, safe);
     }
 
-    frob_caller_checks(u, v, w, dart, dink);
-
-    // urn has no debt, or a non-dusty amount
-    with_attr error_message("Vat/dust") {
-        let (no_debt) = eq_0(art);
-        let non_dusty = is_le(ilk_dust, tab);
-        assert_either(no_debt, non_dusty);
-    }
-
-    // let (gem) = _gem.read(i, v);
-
     return ();
 }
+
 
 // @pre True
 // @post True
 @external
-func frob_caller_checks{
+func frob3{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(u: felt, v: felt, w: felt, dink: felt, dart: felt) {
+}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
     alloc_locals;
 
     let (caller) = get_caller_address();
 
+    // urn is either more safe, or the owner consents
+    // require(either(both(dart <= 0, dink >= 0), wish(u, msg.sender)), "Vat/not-allowed-u");
     with_attr error_message("Vat/not-allowed-u") {
         let dart_le_0 = is_le(dart, 0);
         let dink_ge_0 = is_le(0, dink);
@@ -282,6 +285,7 @@ func frob_caller_checks{
     }
 
     // collateral src consents
+    // require(either(dink <= 0, wish(v, msg.sender)), "Vat/not-allowed-v");
     with_attr error_message("Vat/not-allowed-v") {
         let dink_le_0 = is_le(dink, 0);
         let (src_consents) = wish(v, caller);
@@ -295,6 +299,41 @@ func frob_caller_checks{
         let (dst_consents) = wish(w, caller);
         assert_either(dart_ge_0, dst_consents);
     }
+
+    return ();
+}
+
+// @pre True
+// @storage_update _gem(i, v) := _gem(i, v) - dink
+// @storage_update _dai(w) := _dai(w) + dtab
+// @storage_update _urns_ink(i, u) := ink
+// @storage_update _urns_art(i, u) := art
+// @post True
+@external
+func frob4{
+    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
+}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt, ink: felt, art: felt, tab: felt, dtab: felt) {
+    alloc_locals;
+
+    let (local ilk_dust) = _ilks_dust.read(i);
+
+    // urn has no debt, or a non-dusty amount
+    with_attr error_message("Vat/dust") {
+        let (no_debt) = eq_0(art);
+        let non_dusty = is_le(ilk_dust, tab);
+        assert_either(no_debt, non_dusty);
+    }
+
+    let (gem) = _gem.read(i, v);
+    let gem = gem - dink;
+    _gem.write(i, v, gem);
+
+    let (dai) = _dai.read(w);
+    let dai = dai + dtab;
+    _dai.write(w, dai);
+
+    _urns_ink.write(i, u, ink);
+    _urns_art.write(i, u, art);
 
     return ();
 }
