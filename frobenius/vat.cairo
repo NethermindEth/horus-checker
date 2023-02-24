@@ -28,18 +28,10 @@ from assertions import (
     eq_0,
 )
 
-// mapping(address => mapping (address => uint256)) public can;
 @storage_var
 func _can(b: felt, u: felt) -> (res: felt) {
 }
 
-// struct Ilk {
-//     uint256 Art;   // Total Normalised Debt     [wad]
-//     uint256 rate;  // Accumulated Rates         [ray]
-//     uint256 spot;  // Price with Safety Margin  [ray]
-//     uint256 line;  // Debt Ceiling              [rad]
-//     uint256 dust;  // Urn Debt Floor            [rad]
-// }
 struct Ilk {
     Art: felt,  // Total Normalised Debt     [wad]
     rate: felt,  // Accumulated Rates         [ray]
@@ -48,41 +40,46 @@ struct Ilk {
     dust: felt,  // Urn Debt Floor            [rad]
 }
 
-// struct Urn {
-//   uint256 ink;   // Locked Collateral  [wad]
-//   uint256 art;   // Normalised Debt    [wad]
-// }
 struct Urn {
     ink: felt,  // Locked Collateral  [wad]
     art: felt,  // Normalised Debt    [wad]
 }
 
-// mapping (bytes32 => Ilk)                       public ilks;
 @storage_var
-func _ilks(i: felt) -> (ilk: Ilk) {
+func _ilks_Art(i: felt) -> (res: felt) {
+}
+@storage_var
+func _ilks_rate(i: felt) -> (res: felt) {
+}
+@storage_var
+func _ilks_spot(i: felt) -> (res: felt) {
+}
+@storage_var
+func _ilks_line(i: felt) -> (res: felt) {
+}
+@storage_var
+func _ilks_dust(i: felt) -> (res: felt) {
 }
 
-// mapping (bytes32 => mapping (address => Urn )) public urns;
 @storage_var
-func _urns(i: felt, u: felt) -> (urn: Urn) {
+func _urns_ink(i: felt, u: felt) -> (res: felt) {
+}
+@storage_var
+func _urns_art(i: felt, u: felt) -> (res: felt) {
 }
 
-// mapping (bytes32 => mapping (address => uint)) public gem;  // [wad]
 @storage_var
 func _gem(i: felt, u: felt) -> (gem: felt) {
 }
 
-// mapping (address => uint256)                   public dai;  // [rad]
 @storage_var
 func _dai(u: felt) -> (dai: felt) {
 }
 
-// uint256 public debt;  // Total Dai Issued    [rad]
 @storage_var
 func _debt() -> (debt: felt) {
 }
 
-// uint256 public live;  // Active Flag
 @storage_var
 func _live() -> (live: felt) {
 }
@@ -101,7 +98,12 @@ func can{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(b: fel
 // @post True
 @view
 func ilks{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt) -> (ilk: Ilk) {
-    let (ilk) = _ilks.read(i);
+    let (Art) = _ilks_Art.read(i);
+    let (rate) = _ilks_rate.read(i);
+    let (spot) = _ilks_spot.read(i);
+    let (line) = _ilks_line.read(i);
+    let (dust) = _ilks_dust.read(i);
+    let ilk = Ilk(Art, rate, spot, line, dust);
     return (ilk,);
 }
 
@@ -111,7 +113,9 @@ func ilks{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: fe
 func urns{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt, u: felt) -> (
     urn: Urn
 ) {
-    let (urn) = _urns.read(i, u);
+    let (ink) = _urns_ink.read(i, u);
+    let (art) = _urns_art.read(i, u);
+    let urn = Urn(ink, art);
     return (urn,);
 }
 
@@ -151,14 +155,10 @@ func live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> 
     return (live,);
 }
 
-// event Frob(bytes32 indexed i, address indexed u, address v, address w, int256 dink, int256 dart);
 @event
 func Frob(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
 }
 
-// function wish(address bit, address usr) internal view returns (bool) {
-//     return either(bit == usr, can[bit][usr] == 1);
-// }
 // @pre True
 // @post True
 @external
@@ -173,27 +173,6 @@ func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     return (res,);
 }
 
-// // --- Math ---
-// function _add(uint256 x, int256 y) internal pure returns (uint256 z) {
-//     unchecked {
-//         z = x + uint256(y);
-//     }
-//     require(y >= 0 || z <= x);
-//     require(y <= 0 || z >= x);
-// }
-
-// function _sub(uint256 x, int256 y) internal pure returns (uint256 z) {
-//     unchecked {
-//         z = x - uint256(y);
-//     }
-//     require(y <= 0 || z <= x);
-//     require(y >= 0 || z >= x);
-// }
-
-// function _int256(uint256 x) internal pure returns (int256 y) {
-//     require((y = int256(x)) >= 0);
-// }
-
 // @pre True
 // @post True
 func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() {
@@ -206,19 +185,10 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
     return ();
 }
 
-// Helpers
-// function either(bool x, bool y) internal pure returns (bool z) {
-//     assembly{ z := or(x, y)}
-// }
-
-// function both(bool x, bool y) internal pure returns (bool z) {
-//     assembly{ z := and(x, y)}
-// }
-
-// // --- CDP Manipulation ---
-// function frob(bytes32 i, address u, address v, address w, int256 dink, int256 dart) external {
 // @pre True
-// @storage_update _ilks(i).Art := _ilks(i).Art + dart
+// @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
+// @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
+// @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
 // @post True
 @external
 func frob{
@@ -231,28 +201,24 @@ func frob{
     // check(dart);
 
     // system is live
-    // require(live == 1, "Vat/not-live");
     require_live();
 
-    // Urn memory urn = urns[i][u];
-    // Ilk memory ilk = ilks[i];
-    let (urn) = _urns.read(i, u);
-    let (local ilk) = _ilks.read(i);
+    let (urn_ink) = _urns_ink.read(i, u);
+    let (urn_art) = _urns_art.read(i, u);
+    let (local ilk_rate) = _ilks_rate.read(i);
+    let (local ilk_Art) = _ilks_Art.read(i);
 
-    // ilk has been initialised
-    // require(ilk.rate != 0, "Vat/ilk-not-init");
     with_attr error_message("Vat/ilk-not-init") {
-        assert_not_zero(ilk.rate);
+        assert_not_zero(ilk_rate);
     }
 
-    // urn.ink = _add(urn.ink, dink);
-    // urn.art = _add(urn.art, dart);
-    let ink = urn.ink + dink;
-    let art = urn.art + dart;
-    _urns.write(i, u, Urn(ink, art));
-    // ilk.Art = _add(ilk.Art, dart);
-    let Art = ilk.Art + dart;
-    _ilks.write(i, Ilk(Art, ilk.rate, ilk.spot, ilk.line, ilk.dust));
+    let ink = urn_ink + dink;
+    let art = urn_art + dart;
+    _urns_ink.write(i, u, ink);
+    _urns_art.write(i, u, art);
+
+    let Art = ilk_Art + dart;
+    _ilks_Art.write(i, Art);
 
     return ();
 }
