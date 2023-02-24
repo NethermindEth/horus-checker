@@ -189,6 +189,7 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
 // @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
 // @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
+// @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
 // @post True
 @external
 func frob{
@@ -219,6 +220,13 @@ func frob{
 
     let Art = ilk_Art + dart;
     _ilks_Art.write(i, Art);
+
+    let dtab = ilk_rate * dart;
+    let tab = ilk_rate * art;
+
+    let (debt) = _debt.read();
+    let debt = debt + dtab;
+    _debt.write(debt);
 
     return ();
 }
