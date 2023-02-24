@@ -376,7 +376,7 @@ solveContract = do
   isVerifiedIgnorable (SolvingInfo name _ res _ _) = False
 
   funcPrefixesWhitelist :: [Text]
-  funcPrefixesWhitelist = ["frob:::1"]
+  funcPrefixesWhitelist = ["frob4"]
 
   isWhitelisted :: Identifiers -> Module -> Bool
   isWhitelisted identifiers m = any (`Text.isPrefixOf` trace' "moduleName" moduleName) funcPrefixesWhitelist

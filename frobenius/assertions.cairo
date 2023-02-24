@@ -21,8 +21,7 @@ func either(a: felt, b: felt) -> (res: felt) {
     return (1,);
 }
 
-// @pre True
-// @post True
+// @post not (a + b == 0)
 func assert_either(a: felt, b: felt) {
     if (a + b == 0) {
         assert 1 = 0;
@@ -30,8 +29,6 @@ func assert_either(a: felt, b: felt) {
     return ();
 }
 
-// @pre True
-// @post True
 func both(a: felt, b: felt) -> (res: felt) {
     if (a + b == 2) {
         return (1,);
