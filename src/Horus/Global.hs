@@ -21,7 +21,7 @@ import Data.Maybe (fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
 import Data.Set qualified as Set (map)
 import Data.Text (Text, unpack)
-import Data.Text qualified as Text (isPrefixOf)
+import Data.Text qualified as Text
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
@@ -46,9 +46,14 @@ import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includ
 import Horus.Program (Identifiers, Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.Identifier (Function (..))
-import Horus.SW.ScopedName (ScopedName ())
+import Horus.SW.ScopedName (ScopedName (..))
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
+
+import Debug.Trace (trace)
+
+trace' :: Show a => String -> a -> a
+trace' s x = trace (s ++ ": " ++ show x) x
 
 data Config = Config
   { cfg_verbose :: Bool
@@ -350,7 +355,7 @@ solveContract = do
        where
         (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
         labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
-  infos <- for (filter isUntrusted modules) solveModule
+  infos <- for (filter (isWhitelisted identifiers) $ filter isUntrusted modules) solveModule
   pure $
     ( concatMap collapseAllUnsats
         . groupBy sameFuncName
@@ -368,8 +373,16 @@ solveContract = do
   ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
-  isVerifiedIgnorable (SolvingInfo name _ res _ _) =
-    res == Verified && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
+  isVerifiedIgnorable (SolvingInfo name _ res _ _) = False
+
+  funcPrefixesWhitelist :: [Text]
+  funcPrefixesWhitelist = ["frob:::1"]
+
+  isWhitelisted :: Identifiers -> Module -> Bool
+  isWhitelisted identifiers m = any (`Text.isPrefixOf` trace' "moduleName" moduleName) funcPrefixesWhitelist
+   where
+    (qualifiedFuncName, labelsSummary, oracleSuffix, optimSuffix) = getModuleNameParts identifiers m
+    moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimSuffix
 
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =

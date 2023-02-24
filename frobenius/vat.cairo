@@ -159,13 +159,10 @@ func live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> 
 func Frob(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
 }
 
-// @pre True
-// @post True
 @external
 func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     bit: felt, user: felt
 ) -> (res: felt) {
-    // return either(bit == usr, can[bit][usr] == 1);
     if (bit == user) {
         return (res=1);
     }
@@ -185,7 +182,8 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
     return ();
 }
 
-// @pre True
+// pre _can(u, get_caller_address()) == 1
+// pre u == get_caller_address()
 // @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
 // @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
 // @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
@@ -209,6 +207,7 @@ func frob{
     let (local ilk_rate) = _ilks_rate.read(i);
     let (local ilk_line) = _ilks_line.read(i);
     let (local ilk_spot) = _ilks_spot.read(i);
+    let (local ilk_dust) = _ilks_dust.read(i);
     let (local ilk_Art) = _ilks_Art.read(i);
 
     with_attr error_message("Vat/ilk-not-init") {
@@ -250,6 +249,52 @@ func frob{
         assert_either(less_risky, safe);
     }
 
+    frob_caller_checks(u, v, w, dart, dink);
+
+    // urn has no debt, or a non-dusty amount
+    with_attr error_message("Vat/dust") {
+        let (no_debt) = eq_0(art);
+        let non_dusty = is_le(ilk_dust, tab);
+        assert_either(no_debt, non_dusty);
+    }
+
+    // let (gem) = _gem.read(i, v);
+
+    return ();
+}
+
+// @pre True
+// @post True
+@external
+func frob_caller_checks{
+    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
+}(u: felt, v: felt, w: felt, dink: felt, dart: felt) {
+    alloc_locals;
+
+    let (caller) = get_caller_address();
+
+    with_attr error_message("Vat/not-allowed-u") {
+        let dart_le_0 = is_le(dart, 0);
+        let dink_ge_0 = is_le(0, dink);
+        let (less_risky) = both(dart_le_0, dink_ge_0);
+        let (owner_consents) = wish(u, caller);
+        assert_either(less_risky, owner_consents);
+    }
+
+    // collateral src consents
+    with_attr error_message("Vat/not-allowed-v") {
+        let dink_le_0 = is_le(dink, 0);
+        let (src_consents) = wish(v, caller);
+        assert_either(dink_le_0, src_consents);
+    }
+
+    // debt dst consents
+    // require(either(dart >= 0, wish(w, msg.sender)), "Vat/not-allowed-w");
+    with_attr error_message("Vat/not-allowed-w") {
+        let dart_ge_0 = is_le(0, dart);
+        let (dst_consents) = wish(w, caller);
+        assert_either(dart_ge_0, dst_consents);
+    }
 
     return ();
 }
