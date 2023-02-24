@@ -207,6 +207,8 @@ func frob{
     let (urn_ink) = _urns_ink.read(i, u);
     let (urn_art) = _urns_art.read(i, u);
     let (local ilk_rate) = _ilks_rate.read(i);
+    let (local ilk_line) = _ilks_line.read(i);
+    let (local ilk_spot) = _ilks_spot.read(i);
     let (local ilk_Art) = _ilks_Art.read(i);
 
     with_attr error_message("Vat/ilk-not-init") {
@@ -227,6 +229,27 @@ func frob{
     let (debt) = _debt.read();
     let debt = debt + dtab;
     _debt.write(debt);
+
+    // either debt has decreased, or debt ceilings are not exceeded
+    with_attr error_message("Vat/ceiling-exceeded") {
+        let debt_decreased = is_le(dart, 0);
+        let ilk_debt = Art * ilk_rate;
+        let line_ok = is_le(ilk_debt, ilk_line);
+        let Line_ok = is_le(debt, ilk_line);
+        let (lines_ok) = both(line_ok, Line_ok);
+        assert_either(debt_decreased, lines_ok);
+    }
+
+    // urn is either less risky than before, or it is safe
+    with_attr error_message("Vat/not-safe") {
+        let dart_le_0 = is_le(dart, 0);
+        let dink_ge_0 = is_le(0, dink);
+        let (less_risky) = both(dart_le_0, dink_ge_0);
+        let brim = ink * ilk_spot;
+        let safe = is_le(tab, brim);
+        assert_either(less_risky, safe);
+    }
+
 
     return ();
 }
