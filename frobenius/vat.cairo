@@ -186,7 +186,6 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
 // @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
 // @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
-// @post True
 @external
 func frob{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -228,8 +227,8 @@ func frob{
     return (Art=Art, ink=ink, tab=tab, debt=debt, art=art);
 }
 
-// @pre True
-// @post True
+// post dart < 0 or (Art * _ilks_rate(i) <= _ilks_line(i) and debt <= _ilks_line(i))
+// @post (dart <= 0 and 0 <= dink) or (tab <= ink * _ilks_spot(i))
 @external
 func frob2{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -334,6 +333,8 @@ func frob4{
 
     _urns_ink.write(i, u, ink);
     _urns_art.write(i, u, art);
+
+    // Frob.emit(i, u, v, w, dink, dart);
 
     return ();
 }
