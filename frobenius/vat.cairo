@@ -84,77 +84,6 @@ func _debt() -> (debt: felt) {
 func _live() -> (live: felt) {
 }
 
-// @pre True
-// @post True
-@view
-func can{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(b: felt, u: felt) -> (
-    res: felt
-) {
-    let (res) = _can.read(b, u);
-    return (res,);
-}
-
-// @pre True
-// @post True
-@view
-func ilks{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt) -> (ilk: Ilk) {
-    let (Art) = _ilks_Art.read(i);
-    let (rate) = _ilks_rate.read(i);
-    let (spot) = _ilks_spot.read(i);
-    let (line) = _ilks_line.read(i);
-    let (dust) = _ilks_dust.read(i);
-    let ilk = Ilk(Art, rate, spot, line, dust);
-    return (ilk,);
-}
-
-// @pre True
-// @post True
-@view
-func urns{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt, u: felt) -> (
-    urn: Urn
-) {
-    let (ink) = _urns_ink.read(i, u);
-    let (art) = _urns_art.read(i, u);
-    let urn = Urn(ink, art);
-    return (urn,);
-}
-
-// @pre True
-// @post True
-@view
-func dai{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(u: felt) -> (
-    res: felt
-) {
-    let (res) = _dai.read(u);
-    return (res,);
-}
-
-// @pre True
-// @post True
-@view
-func gem{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(i: felt, u: felt) -> (
-    gem: felt
-) {
-    let (gem) = _gem.read(i, u);
-    return (gem,);
-}
-
-// @pre True
-// @post True
-@view
-func debt{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (debt: felt) {
-    let (debt) = _debt.read();
-    return (debt,);
-}
-
-// @pre True
-// @post True
-@view
-func live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() -> (live: felt) {
-    let (live) = _live.read();
-    return (live,);
-}
-
 @event
 func Frob(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
 }
@@ -171,7 +100,7 @@ func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
 }
 
 // @pre True
-// @post True
+// @post _live() == 1
 func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() {
     // require(live == 1, "Vat/not-live");
     with_attr error_message("Vat/not-live") {
@@ -186,8 +115,10 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
 // @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
 // @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
+// @post _live() == 1
+// @post _ilks_rate(i) != 0
 @external
-func frob{
+func frob1{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) -> (Art: felt, ink: felt, tab: felt, debt: felt, art: felt) {
     alloc_locals;
@@ -288,14 +219,6 @@ func frob3{
         assert_either(dink_le_0, src_consents);
     }
 
-    // debt dst consents
-    // require(either(dart >= 0, wish(w, msg.sender)), "Vat/not-allowed-w");
-    with_attr error_message("Vat/not-allowed-w") {
-        let dart_ge_0 = is_le(0, dart);
-        let (dst_consents) = wish(w, caller);
-        assert_either(dart_ge_0, dst_consents);
-    }
-
     return ();
 }
 
@@ -304,7 +227,7 @@ func frob3{
 // @storage_update _dai(w) := _dai(w) + dtab
 // @storage_update _urns_ink(i, u) := ink
 // @storage_update _urns_art(i, u) := art
-// @post True
+// @post art == 0 or _ilks_dust(i) <= tab
 @external
 func frob4{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -330,8 +253,6 @@ func frob4{
 
     _urns_ink.write(i, u, ink);
     _urns_art.write(i, u, art);
-
-    // Frob.emit(i, u, v, w, dink, dart);
 
     return ();
 }
