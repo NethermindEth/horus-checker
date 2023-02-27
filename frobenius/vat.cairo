@@ -227,8 +227,9 @@ func frob{
     return (Art=Art, ink=ink, tab=tab, debt=debt, art=art);
 }
 
-// post dart < 0 or (Art * _ilks_rate(i) <= _ilks_line(i) and debt <= _ilks_line(i))
-// @post (dart <= 0 and 0 <= dink) or (tab <= ink * _ilks_spot(i))
+// post Art * _ilks_rate(i) <= _ilks_line(i)
+// post debt <= _ilks_line(i)
+// post tab <= ink * _ilks_spot(i)
 @external
 func frob2{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -241,22 +242,18 @@ func frob2{
 
     // either debt has decreased, or debt ceilings are not exceeded
     with_attr error_message("Vat/ceiling-exceeded") {
-        let debt_decreased = is_le(dart, 0);
         let ilk_debt = Art * ilk_rate;
         let line_ok = is_le(ilk_debt, ilk_line);
         let Line_ok = is_le(debt, ilk_line);
         let (lines_ok) = both(line_ok, Line_ok);
-        assert_either(debt_decreased, lines_ok);
+        assert lines_ok = 1;
     }
 
     // urn is either less risky than before, or it is safe
     with_attr error_message("Vat/not-safe") {
-        let dart_le_0 = is_le(dart, 0);
-        let dink_ge_0 = is_le(0, dink);
-        let (less_risky) = both(dart_le_0, dink_ge_0);
         let brim = ink * ilk_spot;
         let safe = is_le(tab, brim);
-        assert_either(less_risky, safe);
+        assert safe = 1;
     }
 
     return ();
