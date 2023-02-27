@@ -9,3 +9,4 @@ tests/resources/golden/*.temp
 tests/resources/golden/*.json
 horus-compile/
 *.json
+demos/
