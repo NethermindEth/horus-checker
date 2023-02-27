@@ -56,9 +56,9 @@ verticesLabelledBy cfg l = [v | v <- cfg_vertices cfg, v_label v == l]
 interpret :: CFGBuildL a -> Impl a
 interpret = iterM exec . runCFGBuildL
  where
-  exec (AddVertex l isOptimizing cont) = do
+  exec (AddVertex l optimises cont) = do
     freshVal <- cfgVertexCounter <%= succ
-    let newVertex = Vertex (Text.pack (show freshVal)) l isOptimizing
+    let newVertex = Vertex (Text.pack (show freshVal)) l optimises
     vs <- gets cfg_vertices
     -- Currently, the design is such that it is convenient to be able to distinguish
     -- 'the unique vertex the entire codebase relies on' from vertices that exist

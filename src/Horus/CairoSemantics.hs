@@ -26,7 +26,7 @@ import Data.Traversable (for)
 import Lens.Micro ((^.), _1)
 
 import Horus.CallStack as CS (CallEntry, CallStack)
-import Horus.Expr (Cast (..), Expr (ExistsFelt, (:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
+import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
 import Horus.Expr qualified as TSMT
 import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
@@ -227,12 +227,8 @@ preparePost ap fp expr isOptim = do
     then do
       memVars <- getMemVars
       post <- storageRemoval expr
-      ($ memVars) <$> exMemoryRemoval (substitute "fp" fp (substitute "ap" ap (sansExists post)))
-    else prepare' ap fp $ sansExists expr
- where
-  sansExists e = case e of
-    ExistsFelt _ innerExpr -> innerExpr
-    _ -> e
+      ($ memVars) <$> exMemoryRemoval (substitute "fp" fp (substitute "ap" ap post))
+    else prepare' ap fp expr
 
 encodeApTracking :: Text -> ApTracking -> Expr TFelt
 encodeApTracking traceDescr ApTracking{..} =

@@ -20,7 +20,7 @@ module Horus.CFGBuild
 where
 
 import Control.Arrow (Arrow (second))
-import Control.Monad (unless, when)
+import Control.Monad (when)
 import Control.Monad.Except (MonadError (..))
 import Control.Monad.Free.Church (F, liftF)
 import Data.Coerce (coerce)
@@ -160,8 +160,9 @@ getSalientVertex :: Label -> CFGBuildL Vertex
 getSalientVertex l = do
   verts <- filter (not . isOptimising) <$> getVerts l
   -- This can be at most one, so len <> 1 implies there are no vertices
-  unless (length verts == 1) . throw $ "No vertex with label: " <> tShow l
-  pure $ head verts
+  case verts of
+    [vert] -> pure vert
+    _ -> throw $ "No vertex with label: " <> tShow l
 
 throw :: Text -> CFGBuildL a
 throw t = liftF' (Throw t)
