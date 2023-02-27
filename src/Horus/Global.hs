@@ -50,7 +50,7 @@ import Horus.SW.ScopedName (ScopedName (..))
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 
-import Debug.Trace (trace)
+import Debug.Trace (trace, traceM)
 
 trace' :: Show a => String -> a -> a
 trace' s x = trace (s ++ ": " ++ show x) x
@@ -356,6 +356,7 @@ solveContract = do
         (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
         labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
   infos <- for (filter (isWhitelisted identifiers) $ filter isUntrusted modules) solveModule
+  traceM "\nResults\n======="
   pure $
     ( concatMap collapseAllUnsats
         . groupBy sameFuncName
@@ -376,10 +377,10 @@ solveContract = do
   isVerifiedIgnorable (SolvingInfo name _ res _ _) = False
 
   funcPrefixesWhitelist :: [Text]
-  funcPrefixesWhitelist = ["frob2"]
+  funcPrefixesWhitelist = ["frob4"]
 
   isWhitelisted :: Identifiers -> Module -> Bool
-  isWhitelisted identifiers m = any (`Text.isPrefixOf` trace' "moduleName" moduleName) funcPrefixesWhitelist
+  isWhitelisted identifiers m = any (`Text.isPrefixOf` trace ("Checking module: " <> Text.unpack moduleName <> " ...") moduleName) funcPrefixesWhitelist
    where
     (qualifiedFuncName, labelsSummary, oracleSuffix, optimSuffix) = getModuleNameParts identifiers m
     moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimSuffix
