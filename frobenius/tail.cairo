@@ -50,3 +50,13 @@ frob4
 
     // Frob.emit(i, u, v, w, dink, dart);
 
+
+
+
+archive
+
+    with_attr error_message("Vat/not-safe") {
+        let x_le_0 = is_le(x, 0);
+        let y_ge_0 = is_le(0, y);
+        // assert_either(x_le_0, y_ge_0);
+    }
