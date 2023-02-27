@@ -192,44 +192,13 @@ func frob2{
 
 
 // @pre True
-// @post True
-@external
-func frob3{
-    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) {
-    alloc_locals;
-
-    let (caller) = get_caller_address();
-
-    // urn is either more safe, or the owner consents
-    // require(either(both(dart <= 0, dink >= 0), wish(u, msg.sender)), "Vat/not-allowed-u");
-    with_attr error_message("Vat/not-allowed-u") {
-        let dart_le_0 = is_le(dart, 0);
-        let dink_ge_0 = is_le(0, dink);
-        let (less_risky) = both(dart_le_0, dink_ge_0);
-        let (owner_consents) = wish(u, caller);
-        assert_either(less_risky, owner_consents);
-    }
-
-    // collateral src consents
-    // require(either(dink <= 0, wish(v, msg.sender)), "Vat/not-allowed-v");
-    with_attr error_message("Vat/not-allowed-v") {
-        let dink_le_0 = is_le(dink, 0);
-        let (src_consents) = wish(v, caller);
-        assert_either(dink_le_0, src_consents);
-    }
-
-    return ();
-}
-
-// @pre True
 // @storage_update _gem(i, v) := _gem(i, v) - dink
 // @storage_update _dai(w) := _dai(w) + dtab
 // @storage_update _urns_ink(i, u) := ink
 // @storage_update _urns_art(i, u) := art
-// @post art == 0 or _ilks_dust(i) <= tab
+// post art == 0 or _ilks_dust(i) <= tab
 @external
-func frob4{
+func frob3{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt, ink: felt, art: felt, tab: felt, dtab: felt) {
     alloc_locals;
