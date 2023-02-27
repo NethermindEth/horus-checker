@@ -20,7 +20,7 @@
 
 from starkware.cairo.common.cairo_builtins import HashBuiltin, BitwiseBuiltin
 from starkware.cairo.common.math import assert_not_zero
-from starkware.cairo.common.math_cmp import is_le
+from starkware.cairo.common.math_cmp import is_le, is_le_felt
 from starkware.starknet.common.syscalls import get_caller_address
 from assertions import (
     assert_either,
@@ -158,35 +158,13 @@ func frob1{
     return (Art=Art, ink=ink, tab=tab, debt=debt, art=art);
 }
 
-// post Art * _ilks_rate(i) <= _ilks_line(i)
-// post debt <= _ilks_line(i)
-// post tab <= ink * _ilks_spot(i)
+// post 0 <= z - (x * y) and z - (x * y) < 2**128
+// @post x * y <= z
 @external
 func frob2{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(i: felt, dink: felt, dart: felt, Art: felt, ink: felt, tab: felt, debt: felt) {
-    alloc_locals;
-
-    let (local ilk_rate) = _ilks_rate.read(i);
-    let (local ilk_line) = _ilks_line.read(i);
-    let (local ilk_spot) = _ilks_spot.read(i);
-
-    // either debt has decreased, or debt ceilings are not exceeded
-    with_attr error_message("Vat/ceiling-exceeded") {
-        let ilk_debt = Art * ilk_rate;
-        let line_ok = is_le(ilk_debt, ilk_line);
-        let Line_ok = is_le(debt, ilk_line);
-        let (lines_ok) = both(line_ok, Line_ok);
-        assert lines_ok = 1;
-    }
-
-    // urn is either less risky than before, or it is safe
-    with_attr error_message("Vat/not-safe") {
-        let brim = ink * ilk_spot;
-        let safe = is_le(tab, brim);
-        assert safe = 1;
-    }
-
+}(x: felt, y: felt, z: felt) {
+    assert is_le_felt(x * y, z) = 1;
     return ();
 }
 
