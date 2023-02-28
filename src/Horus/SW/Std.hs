@@ -7,7 +7,7 @@ import Data.Map (Map)
 import Data.Map qualified as Map (fromList)
 import Data.Text (Text)
 
-import Horus.Expr (Expr (ExitField), Ty (TFelt), (.&&), (.<), (.<=), (.==))
+import Horus.Expr (Expr (ExitField), Ty (TFelt), (.&&), (.<), (.<=), (.==), (.||))
 import Horus.Expr qualified as Expr
 import Horus.Expr.Vars (ap, blockTimestamp, callerAddress, contractAddress, fp, memory, prime, rcBound)
 import Horus.SW.FuncSpec (FuncSpec (..), emptyFuncSpec)
@@ -161,6 +161,16 @@ stdSpecsList =
                   (0 .<= diff .&& diff .< rcBound)
                   (res .== 1)
                   (res .== 0)
+        }
+    )
+  ,
+    ( "starkware.cairo.common.math_cmp.is_le_felt"
+    , emptyFuncSpec
+        { fs_post =
+            let a = memory (fp - 4)
+                b = memory (fp - 3)
+                res = memory (ap - 1)
+             in (res .== 1 .&& a .<= b) .|| (res .== 0 .&& b .< a)
         }
     )
   ,
