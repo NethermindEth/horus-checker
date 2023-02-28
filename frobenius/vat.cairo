@@ -158,23 +158,44 @@ func frob1{
     return (Art=Art, ink=ink, tab=tab, debt=debt, art=art);
 }
 
-// post 0 <= z - (x * y) and z - (x * y) < 2**128
-// @post x * y <= z
+// @post Art * _ilks_rate(i) <= _ilks_line(i)
+// @post debt <= _ilks_line(i)
+// @post tab <= ink * _ilks_spot(i)
 @external
 func frob2{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(x: felt, y: felt, z: felt) {
-    assert is_le_felt(x * y, z) = 1;
+}(i: felt, dink: felt, dart: felt, Art: felt, ink: felt, tab: felt, debt: felt) {
+    alloc_locals;
+
+    let (local ilk_rate) = _ilks_rate.read(i);
+    let (local ilk_line) = _ilks_line.read(i);
+    let (local ilk_spot) = _ilks_spot.read(i);
+
+    // either debt has decreased, or debt ceilings are not exceeded
+    with_attr error_message("Vat/ceiling-exceeded") {
+        let ilk_debt = Art * ilk_rate;
+        let line_ok = is_le_felt(ilk_debt, ilk_line);
+        let Line_ok = is_le_felt(debt, ilk_line);
+        let (lines_ok) = both(line_ok, Line_ok);
+        assert lines_ok = 1;
+    }
+
+    // urn is either less risky than before, or it is safe
+    with_attr error_message("Vat/not-safe") {
+        let brim = ink * ilk_spot;
+        let safe = is_le_felt(tab, brim);
+        assert safe = 1;
+    }
+
     return ();
 }
 
 
-// @pre True
 // @storage_update _gem(i, v) := _gem(i, v) - dink
 // @storage_update _dai(w) := _dai(w) + dtab
 // @storage_update _urns_ink(i, u) := ink
 // @storage_update _urns_art(i, u) := art
-// post art == 0 or _ilks_dust(i) <= tab
+// @post art == 0 or _ilks_dust(i) <= tab
 @external
 func frob3{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -186,7 +207,7 @@ func frob3{
     // urn has no debt, or a non-dusty amount
     with_attr error_message("Vat/dust") {
         let (no_debt) = eq_0(art);
-        let non_dusty = is_le(ilk_dust, tab);
+        let non_dusty = is_le_felt(ilk_dust, tab);
         assert_either(no_debt, non_dusty);
     }
 
