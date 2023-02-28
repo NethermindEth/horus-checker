@@ -191,15 +191,11 @@ func frob2{
 }
 
 
-// @storage_update _gem(i, v) := _gem(i, v) - dink
-// @storage_update _dai(w) := _dai(w) + dtab
-// @storage_update _urns_ink(i, u) := ink
-// @storage_update _urns_art(i, u) := art
 // @post art == 0 or _ilks_dust(i) <= tab
 @external
 func frob3{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt, ink: felt, art: felt, tab: felt, dtab: felt) {
+}(i: felt, u: felt, art: felt, tab: felt) {
     alloc_locals;
 
     let (local ilk_dust) = _ilks_dust.read(i);
@@ -210,6 +206,19 @@ func frob3{
         let non_dusty = is_le_felt(ilk_dust, tab);
         assert_either(no_debt, non_dusty);
     }
+
+    return ();
+}
+
+// @storage_update _gem(i, v) := _gem(i, v) - dink
+// @storage_update _dai(w) := _dai(w) + dtab
+// @storage_update _urns_ink(i, u) := ink
+// @storage_update _urns_art(i, u) := art
+@external
+func frob4{
+    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
+}(i: felt, u: felt, v: felt, w: felt, dink: felt, ink: felt, art: felt, dtab: felt) {
+    alloc_locals;
 
     let (gem) = _gem.read(i, v);
     let gem = gem - dink;
