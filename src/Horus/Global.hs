@@ -370,17 +370,18 @@ solveContract = do
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
   sameFuncName (SolvingInfo _ nameA _ _ _) (SolvingInfo _ nameB _ _ _) = nameA == nameB
 
-  ignorableFuncPrefixes :: [Text]
-  ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
+  -- ignorableFuncPrefixes :: [Text]
+  -- ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
-  isVerifiedIgnorable (SolvingInfo name _ res _ _) = False
+  isVerifiedIgnorable (SolvingInfo _ _ _ _ _) = False
 
   funcPrefixesWhitelist :: [Text]
-  funcPrefixesWhitelist = ["frob2"]
+  funcPrefixesWhitelist = [""]
 
   isWhitelisted :: Identifiers -> Module -> Bool
   isWhitelisted identifiers m = any (`Text.isPrefixOf` trace ("Checking module: " <> Text.unpack moduleName <> " ...") moduleName) funcPrefixesWhitelist
+  -- isWhitelisted identifiers m = any (`Text.isPrefixOf` moduleName) funcPrefixesWhitelist
    where
     (qualifiedFuncName, labelsSummary, oracleSuffix, optimSuffix) = getModuleNameParts identifiers m
     moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimSuffix
