@@ -52,9 +52,6 @@ import Horus.Util (tShow, whenJust)
 
 import Debug.Trace (trace, traceM)
 
-trace' :: Show a => String -> a -> a
-trace' s x = trace (s ++ ": " ++ show x) x
-
 data Config = Config
   { cfg_verbose :: Bool
   , cfg_outputQueries :: Maybe FilePath
@@ -377,7 +374,7 @@ solveContract = do
   isVerifiedIgnorable (SolvingInfo _ _ _ _ _) = False
 
   funcPrefixesWhitelist :: [Text]
-  funcPrefixesWhitelist = [""]
+  funcPrefixesWhitelist = ["frob"]
 
   isWhitelisted :: Identifiers -> Module -> Bool
   isWhitelisted identifiers m = any (`Text.isPrefixOf` trace ("Checking module: " <> Text.unpack moduleName <> " ...") moduleName) funcPrefixesWhitelist
