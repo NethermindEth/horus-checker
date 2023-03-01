@@ -18,7 +18,7 @@ func both(a: felt, b: felt) -> (res: felt) {
     return (0,);
 }
 
-// @post (a == 0 and $Return.res == 1) or ((not (a == 0)) and $Return.res == 0)
+// @post (a == 0 and $Return.res == 1) or (a != 0 and $Return.res == 0)
 func eq_0(a: felt) -> (res: felt) {
     if (a == 0) {
         return (1,);
