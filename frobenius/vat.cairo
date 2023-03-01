@@ -117,10 +117,16 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
 // @post _live() == 1
 // @post _ilks_rate(i) != 0
+// @post $Return.Art == _ilks_Art(i) + dart
+// post $Return.ink == _urns_ink(i, u) + dink
+// post $Return.tab == _ilks_rate(i) * (_urns_art(i, u) + dart)
+// post $Return.dtab == _ilks_rate(i) * dart
+// post $Return.debt == _debt() + _ilks_rate(i) * dart
+// post $Return.art == _urns_art(i, u) + dart
 @external
 func frob1{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) -> (Art: felt, ink: felt, tab: felt, debt: felt, art: felt) {
+}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) -> (Art: felt, ink: felt, tab: felt, dtab: felt, debt: felt, art: felt) {
     alloc_locals;
 
     // We comment these out because we have converted `dink`, `dart` parameters to felts.
@@ -155,7 +161,7 @@ func frob1{
     let debt = debt + dtab;
     _debt.write(debt);
 
-    return (Art=Art, ink=ink, tab=tab, debt=debt, art=art);
+    return (Art=Art, ink=ink, tab=tab, dtab=dtab, debt=debt, art=art);
 }
 
 // @post Art * _ilks_rate(i) <= _ilks_line(i)
@@ -190,12 +196,11 @@ func frob2{
     return ();
 }
 
-
 // @post art == 0 or _ilks_dust(i) <= tab
 @external
 func frob3{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
-}(i: felt, u: felt, art: felt, tab: felt) {
+}(i: felt, art: felt, tab: felt) {
     alloc_locals;
 
     let (local ilk_dust) = _ilks_dust.read(i);
@@ -232,4 +237,43 @@ func frob4{
     _urns_art.write(i, u, art);
 
     return ();
+}
+
+// @declare $Art : felt
+// declare $art : felt
+// declare $dtab : felt
+// declare $tab : felt
+// declare $debt : felt
+// declare $ink : felt
+// @pre $Art == _ilks_Art(i) + dart
+// pre $art == _urns_art(i, u) + dart
+// pre $dtab == _ilks_rate(i) * dart
+// pre $tab == _ilks_rate(i) * $art
+// pre $debt == _debt() + $dtab
+// pre $ink == _urns_ink(i, u) + dink
+// @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
+// @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
+// @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
+// @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
+// @post _live() == 1
+// @post _ilks_rate(i) != 0
+// post $Art * _ilks_rate(i) <= _ilks_line(i)
+// post $debt <= _ilks_line(i)
+// post $tab <= $ink * _ilks_spot(i)
+// post $art == 0 or _ilks_dust(i) <= $tab
+// storage_update _gem(i, v) := _gem(i, v) - dink
+// storage_update _dai(w) := _dai(w) + $dtab
+// storage_update _urns_ink(i, u) := $ink
+// storage_update _urns_art(i, u) := $art
+// @post $Return.Art == _ilks_Art(i) + dart
+@external
+func frobenius{
+    syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
+}(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) -> (Art: felt) {
+    alloc_locals;
+    let (Art, ink, tab, dtab, debt, art) = frob1(i, u, v, w, dink, dart);
+    frob2(i, dink, dart, Art, ink, tab, debt);
+    // frob3(i, art, tab);
+    // frob4(i, u, v, w, dink, ink, art, dtab);
+    return (Art=Art,);
 }
