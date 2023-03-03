@@ -264,7 +264,7 @@ func frob4{
 // @storage_update _gem(i, v) := _gem(i, v) - dink
 // @storage_update _dai(w) := _dai(w) + $dtab
 @external
-func frobenius{
+func frob{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(i: felt, u: felt, v: felt, w: felt, dink: felt, dart: felt) -> () {
     alloc_locals;
