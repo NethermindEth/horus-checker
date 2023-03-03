@@ -100,7 +100,7 @@ data CairoSemanticsF a
   | ResetStack a
   | Top (CallEntry -> a)
   | EnableStorage a
-  | ReadStorage ScopedName [Expr TFelt] (Expr TFelt -> a)
+  | ReadStorage (Maybe Storage) ScopedName [Expr TFelt] (Expr TFelt -> a)
   | UpdateStorage Storage a
   | GetStorage (Storage -> a)
   | Throw Text
@@ -145,8 +145,12 @@ throw t = liftF (Throw t)
 enableStorage :: CairoSemanticsL ()
 enableStorage = liftF (EnableStorage ())
 
-readStorage :: ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
-readStorage name args = liftF (ReadStorage name args id)
+{- | Get an expression for the value of a storage variable with certain
+ arguments given a value of type `Storage`, which represents the state of all
+ storage variables during program execution at some specific point in time.
+-}
+readStorage :: Maybe Storage -> ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
+readStorage storage name args = liftF (ReadStorage storage name args id)
 
 resetStack :: CairoSemanticsL ()
 resetStack = liftF (ResetStack ())
@@ -195,10 +199,31 @@ top :: CairoSemanticsL CallEntry
 top = liftF (Top id)
 
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
-storageRemoval = Expr.transform step
+storageRemoval = storageRemoval' Nothing
+
+{- | Substitute a reference to a storage variable in an expression with its
+ value according to `storage :: Storage`.
+
+ For example, suppose we have a storage variable called `state() : felt`. If
+ we reference this storage variable in the precondition for some function
+ `f`, for example in `// @pre state() ==  5`, then when constructing the
+ assertions to represent this constraint, we must replace the symbolic name
+ `state()` in this expression with an expression for the actual value of the
+ storage variable just before the function `f` is called.
+
+ This substitution is what `storageRemoval'` does, and it does it with
+ respect to the argument `storage :: Maybe Storage`, which represents the
+ state of all storage variables during program execution at a particular
+ point in time.
+
+ Some better names: `resolveStorageReferences`, `resolveStorage`,
+ `expandStorageExpressions`, `substituteStorage`, or `dereferenceStorage`.
+-}
+storageRemoval' :: Maybe Storage -> Expr a -> CairoSemanticsL (Expr a)
+storageRemoval' storage = Expr.transform step
  where
   step :: Expr b -> CairoSemanticsL (Expr b)
-  step (StorageVar name args) = readStorage (ScopedName.fromText name) args
+  step (StorageVar name args) = readStorage storage (ScopedName.fromText name) args
   step e = pure e
 
 substitute :: Text -> Expr TFelt -> Expr a -> Expr a
@@ -264,6 +289,12 @@ encodeModule mdl = case md_spec (moduleData mdl) of
   MSRich spec -> encodeRichSpec mdl spec
   MSPlain spec -> encodePlainSpec mdl spec
 
+{- | Gather the assertions and other state (in the `ConstraintsState` contained
+ in `CairoSemanticsL`) associated with a function specification that contains
+ a storage update.
+
+ Note that `rich` in `RichSpec` means "has a `@storage_update`".
+-}
 encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
 encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   enableStorage
@@ -277,6 +308,9 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
  where
   plainSpec = richToPlainSpec funcSpec
 
+{- | Gather the assertions and other state associated with a storage
+ update-less function specification.
+-}
 encodePlainSpec :: Module -> PlainSpec -> CairoSemanticsL ()
 encodePlainSpec mdl PlainSpec{..} = do
   apStart <- moduleStartAp mdl
@@ -378,6 +412,22 @@ withExecutionCtx ctx action = do
   pop
   pure res
 
+{- | Records in the `ConstraintsState` (and in particular, in `cs_asserts`
+ field) the assertions corresponding with the semantics of `assert_eq` and
+ `call`, and possibly returns a felt expression that represents an FP.
+
+ This is only used in `encodePlainSpec`, and so is essentially a helper function.
+
+ We need this information because sometimes, when we call `getFp` in
+ `encodePlainSpec`, we get a value that is misleading as a result of the
+ optimising modules, which interrupt execution, meaning there may be a
+ missing Cairo `ret`.
+
+ The return value is usually `Nothing` because most functions execute until
+ the end, matching every call with a `ret`. A return value of `Just fp`
+ represents the FP of the function that is on the top of the stack at the
+ point when the execution is interrupted.
+-}
 mkInstructionConstraints ::
   LabeledInst ->
   Label ->
@@ -428,9 +478,12 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
       let pre' = suffixLogicalVariables lvarSuffix pre
           post' = suffixLogicalVariables lvarSuffix post
       preparedPre <- prepare nextPc calleeFp =<< storageRemoval pre'
+      -- Grab the state of all storage variables prior to executing the function body.
+      precedingStorage <- getStorage
       updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
       pop
-      preparedPost <- prepare nextPc calleeFp =<< storageRemoval post'
+      -- Dereference storage variable reads with respect to `precedingStorage`.
+      preparedPost <- prepare nextPc calleeFp =<< storageRemoval' (Just precedingStorage) post'
       -- One would normally expect to see assert (pre -> post).
       -- However, pre will be checked in a separate 'optimising' module and we can therefore simply
       -- assert it holds here. If it does not, the corresponding pre-checking module will fail,
