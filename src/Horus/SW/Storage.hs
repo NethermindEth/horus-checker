@@ -1,12 +1,15 @@
-module Horus.SW.Storage (Storage, read, getWrites, parse, equivalenceExpr) where
+module Horus.SW.Storage (Storage, read, getWrites, parse, equivalenceExpr, syntacticallyEquivalentWritesOfStorage) where
 
 import Prelude hiding (read)
 
 import Data.Aeson (FromJSON (..), Value, withObject, (.:))
 import Data.Aeson.Types (Parser)
 import Data.Coerce (coerce)
+import Data.List (nub)
 import Data.Map (Map)
-import Data.Map qualified as Map (findWithDefault, toList)
+import Data.Map qualified as Map (findWithDefault, foldrWithKey, map, toList)
+import Data.Set (Set)
+import Data.Set qualified as Set
 
 import Horus.Expr (Expr, Ty (..), (.==))
 import Horus.Expr qualified as Expr
@@ -49,6 +52,23 @@ parse v = fmap elimHelpersFromStorage (parseJSON v)
 
 elimHelpersFromStorage :: Map ScopedName [Write] -> Storage
 elimHelpersFromStorage = coerce
+
+{- | Allows us to check for `@storage_update` annotations of the same storage
+ variable within a single function's specification (up to syntactic equality).
+
+ So if you annotate a storage variable whose LHS looks like `state(i + k) := ...`,
+ and then you write another annotation for the same function of the
+ form `state(k + i) := ...`, we are *not* able to detect these as duplicate.
+
+ If we don't do this check, then only the first `@storage_update` annotation
+ will count.
+-}
+syntacticallyEquivalentWritesOfStorage :: Storage -> Set ScopedName
+syntacticallyEquivalentWritesOfStorage =
+  Map.foldrWithKey appendSvarWithSyntEqualArgs Set.empty . Map.map (map fst)
+ where
+  appendSvarWithSyntEqualArgs name args acc =
+    if length (nub args) /= length args then Set.insert name acc else acc
 
 newtype Write = Write ([HSExpr TFelt], HSExpr TFelt)
 

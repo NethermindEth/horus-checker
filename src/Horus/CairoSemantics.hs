@@ -20,8 +20,8 @@ import Data.List.NonEmpty qualified as NonEmpty (head, last, tail, toList)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
 import Data.Maybe (fromMaybe, isJust)
-import Data.Set qualified as Set (Set, member)
-import Data.Text (Text)
+import Data.Set qualified as Set (Set, map, member, null, toAscList)
+import Data.Text (Text, intercalate)
 import Data.Traversable (for)
 import Lens.Micro ((^.), _1)
 
@@ -64,7 +64,7 @@ import Horus.SW.Builtin qualified as Builtin (name)
 import Horus.SW.FuncSpec (FuncSpec (..), FuncSpec', toFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.ScopedName qualified as ScopedName (fromText)
-import Horus.SW.Storage (Storage)
+import Horus.SW.Storage (Storage, syntacticallyEquivalentWritesOfStorage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
 import Horus.Util (enumerate, safeLast, tShow, whenJust, whenJustM)
 
@@ -293,6 +293,8 @@ encodeModule m@Module{..} = case m_spec of
 -}
 encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
 encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
+  unless (Set.null duplicateAccesses) . throw $
+    "Re-declared storage update annotations for: " <> prettyError duplicateAccesses
   enableStorage
   fp <- getFp
   apEnd <- moduleEndAp mdl
@@ -303,6 +305,9 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
     expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec
+  duplicateAccesses = syntacticallyEquivalentWritesOfStorage storage
+  prettyError :: Set.Set ScopedName -> Text
+  prettyError = intercalate ", " . Set.toAscList . Set.map tShow
 
 {- | Gather the assertions and other state associated with a storage
  update-less function specification.

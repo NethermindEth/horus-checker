@@ -1,0 +1,6 @@
+get_balance
+Verified
+
+increase_balance
+Unknown
+Error: Re-declared storage update annotations for: __main__.balance
