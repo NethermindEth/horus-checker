@@ -1,4 +1,4 @@
-module Horus.ContractInfo (ContractInfo (..), mkContractInfo) where
+module Horus.ContractInfo (ContractInfo (..), mkContractInfo, pcToFun) where
 
 import Control.Monad.Except (MonadError (..))
 import Data.Foldable (asum)
@@ -39,6 +39,7 @@ data ContractInfo = ContractInfo
   , ci_labelledInstrs :: [LabeledInst]
   , ci_program :: Program
   , ci_sources :: [(Function, ScopedName, FuncSpec)]
+  , ci_svarSpecs :: Set ScopedName
   , ci_storageVars :: [ScopedName]
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
   , ci_getBuiltinOffsets :: forall m. MonadError Text m => Label -> Builtin -> m (Maybe BuiltinOffsets)
@@ -48,6 +49,12 @@ data ContractInfo = ContractInfo
   , ci_getCallee :: forall m. MonadError Text m => LabeledInst -> m ScopedFunction
   , ci_getRets :: forall m. MonadError Text m => ScopedName -> m [Label]
   }
+
+pcToFun :: Map ScopedName Identifier -> Map Label ScopedFunction
+pcToFun identifiers =
+  Map.fromList
+    [ (pc, ScopedFunction fun pc) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
+    ]
 
 mkContractInfo :: forall m'. MonadError Text m' => ContractDefinition -> m' ContractInfo
 mkContractInfo cd = do
@@ -62,10 +69,11 @@ mkContractInfo cd = do
       { ci_contractDef = cd
       , ci_inlinables = inlinables
       , ci_identifiers = identifiers
-      , ci_functions = pcToFun
+      , ci_functions = pcToFun identifiers
       , ci_labelledInstrs = lInstrs
       , ci_program = program
       , ci_sources = sources
+      , ci_svarSpecs = fromList . Map.keys $ storageVarsSpecs
       , ci_storageVars = storageVarsNames
       , ci_getApTracking = getApTracking
       , ci_getBuiltinOffsets = getBuiltinOffsets
@@ -80,10 +88,6 @@ mkContractInfo cd = do
   debugInfo = p_debugInfo (cd_program cd)
   identifiers = p_identifiers (cd_program cd)
   instructionLocations = di_instructionLocations debugInfo
-  pcToFun =
-    Map.fromList
-      [ (pc, ScopedFunction fun pc) | (fun, idef) <- Map.toList identifiers, Just pc <- [getFunctionPc idef]
-      ]
   program = cd_program cd
   storageVarsNames = storageVarsOfCD cd
 

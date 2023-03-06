@@ -16,6 +16,7 @@ module Horus.FunctionAnalysis
   , storageVarsOfCD
   , isAuxFunc
   , scopedFOfPc
+  , uncheckedScopedFOfPc
   )
 where
 
@@ -45,7 +46,7 @@ import Data.Map qualified as Map
   , toList
   , (!)
   )
-import Data.Maybe (fromMaybe, isNothing, listToMaybe, mapMaybe)
+import Data.Maybe (fromJust, fromMaybe, isNothing, listToMaybe, mapMaybe)
 import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (cd_invariants, cd_program, cd_specs, cd_storageVars))
@@ -211,6 +212,9 @@ scopedFOfPc idents label = ScopedFunction <$> scopedName <*> Just label
       , pc == label
       ]
 
+uncheckedScopedFOfPc :: Identifiers -> Label -> ScopedFunction
+uncheckedScopedFOfPc idents = fromJust . scopedFOfPc idents
+
 labelIdentifiersOfPc :: Identifiers -> Label -> [Identifier]
 labelIdentifiersOfPc idents lblpc =
   [ ident
@@ -283,9 +287,6 @@ isAuxFunc (ScopedFunction fname _) cd =
 sizeOfCall :: Int
 sizeOfCall = 2
 
-hasStorage :: ScopedFunction -> ContractDefinition -> Bool
-hasStorage (ScopedFunction name _) cd = Just 0 == Map.lookup name (cd_storageVars cd)
-
 inlinableFuns :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
 inlinableFuns rows prog cd =
   Map.filterWithKey
@@ -295,7 +296,6 @@ inlinableFuns rows prog cd =
           && notIsAnnotatedLater f
           && not (isWrapper f)
           && not (isAuxFunc f cd)
-          && not (hasStorage f cd)
     )
     functions
  where

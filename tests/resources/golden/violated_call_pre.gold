@@ -1,6 +1,10 @@
+
 transfer
 Verified
 
-main [inlined]
+main Pre<transfer|<root>@8> [inlined]
 False
+
+main:::default [inlined]
+Verified
 
