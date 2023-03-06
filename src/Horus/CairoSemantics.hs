@@ -22,6 +22,7 @@ import Data.Map qualified as Map ((!?))
 import Data.Maybe (fromMaybe, isJust)
 import Data.Set qualified as Set (Set, member)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Traversable (for)
 import Lens.Micro ((^.), _1)
 
@@ -42,7 +43,7 @@ import Horus.Expr.Vars
   , pattern StorageVar
   )
 import Horus.Expr.Vars qualified as Vars
-import Horus.FunctionAnalysis (ScopedFunction (sf_pc))
+import Horus.FunctionAnalysis (ScopedFunction (..))
 import Horus.Instruction
   ( ApUpdate (..)
   , Instruction (..)
@@ -73,7 +74,9 @@ data MemoryVariable = MemoryVariable
   , mv_addrName :: Text
   , mv_addrExpr :: Expr TFelt
   }
-  deriving (Show)
+
+instance Show MemoryVariable where
+  show (MemoryVariable var _ expr) = T.unpack var ++ " : " ++ show expr
 
 data AssertionType
   = PreAssertion
