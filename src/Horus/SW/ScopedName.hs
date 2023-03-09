@@ -1,4 +1,4 @@
-module Horus.SW.ScopedName (ScopedName (..), StorageUpdateKey (..), fromText, toText) where
+module Horus.SW.ScopedName (ScopedName (..), StorageUpdateKey (..), dropMain, fromText, toText) where
 
 import Data.Aeson (FromJSON (..), FromJSONKey (..), FromJSONKeyFunction (..), withText)
 import Data.Aeson.Types (Parser)
@@ -9,6 +9,11 @@ import Text.Read (readMaybe)
 
 newtype ScopedName = ScopedName {sn_path :: [Text]} deriving (Eq, Ord)
 data StorageUpdateKey = StorageUpdateKey [Text] Int deriving (Eq, Ord)
+
+-- | Remove the `__main__` prefix from top-level function names.
+dropMain :: ScopedName -> ScopedName
+dropMain (ScopedName ("__main__" : xs)) = ScopedName xs
+dropMain name = name
 
 {- | An aeson parser for the keys of the `"storage_update"` object in the
     `spec.json` file emitted by the compiler.
@@ -27,11 +32,11 @@ parseStorageUpdateKey :: Text -> Parser StorageUpdateKey
 parseStorageUpdateKey s
   | [dottedName, idx] <- Text.splitOn " " s
   , Just i <- readMaybe (Text.unpack idx) =
-      pure $ StorageUpdateKey (Text.splitOn "." dottedName) i
+      pure $ StorageUpdateKey (sn_path . dropMain . fromText $ dottedName) i
   | otherwise = fail $ "Expected something of the form '<scopedName> <idx>', but got:" <> show s
 
 fromText :: Text -> ScopedName
-fromText scope = ScopedName (Text.splitOn "." scope)
+fromText scope = ScopedName (sn_path . dropMain . fromText $ scope)
 
 toText :: ScopedName -> Text
 toText = Text.intercalate "." . sn_path
