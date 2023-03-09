@@ -33,7 +33,7 @@ parseStorageUpdateKey s
   | otherwise = fail $ "Expected something of the form '<scopedName> <idx>', but got:" <> show s
 
 fromText :: Text -> ScopedName
-fromText scope = ScopedName (Text.splitOn "." scope)
+fromText scope = ScopedName (dropMain $ Text.splitOn "." scope)
 
 toText :: ScopedName -> Text
 toText = Text.intercalate "." . sn_path
