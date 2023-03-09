@@ -46,26 +46,12 @@ struct Urn {
 }
 
 @storage_var
-func _ilks_Art(i: felt) -> (res: felt) {
-}
-@storage_var
-func _ilks_rate(i: felt) -> (res: felt) {
-}
-@storage_var
-func _ilks_spot(i: felt) -> (res: felt) {
-}
-@storage_var
-func _ilks_line(i: felt) -> (res: felt) {
-}
-@storage_var
-func _ilks_dust(i: felt) -> (res: felt) {
+func _ilks(i: felt) -> (ilk: Ilk) {
 }
 
+// mapping (bytes32 => mapping (address => Urn )) public urns;
 @storage_var
-func _urns_ink(i: felt, u: felt) -> (res: felt) {
-}
-@storage_var
-func _urns_art(i: felt, u: felt) -> (res: felt) {
+func _urns(i: felt, u: felt) -> (urn: Urn) {
 }
 
 @storage_var
@@ -99,10 +85,10 @@ func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     return (res,);
 }
 
+// N.B.: We cannot spec this without revert semantics!
 // @pre True
-// @post _live() == 1
+// @post True
 func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() {
-    // require(live == 1, "Vat/not-live");
     with_attr error_message("Vat/not-live") {
         let (live) = _live.read();
         assert live = 1;
@@ -111,18 +97,18 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
     return ();
 }
 
-// @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
-// @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
-// @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
-// @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
-// @post _live() == 1
-// @post _ilks_rate(i) != 0
-// @post $Return.Art == _ilks_Art(i) + dart
-// @post $Return.ink == _urns_ink(i, u) + dink
-// @post $Return.tab == _ilks_rate(i) * (_urns_art(i, u) + dart)
-// @post $Return.dtab == _ilks_rate(i) * dart
-// @post $Return.debt == _debt() + _ilks_rate(i) * dart
-// @post $Return.art == _urns_art(i, u) + dart
+// @storage_update _ilks(i).ilk.Art := _ilks(i).ilk.Art + dart
+// @storage_update _urns(i, u).urn.ink := _urns(i, u).urn.ink + dink
+// @storage_update _urns(i, u).urn.art := _urns(i, u).urn.art + dart
+// @storage_update _debt().debt := _debt().debt + (_ilks(i).ilk.rate * dart)
+// @post _live().live == 1
+// @post _ilks(i).ilk.rate != 0
+// @post $Return.Art == _ilks(i).ilk.Art + dart
+// @post $Return.ink == _urns(i, u).urn.ink + dink
+// @post $Return.tab == _ilks(i).ilk.rate * (_urns(i, u).urn.art + dart)
+// @post $Return.dtab == _ilks(i).ilk.rate * dart
+// @post $Return.debt == _debt().debt + _ilks(i).ilk.rate * dart
+// @post $Return.art == _urns(i, u).urn.art + dart
 @external
 func frob1{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -136,26 +122,22 @@ func frob1{
     // system is live
     require_live();
 
-    let (urn_ink) = _urns_ink.read(i, u);
-    let (urn_art) = _urns_art.read(i, u);
-    let (local ilk_rate) = _ilks_rate.read(i);
-    let (local ilk_dust) = _ilks_dust.read(i);
-    let (local ilk_Art) = _ilks_Art.read(i);
+    let (urn) = _urns.read(i, u);
+    let (local ilk) = _ilks.read(i);
 
     with_attr error_message("Vat/ilk-not-init") {
-        assert_not_zero(ilk_rate);
+        assert_not_zero(ilk.rate);
     }
 
-    let ink = urn_ink + dink;
-    let art = urn_art + dart;
-    _urns_ink.write(i, u, ink);
-    _urns_art.write(i, u, art);
+    let ink = urn.ink + dink;
+    let art = urn.art + dart;
+    _urns.write(i, u, Urn(ink, art));
 
-    let Art = ilk_Art + dart;
-    _ilks_Art.write(i, Art);
+    let Art = ilk.Art + dart;
+    _ilks.write(i, Ilk(Art, ilk.rate, ilk.spot, ilk.line, ilk.dust));
 
-    let dtab = ilk_rate * dart;
-    let tab = ilk_rate * art;
+    let dtab = ilk.rate * dart;
+    let tab = ilk.rate * art;
 
     let (debt) = _debt.read();
     let debt = debt + dtab;
@@ -164,31 +146,29 @@ func frob1{
     return (Art=Art, ink=ink, tab=tab, dtab=dtab, debt=debt, art=art);
 }
 
-// @post Art * _ilks_rate(i) <= _ilks_line(i)
-// @post debt <= _ilks_line(i)
-// @post tab <= ink * _ilks_spot(i)
+// @post Art * _ilks(i).ilk.rate <= _ilks(i).ilk.line
+// @post debt <= _ilks(i).ilk.line
+// @post tab <= ink * _ilks(i).ilk.spot
 @external
 func frob2{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(i: felt, dink: felt, dart: felt, Art: felt, ink: felt, tab: felt, debt: felt) {
     alloc_locals;
 
-    let (local ilk_rate) = _ilks_rate.read(i);
-    let (local ilk_line) = _ilks_line.read(i);
-    let (local ilk_spot) = _ilks_spot.read(i);
+    let (local ilk) = _ilks.read(i);
 
     // either debt has decreased, or debt ceilings are not exceeded
     with_attr error_message("Vat/ceiling-exceeded") {
-        let ilk_debt = Art * ilk_rate;
-        let line_ok = is_le_felt(ilk_debt, ilk_line);
-        let Line_ok = is_le_felt(debt, ilk_line);
+        let ilk_debt = Art * ilk.rate;
+        let line_ok = is_le_felt(ilk_debt, ilk.line);
+        let Line_ok = is_le_felt(debt, ilk.line);
         let (lines_ok) = both(line_ok, Line_ok);
         assert lines_ok = 1;
     }
 
     // urn is either less risky than before, or it is safe
     with_attr error_message("Vat/not-safe") {
-        let brim = ink * ilk_spot;
+        let brim = ink * ilk.spot;
         let safe = is_le_felt(tab, brim);
         assert safe = 1;
     }
@@ -196,29 +176,29 @@ func frob2{
     return ();
 }
 
-// @post art == 0 or _ilks_dust(i) <= tab
+// @post art == 0 or _ilks(i).ilk.dust <= tab
 @external
 func frob3{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
 }(i: felt, art: felt, tab: felt) {
     alloc_locals;
 
-    let (local ilk_dust) = _ilks_dust.read(i);
+    let (local ilk) = _ilks.read(i);
 
     // urn has no debt, or a non-dusty amount
     with_attr error_message("Vat/dust") {
         let (no_debt) = eq_0(art);
-        let non_dusty = is_le_felt(ilk_dust, tab);
+        let non_dusty = is_le_felt(ilk.dust, tab);
         assert_either(no_debt, non_dusty);
     }
 
     return ();
 }
 
-// @storage_update _gem(i, v) := _gem(i, v) - dink
-// @storage_update _dai(w) := _dai(w) + dtab
-// @storage_update _urns_ink(i, u) := ink
-// @storage_update _urns_art(i, u) := art
+// @storage_update _gem(i, v).gem := _gem(i, v).gem - dink
+//  storage_update _dai(w).dai := _dai(w).dai + dtab
+//  storage_update _urns(i, u).urn.ink := ink
+//  storage_update _urns(i, u).urn.art := art
 @external
 func frob4{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -231,10 +211,9 @@ func frob4{
 
     let (dai) = _dai.read(w);
     let dai = dai + dtab;
-    _dai.write(w, dai);
+    // _dai.write(w, dai);
 
-    _urns_ink.write(i, u, ink);
-    _urns_art.write(i, u, art);
+    // _urns.write(i, u, Urn(ink, art));
 
     return ();
 }
@@ -245,24 +224,24 @@ func frob4{
 // @declare $tab : felt
 // @declare $debt : felt
 // @declare $ink : felt
-// @pre $Art == _ilks_Art(i) + dart
-// @pre $art == _urns_art(i, u) + dart
-// @pre $dtab == _ilks_rate(i) * dart
-// @pre $tab == _ilks_rate(i) * $art
-// @pre $debt == _debt() + $dtab
-// @pre $ink == _urns_ink(i, u) + dink
-// @storage_update _ilks_Art(i) := _ilks_Art(i) + dart
-// @storage_update _urns_ink(i, u) := _urns_ink(i, u) + dink
-// @storage_update _urns_art(i, u) := _urns_art(i, u) + dart
-// @storage_update _debt() := _debt() + (_ilks_rate(i) * dart)
-// @post _live() == 1
-// @post _ilks_rate(i) != 0
-// @post $Art * _ilks_rate(i) <= _ilks_line(i)
-// @post $debt <= _ilks_line(i)
-// @post $tab <= $ink * _ilks_spot(i)
-// @post $art == 0 or _ilks_dust(i) <= $tab
-// @storage_update _gem(i, v) := _gem(i, v) - dink
-// @storage_update _dai(w) := _dai(w) + $dtab
+// @pre $Art == _ilks(i).ilk.Art + dart
+// @pre $art == _urns(i, u).urn.art + dart
+// @pre $dtab == _ilks(i).ilk.rate * dart
+// @pre $tab == _ilks(i).ilk.rate * $art
+// @pre $debt == _debt().debt + $dtab
+// @pre $ink == _urns(i, u).urn.ink + dink
+// @storage_update _ilks(i).ilk.Art := _ilks(i).ilk.Art + dart
+// @storage_update _urns(i, u).urn.ink := _urns(i, u).urn.ink + dink
+// @storage_update _urns(i, u).urn.art := _urns(i, u).urn.art + dart
+// @storage_update _debt().debt := _debt().debt + (_ilks(i).ilk.rate * dart)
+// @post _live().live == 1
+// @post _ilks(i).ilk.rate != 0
+// @post $Art * _ilks(i).ilk.rate <= _ilks(i).ilk.line
+// @post $debt <= _ilks(i).ilk.line
+// @post $tab <= $ink * _ilks(i).ilk.spot
+// @post $art == 0 or _ilks(i).ilk.dust <= $tab
+// @storage_update _gem(i, v).gem := _gem(i, v).gem - dink
+// @storage_update _dai(w).dai := _dai(w).dai + $dtab
 @external
 func frob{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
