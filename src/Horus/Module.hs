@@ -10,6 +10,9 @@ module Horus.Module
   , richToPlainSpec
   , isOptimising
   , dropMain
+  , moduleData
+  , ModuleData (..)
+  , moduleOptimisesPreForF
   )
 where
 
@@ -21,7 +24,6 @@ import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, map, null, toList)
-import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
@@ -43,14 +45,18 @@ import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 
-data Module = Module
-  { m_spec :: ModuleSpec
-  , m_prog :: [LabeledInst]
-  , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
-  , m_calledF :: Label
-  , m_lastPc :: (CallStack, Label)
-  , m_optimisesF :: Maybe (CallStack, ScopedFunction)
+data ModuleData = ModuleData
+  { md_spec :: ModuleSpec
+  , md_prog :: [LabeledInst]
+  , md_jnzOracle :: Map (NonEmpty Label, Label) Bool
+  , md_calledF :: Label
+  , md_lastPc :: (CallStack, Label)
   }
+  deriving stock (Show)
+
+data Module
+  = StandardModule ModuleData
+  | OptimisingModule ModuleData (CallStack, ScopedFunction)
   deriving stock (Show)
 
 data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
@@ -59,8 +65,17 @@ data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
 data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
   deriving stock (Show)
 
+moduleData :: Module -> ModuleData
+moduleData (StandardModule md) = md
+moduleData (OptimisingModule md _) = md
+
+moduleOptimisesPreForF :: Module -> Maybe (CallStack, ScopedFunction)
+moduleOptimisesPreForF (StandardModule _) = Nothing
+moduleOptimisesPreForF (OptimisingModule _ f) = Just f
+
 isOptimising :: Module -> Bool
-isOptimising = isJust . m_optimisesF
+isOptimising (StandardModule _) = False
+isOptimising (OptimisingModule _ _) = True
 
 richToPlainSpec :: FuncSpec -> PlainSpec
 richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
@@ -193,7 +208,7 @@ descrOfOracle oracle =
  it does not contain the rest of the labels.
 -}
 getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
-getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
+getModuleNameParts idents mdl =
   case beginOfModule prog of
     Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
@@ -202,10 +217,11 @@ getModuleNameParts idents (Module spec prog oracle calledF _ optimisesF) =
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, optimisingSuffix)
  where
+  (ModuleData spec prog oracle calledF _) = moduleData mdl
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
-  optimisingSuffix = case optimisesF of
-    Nothing -> ""
-    Just (callstack, f) ->
+  optimisingSuffix = case mdl of
+    StandardModule _ -> ""
+    OptimisingModule _ (callstack, f) ->
       let fName = toText . ScopedName . dropMain . sn_path . sf_scopedName $ f
           stack = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
        in " Pre<" <> fName <> "|" <> stack <> ">"
@@ -266,12 +282,52 @@ extractPlainBuilder fs@(FuncSpec _pre _post state)
 gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
 
+{- | This function represents a depth first search through the CFG that uses as sentinels
+(for where to begin and where to end) assertions in nodes, such that nodes that are not annotated
+are traversed without stopping the search, gathering labels from respective edges that
+represent instructions and concatenating them into final Modules, that are subsequently
+transformed into actual *.smt2 queries.
+
+Thus, a module can comprise of 0 to several segments, where the precondition of the module
+is the annotation of the node 'begin' that begins the first segment, the postcondition of the module
+is the annotation of the node 'end' that ends the last segment and instructions of the module
+are a concatenation of edge labels for the given path through the graph from 'begin' to 'end'.
+
+Note that NO node with an annotation can be encountered in the middle of one such path,
+because annotated nodes are sentinels and the search would terminate.
+
+We distinguish between plain and rich modules.
+A plain module is a self-contained 'sub-program' with its own semantics that is referentially pure
+in the sense that it has no side-effects on the environment, i.e. does not access storage variables.
+
+A rich module is very much like a plain module except it allows side effects,
+i.e. accesses to storage variables.
+-}
 gatherFromSource :: CFG -> Function -> FuncSpec -> ModuleL ()
 gatherFromSource cfg function fSpec = do
   let verticesAtFuPc = verticesLabelledBy cfg $ fu_pc function
   for_ verticesAtFuPc $ \v ->
     visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing
  where
+  {- Revisiting nodes (thus looping) within the CFG is verboten in all cases but one,
+     specifically when we are jumping back to a label that is annotated with an invariant 'inv'.
+     In this case, we pretend that the 'begin' and 'end' is the same node, both of which
+     annotated with 'inv'.
+
+     Thus, visit needs a way to keep track of nodes that have already been visited. However,
+     it is important to note that it is not sufficient to keep track of which program counters
+     we have touched in the CFG, as there are several ways to 'validly' revisit the same PC
+     without loopy behaviour, most prominently stemming from existence of ifs that converge
+     on the same path and presence of inlining where the same function can be called multiple times.
+
+     In order to distinguish valid nodes in this context, we need the oracle for ifs as described in
+     the docs of getModuleNameParts and we need the callstack which keeps track of inlined functions
+     in very much the same way as 'normal' callstacks work, thus allowing us to identify
+     whether the execution of the current function is unique, or being revisited through
+     a 'wrong' path through the CFG.
+
+     Oracles need a bit of extra information about which booltest passed - in the form of ArcCondition
+     and CallStack needs a bit of extra information about when call/ret are called, in the form of FInfo. -}
   visit ::
     Map (NonEmpty Label, Label) Bool ->
     CallStack ->
@@ -309,20 +365,22 @@ gatherFromSource cfg function fSpec = do
     oracle' = updateOracle arcCond callstack' oracle
     assertions = map snd (cfg_assertions cfg ^. ix v)
     onFinalNode = null (cfg_arcs cfg ^. ix v)
-    emitPlain pre post = emit . MSPlain $ PlainSpec pre post
-    emitRich pre post = emit . MSRich . FuncSpec pre post $ fs_storage fSpec
 
-    emit spec =
-      emitModule
-        ( Module spec acc oracle' (fu_pc function) (callstack', l) executionContextOfOptimisedF
-        )
+    optimisingStackFrame = (fCallerPc, fCalledF)
      where
-      optimisingStackFrame = (fCallerPc, fCalledF)
-       where
-        laballedCall@(fCallerPc, _) = last acc
-        fCalledF = uncheckedCallDestination laballedCall
-      executionContextOfOptimisedF =
-        (push optimisingStackFrame callstack',) <$> v_optimisesF v
+      laballedCall@(fCallerPc, _) = last acc
+      fCalledF = uncheckedCallDestination laballedCall
+    optimContext =
+      (push optimisingStackFrame callstack',) <$> v_optimisesF v
+
+    emitPlain pre post = emit optimContext . MSPlain $ PlainSpec pre post
+    emitRich pre post = emit optimContext . MSRich . FuncSpec pre post $ fs_storage fSpec
+
+    emit mbTrace spec = case mbTrace of
+      Nothing -> emitModule (StandardModule md)
+      Just trace -> emitModule (OptimisingModule md trace)
+     where
+      md = ModuleData spec acc oracle' (fu_pc function) (callstack', l)
 
     visitArcs newOracle acc' pre v' = do
       let outArcs = cfg_arcs cfg ^. ix v'
