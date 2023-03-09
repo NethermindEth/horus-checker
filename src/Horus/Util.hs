@@ -13,6 +13,7 @@ module Horus.Util
   , invert
   , eqT'
   , atMay
+  , dropMain
   )
 where
 
@@ -26,6 +27,12 @@ import Data.Some (Some (..))
 import Data.Text (Text, pack)
 import Data.Text qualified as Text
 import Data.Typeable (Typeable, eqT)
+
+-- | Remove the `__main__` prefix from top-level function names.
+dropMain :: [Text] -> [Text]
+dropMain [] = []
+dropMain ("__main__" : xs) = xs
+dropMain xs = xs
 
 toSignedFelt :: Integer -> Integer -> Integer
 toSignedFelt fPrime x

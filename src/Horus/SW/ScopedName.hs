@@ -7,6 +7,8 @@ import Data.Text (Text)
 import Data.Text qualified as Text
 import Text.Read (readMaybe)
 
+import Horus.Util (dropMain)
+
 newtype ScopedName = ScopedName {sn_path :: [Text]} deriving (Eq, Ord)
 data StorageUpdateKey = StorageUpdateKey [Text] Int deriving (Eq, Ord)
 
@@ -27,7 +29,7 @@ parseStorageUpdateKey :: Text -> Parser StorageUpdateKey
 parseStorageUpdateKey s
   | [dottedName, idx] <- Text.splitOn " " s
   , Just i <- readMaybe (Text.unpack idx) =
-    pure $ StorageUpdateKey (Text.splitOn "." dottedName) i
+    pure $ StorageUpdateKey (dropMain $ Text.splitOn "." dottedName) i
   | otherwise = fail $ "Expected something of the form '<scopedName> <idx>', but got:" <> show s
 
 fromText :: Text -> ScopedName

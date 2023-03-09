@@ -9,7 +9,6 @@ module Horus.Module
   , PlainSpec (..)
   , richToPlainSpec
   , isOptimising
-  , dropMain
   )
 where
 
@@ -42,6 +41,7 @@ import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
+import Horus.Util (dropMain)
 
 data Module = Module
   { m_spec :: ModuleSpec
@@ -76,12 +76,6 @@ labelNamesOfPc idents lblpc =
   , Just pc <- [getFunctionPc ident <|> getLabelPc ident]
   , pc == lblpc
   ]
-
--- | Remove the `__main__` prefix from top-level function names.
-dropMain :: [Text] -> [Text]
-dropMain [] = []
-dropMain ("__main__" : xs) = xs
-dropMain xs = xs
 
 {- | Summarize a list of labels for a function.
 
