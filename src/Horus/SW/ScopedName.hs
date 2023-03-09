@@ -3,7 +3,7 @@ module Horus.SW.ScopedName (ScopedName (..), fromText, toText, mainScope) where
 import Data.Aeson (FromJSON (..), FromJSONKey (..), FromJSONKeyFunction (..), withText)
 import Data.String (IsString (..))
 import Data.Text (Text, pack, unpack)
-import Data.Text qualified as Text (intercalate, splitOn)
+import Data.Text qualified as Text
 
 mainScope :: Text
 mainScope = "__main__"

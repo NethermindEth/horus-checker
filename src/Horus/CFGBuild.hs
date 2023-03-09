@@ -125,8 +125,8 @@ liftF' = CFGBuildL . liftF
 addVertex :: Label -> CFGBuildL Vertex
 addVertex l = liftF' (AddVertex l Nothing id)
 
-addOptimizingVertex :: Label -> ScopedFunction -> CFGBuildL Vertex
-addOptimizingVertex l f = liftF' (AddVertex l (Just f) id)
+addOptimisingVertex :: Label -> ScopedFunction -> CFGBuildL Vertex
+addOptimisingVertex l f = liftF' (AddVertex l (Just f) id)
 
 addArc :: Vertex -> Vertex -> [LabeledInst] -> ArcCondition -> FInfo -> CFGBuildL ()
 addArc vFrom vTo insts test f = liftF' (AddArc vFrom vTo insts test f ())
@@ -155,11 +155,17 @@ getSvarSpecs = liftF' (GetSvarSpecs id)
 getVerts :: Label -> CFGBuildL [Vertex]
 getVerts l = liftF' (GetVerts l id)
 
--- It is enforced that for any one PC, one can add at most a single salient vertex
+{- | Saliant vertices can be thought of as 'main' vertices of the CFG, meaning that
+if one wants to reason about flow control of the program, one should query salient vertices.
+
+Certain program transformations and optimisations can add various additional nodes into the CFG,
+whose primary purpose is not to reason about control flow.
+
+It is enforced that for any one PC, one can add at most a single salient vertex.
+-}
 getSalientVertex :: Label -> CFGBuildL Vertex
 getSalientVertex l = do
   verts <- filter (not . isOptimising) <$> getVerts l
-  -- This can be at most one, so len <> 1 implies there are no vertices
   case verts of
     [vert] -> pure vert
     _ -> throw $ "No vertex with label: " <> tShow l
@@ -192,9 +198,14 @@ segmentInsts (Segment ne) = toList ne
 buildFrame :: Set ScopedFunction -> [LabeledInst] -> Program -> CFGBuildL ()
 buildFrame inlinables rows prog = do
   let segments = breakIntoSegments (programLabels rows $ p_identifiers prog) rows
+  -- It is necessary to add all vertices prior to calling `addArcsFrom`.
   segmentsWithVerts <- for segments $ \s -> addVertex (segmentLabel s) <&> (s,)
-  for_ segmentsWithVerts $ \(s, v) -> addArcsFrom inlinables prog rows s v True
+  for_ segmentsWithVerts . uncurry $ addArcsFrom inlinables prog rows
 
+{- | A simple procedure for splitting a stream of instructions into nonempty Segments based
+on program labels, which more-or-less correspond with changes in control flow in the program.
+We thus obtain linear segments of instructions without control flow.
+-}
 breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
 breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
@@ -209,29 +220,25 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
 addArc' :: Vertex -> Vertex -> [LabeledInst] -> CFGBuildL ()
 addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
 
-addArcsFrom :: Set ScopedFunction -> Program -> [LabeledInst] -> Segment -> Vertex -> Bool -> CFGBuildL ()
-addArcsFrom inlinables prog rows seg@(Segment s) vFrom optimiseWithSplit
+{- | This function adds arcs (edges) into the CFG and labels them with instructions that are
+to be executed when traversing from one vertex to another.
+
+Currently, we do not have an optimisation post-processing pass in Horus and we therefore
+also include an optimisation here that generates an extra vertex in order to implement
+separate checking of preconditions for abstracted functions.
+-}
+addArcsFrom :: Set ScopedFunction -> Program -> [LabeledInst] -> Segment -> Vertex -> CFGBuildL ()
+addArcsFrom inlinables prog rows seg@(Segment s) vFrom
   | Call <- i_opCode endInst =
-      let callee = uncheckedScopedFOfPc (p_identifiers prog) (uncheckedCallDestination lInst)
-       in do
-            if callee `Set.member` inlinables
-              then do
-                salientCalleeV <- getSalientVertex (sf_pc callee)
-                addArc vFrom salientCalleeV insts ACNone . Just $ ArcCall endPc (sf_pc callee)
-              else do
-                salientLinearV <- getSalientVertex (nextSegmentLabel seg)
-                addArc' vFrom salientLinearV insts
-                svarSpecs <- getSvarSpecs
-                when (optimiseWithSplit && sf_scopedName callee `Set.notMember` svarSpecs) $ do
-                  -- Suppose F calls G where G has a precondition. We synthesize an extra module
-                  -- Pre(F) -> Pre(G) to check whether Pre(G) holds. The standard module for F
-                  -- is then Pre(F) -> Post(F) (conceptually, unless there's a split in the middle, etc.),
-                  -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
-                  -- been checked by the module induced by the ghost vertex.
-                  ghostV <- addOptimizingVertex (nextSegmentLabel seg) callee
-                  pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
-                  addAssertion ghostV $ quantifyEx pre
-                  addArc' vFrom ghostV insts
+      -- An inlined call pretends as though the stream of instructions continues without breaking
+      -- through the function being inlined.
+
+      -- An abstracted call does not break control flow and CONCEPTUALLY asserts 'pre implies post'.
+      -- Conceptually is the operative word here because due to the way that APs 'flow'
+      -- in the program thus making the actual implication unnecessary plus the existance
+      -- of the optimisation in optimiseCheckingOfPre makes it such that the pre is checked
+      -- in a separate module.
+      if callee `Set.member` inlinables then beginInlining else abstractOver
   | Ret <- i_opCode endInst =
       -- Find the function corresponding to `endPc` and lookup its label. If we
       -- found the label, add arcs for each caller.
@@ -256,6 +263,45 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom optimiseWithSplit
   insts = segmentInsts seg
   inlinableLabels = Set.map sf_pc inlinables
 
+  callee = uncheckedScopedFOfPc (p_identifiers prog) (uncheckedCallDestination lInst)
+
+  beginInlining = do
+    salientCalleeV <- getSalientVertex (sf_pc callee)
+    addArc vFrom salientCalleeV insts ACNone . Just $ ArcCall endPc (sf_pc callee)
+
+  optimiseCheckingOfPre = do
+    -- Suppose F calls G where G has a precondition. We synthesize an extra module
+    -- Pre(F) -> Pre(G) to check whether Pre(G) holds. The standard module for F
+    -- is then Pre(F) -> Post(F) (conceptually, unless there's a split in the middle, etc.),
+    -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
+    -- been checked by the module induced by the ghost vertex.
+    ghostV <- addOptimisingVertex (nextSegmentLabel seg) callee
+    pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
+
+    -- Important note on the way we deal with logical variables. These are @declare-d and
+    -- their values can be bound in preconditions. They generate existentials which only occur
+    -- in our models here and require special treatment, in addition to being somewhat
+    -- difficult for SMT checkers to deal with.
+
+    -- First note that these preconditions now become optimising-module postconditions.
+    -- We existentially quantify all logical variables present in the expression, thus in the
+    -- following example:
+    -- func foo:
+    --   call bar // where bar refers to $my_logical_var
+    -- We get an optimising module along the lines of:
+    -- Pre(foo) -> Pre(bar) where Pre(bar) contains \exists my_logical_var, ...
+    -- We can then check whether this instantiation exists in the optimising module exclusively.
+    -- The module that then considers that pre holds as a fact now has the luxury of not having
+    -- to deal with existential quantifiers, as it can simply 'declare' them as free variables.
+    addAssertion ghostV $ quantifyEx pre
+    addArc' vFrom ghostV insts
+
+  abstractOver = do
+    salientLinearV <- getSalientVertex (nextSegmentLabel seg)
+    addArc' vFrom salientLinearV insts
+    svarSpecs <- getSvarSpecs
+    when (sf_scopedName callee `Set.notMember` svarSpecs) optimiseCheckingOfPre
+
   addRetArc :: Label -> CFGBuildL ()
   addRetArc pc = do
     retV <- getSalientVertex endPc
@@ -274,6 +320,7 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom optimiseWithSplit
     let lvars = gatherLogicalVariables expr
      in foldr Expr.ExistsFelt expr lvars
 
+-- | This function labels appropriate vertices (at 'ret'urns) with their respective postconditions.
 addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
 addAssertions inlinables identifiers = do
   for_ (Map.toList identifiers) $ \(idName, def) -> case def of
@@ -284,6 +331,8 @@ addAssertions inlinables identifiers = do
             post <- fs'_post <$> getFuncSpec func
             retVs <- mapM getSalientVertex =<< getRets idName
             case (pre, post) of
+              -- (Nothing, Nothing) means the function has no pre nor post. We refrain from
+              -- adding Pre := True and Post := True in case the function can be inlined.
               (Nothing, Nothing) ->
                 when (fu_pc f `Set.notMember` Set.map sf_pc inlinables) $
                   for_ retVs (`addAssertion` mkPost Expr.True)

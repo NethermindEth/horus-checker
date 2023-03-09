@@ -39,7 +39,7 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
+import Horus.Module (Module (..), ModuleData (md_calledF, md_prog), ModuleL, gatherModules, getModuleNameParts, moduleData, moduleOptimisesPreForF)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
@@ -159,7 +159,8 @@ makeModules (cfg, allow) =
     =<< getSources
 
 extractConstraints :: Module -> GlobalL ConstraintsState
-extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (encodeModule mdl)
+extractConstraints mdl =
+  runCairoSemanticsL (initialWithFunc . md_calledF . moduleData $ mdl) (encodeModule mdl)
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
@@ -196,7 +197,7 @@ solveModule m = do
   identifiers <- getIdentifiers
   let (qualifiedFuncName, labelsSummary, oracleSuffix, optimisingSuffix) = getModuleNameParts identifiers m
       moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimisingSuffix
-      inlinable = m_calledF m `elem` Set.map sf_pc inlinables
+      inlinable = md_calledF (moduleData m) `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
   pure
     SolvingInfo
@@ -204,7 +205,7 @@ solveModule m = do
       , si_funcName = qualifiedFuncName
       , si_result = result
       , si_inlinable = inlinable
-      , si_optimisesF = m_optimisesF m
+      , si_optimisesF = moduleOptimisesPreForF m
       }
  where
   mkResult :: Text -> GlobalL HorusResult
@@ -253,7 +254,7 @@ removeMathSAT :: Module -> GlobalL a -> GlobalL a
 removeMathSAT m run = do
   conf <- getConfig
   let solver = cfg_solver conf
-  usesLvars <- or <$> traverse instUsesLvars (m_prog m)
+  usesLvars <- or <$> traverse instUsesLvars (md_prog (moduleData m))
   if includesMathsat solver && usesLvars
     then do
       let solver' = filterMathsat solver

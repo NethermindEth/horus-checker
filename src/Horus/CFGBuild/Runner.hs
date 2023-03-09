@@ -27,6 +27,12 @@ import Horus.FunctionAnalysis (FInfo)
 
 type Impl = ReaderT ContractInfo (ExceptT Text (State CFG))
 
+{- | This represents a quasi Control Flow Graph.
+
+Normally, they store instructions in nodes and edges represent flow control / jumps.
+In our case, we store instructions in edges and nodes represent points of program
+with associated logical assertions - preconditions, postconditions and invariants.
+-}
 data CFG = CFG
   { cfg_vertices :: [Vertex]
   , cfg_arcs :: Map Vertex [(Vertex, [LabeledInst], ArcCondition, FInfo)]
