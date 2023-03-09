@@ -28,7 +28,6 @@ import Lens.Micro ((^.), _1)
 import Horus.CallStack as CS (CallEntry, CallStack)
 import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
-import Horus.Expr qualified as TSMT
 import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
 import Horus.Expr.Vars
   ( builtinAligned
@@ -57,7 +56,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (Module (..), ModuleSpec (..), PlainSpec (..), isOptimising, richToPlainSpec)
+import Horus.Module (Module (..), ModuleData (ModuleData, md_lastPc, md_prog, md_spec), ModuleSpec (..), PlainSpec (..), isOptimising, moduleData, moduleOptimisesPreForF, richToPlainSpec)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
@@ -105,7 +104,8 @@ data CairoSemanticsF a
   | UpdateStorage Storage a
   | GetStorage (Storage -> a)
   | Throw Text
-  deriving stock (Functor)
+
+deriving instance Functor CairoSemanticsF
 
 type CairoSemanticsL = F CairoSemanticsF
 
@@ -248,17 +248,21 @@ getFp :: CairoSemanticsL (Expr TFelt)
 getFp = getFp' Nothing
 
 moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
-moduleStartAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
-moduleStartAp Module{m_prog = (pc0, _) : _} = getAp pc0
+moduleStartAp mdl =
+  case md_prog (moduleData mdl) of
+    [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
+    (pc0, _) : _ -> getAp pc0
 
 moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
-moduleEndAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
-moduleEndAp m@Module{m_prog = _} = getAp' (Just callstack) pc where (callstack, pc) = m_lastPc m
+moduleEndAp mdl =
+  case md_prog (moduleData mdl) of
+    [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
+    _ -> getAp' (Just callstack) pc where (callstack, pc) = md_lastPc (moduleData mdl)
 
 encodeModule :: Module -> CairoSemanticsL ()
-encodeModule m@Module{..} = case m_spec of
-  MSRich spec -> encodeRichSpec m spec
-  MSPlain spec -> encodePlainSpec m spec
+encodeModule mdl = case md_spec (moduleData mdl) of
+  MSRich spec -> encodeRichSpec mdl spec
+  MSPlain spec -> encodePlainSpec mdl spec
 
 encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
 encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
@@ -282,11 +286,8 @@ encodePlainSpec mdl PlainSpec{..} = do
   assert (fp .<= apStart)
   assertPre =<< prepare' apStart fp ps_pre
 
-  let instrs = m_prog mdl
-
   -- The last FP might be influenced in the optimizing case, we need to grab it as propagated
   -- by the encoding of the semantics of the call.
-
   lastFp <-
     fromMaybe fp . join . safeLast
       <$> for
@@ -295,13 +296,13 @@ encodePlainSpec mdl PlainSpec{..} = do
             mkInstructionConstraints
               instr
               (getNextPcInlinedWithFallback instrs idx)
-              (m_optimisesF mdl)
-              (m_jnzOracle mdl)
+              (moduleOptimisesPreForF mdl)
+              oracle
         )
 
   expect =<< preparePost apEnd lastFp ps_post (isOptimising mdl)
 
-  whenJust (nonEmpty (m_prog mdl)) $ \neInsts -> do
+  whenJust (nonEmpty instrs) $ \neInsts -> do
     -- Normally, 'call's are accompanied by 'ret's for inlined functions. With the optimisation
     -- that splits modules on pre of every non-inlined function, some modules 'finish' their
     -- enconding without actually reaching a subsequent 'ret' for every inlined 'call', thus
@@ -313,7 +314,9 @@ encodePlainSpec mdl PlainSpec{..} = do
     resetStack
     mkApConstraints apEnd neInsts
     resetStack
-    mkBuiltinConstraints apEnd neInsts (m_optimisesF mdl)
+    mkBuiltinConstraints apEnd neInsts (moduleOptimisesPreForF mdl)
+ where
+  (ModuleData _ instrs oracle _ _) = moduleData mdl
 
 exMemoryRemoval :: Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
 exMemoryRemoval expr = do
@@ -395,6 +398,7 @@ mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc optimisingF jnzOracl
         Nothing -> pure Nothing
     Ret -> pop $> Nothing
 
+-- | A particular case of mkInstructionConstraints for the instruction 'call'.
 mkCallConstraints ::
   Label ->
   Label ->
@@ -407,41 +411,44 @@ mkCallConstraints pc nextPc fp optimisingF f = do
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
   saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
   setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
-  assert (TSMT.and [nextAp, saveOldFp, setNextPc])
+  assert (Expr.and [nextAp, saveOldFp, setNextPc])
   push stackFrame
-  -- We need only a part of the call instruction's semantics for optimizing modules.
   -- Considering we have already pushed the stackFrame by now, we need to make sure that either
   -- the function is inlinable and we'll encounter a 'ret', or we need to pop right away
   -- once we encode semantics of the function.
 
-  -- Determine whether the current function matches the function being optimised exactly -
-  -- this necessitates comparing execution traces.
-  executionContext <- getStackTraceDescr
-  optimisedFExecutionContext <- getStackTraceDescr' ((^. _1) <$> optimisingF)
-  if isJust optimisingF && executionContext == optimisedFExecutionContext
-    then Just <$> getFp <* pop
-    else do
-      -- This is reachable unless the module is optimizing, in which case the precondition
-      -- of the function is necessarily the last thing being checked; as such, the semantics
-      -- of the function being invoked must not be considered.
-      canInline <- isInlinable f
-      if canInline
-        then pure Nothing -- An inlined function will have a 'ret' at some point, do not pop here.
-        else do
-          (FuncSpec pre post storage) <- getFuncSpec f <&> toFuncSpec
-          let pre' = suffixLogicalVariables lvarSuffix pre
-              post' = suffixLogicalVariables lvarSuffix post
-          preparedPre <- prepare nextPc calleeFp =<< storageRemoval pre'
-          updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
-          pop
-          preparedPost <- prepare nextPc calleeFp =<< storageRemoval post'
-          assert preparedPre
-          assert preparedPost
-          pure Nothing
+  -- We need only a part of the call instruction's semantics for optimizing modules.
+  guardWith isModuleCheckingPre (Just <$> getFp <* pop) $ do
+    -- This is reachable unless the module is optimizing, in which case the precondition
+    -- of the function is necessarily the last thing being checked; as such, the semantics
+    -- of the function being invoked must not be considered.
+    guardWith (isInlinable f) (pure Nothing) $ do
+      -- An inlined function will have a 'ret' at some point, do not pop here.
+      (FuncSpec pre post storage) <- getFuncSpec f <&> toFuncSpec
+      let pre' = suffixLogicalVariables lvarSuffix pre
+          post' = suffixLogicalVariables lvarSuffix post
+      preparedPre <- prepare nextPc calleeFp =<< storageRemoval pre'
+      updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
+      pop
+      preparedPost <- prepare nextPc calleeFp =<< storageRemoval post'
+      -- One would normally expect to see assert (pre -> post).
+      -- However, pre will be checked in a separate 'optimising' module and we can therefore simply
+      -- assert it holds here. If it does not, the corresponding pre-checking module will fail,
+      -- thus failing the judgement for the entire function.
+      assert preparedPre
+      assert preparedPost
+      pure Nothing
  where
   lvarSuffix = "+" <> tShowLabel pc
   calleePc = sf_pc f
   stackFrame = (pc, calleePc)
+  -- Determine whether the current function matches the function being optimised exactly -
+  -- this necessitates comparing execution traces.
+  isModuleCheckingPre = do
+    executionContext <- getStackTraceDescr
+    optimisedFExecutionContext <- getStackTraceDescr' ((^. _1) <$> optimisingF)
+    pure (isJust optimisingF && executionContext == optimisedFExecutionContext)
+  guardWith condM val cont = do cond <- condM; if cond then val else cont
 
 traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
