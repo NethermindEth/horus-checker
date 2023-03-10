@@ -101,7 +101,10 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // @storage_update _urns(i, u).urn.ink := _urns(i, u).urn.ink + dink
 // @storage_update _urns(i, u).urn.art := _urns(i, u).urn.art + dart
 // @storage_update _debt().debt := _debt().debt + (_ilks(i).ilk.rate * dart)
-// @post _live().live == 1
+
+// We cannot spec this because we cannot spec `require_live()`!
+//  post _live().live == 1
+
 // @post _ilks(i).ilk.rate != 0
 // @post $Return.Art == _ilks(i).ilk.Art + dart
 // @post $Return.ink == _urns(i, u).urn.ink + dink
@@ -196,9 +199,9 @@ func frob3{
 }
 
 // @storage_update _gem(i, v).gem := _gem(i, v).gem - dink
-//  storage_update _dai(w).dai := _dai(w).dai + dtab
-//  storage_update _urns(i, u).urn.ink := ink
-//  storage_update _urns(i, u).urn.art := art
+// @storage_update _dai(w).dai := _dai(w).dai + dtab
+// @storage_update _urns(i, u).urn.ink := ink
+// @storage_update _urns(i, u).urn.art := art
 @external
 func frob4{
     syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr, bitwise_ptr: BitwiseBuiltin*
@@ -211,9 +214,9 @@ func frob4{
 
     let (dai) = _dai.read(w);
     let dai = dai + dtab;
-    // _dai.write(w, dai);
+    _dai.write(w, dai);
 
-    // _urns.write(i, u, Urn(ink, art));
+    _urns.write(i, u, Urn(ink, art));
 
     return ();
 }
@@ -234,7 +237,7 @@ func frob4{
 // @storage_update _urns(i, u).urn.ink := _urns(i, u).urn.ink + dink
 // @storage_update _urns(i, u).urn.art := _urns(i, u).urn.art + dart
 // @storage_update _debt().debt := _debt().debt + (_ilks(i).ilk.rate * dart)
-// @post _live().live == 1
+//  post _live().live == 1
 // @post _ilks(i).ilk.rate != 0
 // @post $Art * _ilks(i).ilk.rate <= _ilks(i).ilk.line
 // @post $debt <= _ilks(i).ilk.line

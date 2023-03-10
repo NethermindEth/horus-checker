@@ -24,8 +24,8 @@ import Numeric (readHex)
 import Horus.Label (Label (..))
 import Horus.SW.CairoType (CairoType (..))
 import Horus.SW.Identifier (Identifier (..), Struct (..))
-import Horus.SW.ScopedName (ScopedName)
-import Horus.Util (tShow)
+import Horus.SW.ScopedName (ScopedName (..))
+import Horus.Util (tShow, dropMain)
 
 type Identifiers = Map ScopedName Identifier
 
@@ -107,8 +107,8 @@ sizeOfType (TypeTuple mems) identifiers =
             Just t -> Sum <$> sizeOfType t identifiers
             Nothing -> pure (Sum 1)
       )
-sizeOfType (TypeStruct name) identifiers =
-  case identifiers Map.!? name of
+sizeOfType (TypeStruct name) identifiers = do
+  case identifiers Map.!? (ScopedName . dropMain . sn_path $ name) of
     Just (IStruct struct) -> pure $ st_size struct
     Just _ -> throwError $ tShow name <> " is expected to be a struct type."
     Nothing -> throwError $ "Unknown identifier: " <> tShow name <> "."
