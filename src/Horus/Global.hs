@@ -27,12 +27,12 @@ import System.FilePath.Posix ((</>))
 
 import Horus.CFGBuild (CFGBuildL, LabeledInst, buildCFG)
 import Horus.CFGBuild.Runner (CFG (..))
-import Horus.CairoSemantics (CairoSemanticsL, encodeModule)
+import Horus.CairoSemantics (CairoSemanticsL, encodeModule, AssertionType (PreAssertion))
 import Horus.CairoSemantics.Runner
   ( ConstraintsState (..)
   , MemoryVariable (..)
   , debugFriendlyModel
-  , makeModel
+  , makeModel, ModelDescription (ModelDescription, mdesc_guardAssert, mdesc_guardExpect)
   )
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
@@ -221,7 +221,7 @@ solveModule m = do
 outputSmtQueries :: Text -> ConstraintsState -> GlobalL ()
 outputSmtQueries moduleName constraints = do
   fPrime <- p_prime <$> getProgram
-  let query = makeModel False constraints fPrime
+  let query = makeModel standardModel constraints fPrime
   Config{..} <- getConfig
   whenJust cfg_outputQueries (writeSmtFile query)
   whenJust cfg_outputOptimizedQueries (writeSmtFileOptimized query)
@@ -276,24 +276,49 @@ removeMathSAT m run = do
 
   falseIfError a = a `catchError` const (pure False)
 
+-- allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . snd) cs_asserts else cs_asserts
+  -- allowedExpects = if checkPreOnly then [] else cs_expects
+
+standardModel :: ModelDescription
+standardModel = ModelDescription {
+  mdesc_guardAssert = const True,
+  mdesc_guardExpect = const True }
+
+checkPreOnlyModel :: ModelDescription
+checkPreOnlyModel = ModelDescription {
+  mdesc_guardAssert = (== PreAssertion),
+  mdesc_guardExpect = const False }
+
+checkRevertModel :: ModelDescription
+checkRevertModel = ModelDescription {
+  mdesc_guardAssert = const True,
+  mdesc_guardExpect = const False }
+
 solveSMT :: ConstraintsState -> GlobalL HorusResult
 solveSMT cs = do
   Config{..} <- getConfig
   fPrime <- p_prime <$> getProgram
-  let query = makeModel False cs fPrime
-  let preQuery = makeModel True cs fPrime
-  res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
-  preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
+
+  let mkModel model = makeModel model cs fPrime
+  let query = mkModel standardModel
+  let preQuery = mkModel checkPreOnlyModel
+  let revertQuery = mkModel checkRevertModel
+
+  let runModel = runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) . solve fPrime
+  res <- runModel query
+  preRes <- runModel preQuery
+  revertRes <- runModel revertQuery
 
   -- Convert the `SolverResult` to a `HorusResult`.
   --
   -- Note that the special case where the normal query is `Unsat` *and* the
   -- preconditions -> False query is `Unsat` identifies contradictory premises.
-  case (res, preRes) of
-    (Sat mbModel, _) -> pure $ Counterexample mbModel
-    (Unknown mbReason, _) -> pure $ Timeout mbReason
-    (Unsat, Unsat) -> pure ContradictoryPrecondition
-    (Unsat, _) -> pure Verified
+  pure $ case (res, preRes, revertRes) of
+    (_, _, Unsat) -> Revert
+    (Sat mbModel, _, _) -> Counterexample mbModel
+    (Unknown mbReason, _, _) -> Timeout mbReason
+    (Unsat, Unsat, _) -> ContradictoryPrecondition
+    (Unsat, _, _) -> Verified
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 

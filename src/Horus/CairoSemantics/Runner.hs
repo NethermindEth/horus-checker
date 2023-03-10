@@ -4,6 +4,7 @@ module Horus.CairoSemantics.Runner
   , ConstraintsState (..)
   , makeModel
   , debugFriendlyModel
+  , ModelDescription (..)
   )
 where
 
@@ -31,7 +32,7 @@ import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CairoSemantics (AssertionType (..), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
@@ -220,8 +221,13 @@ restrictMemTail (mv0 : rest) =
   mem0 = Expr.const (mv_varName mv0)
   addr0 = Expr.const (mv_addrName mv0)
 
-makeModel :: Bool -> ConstraintsState -> Integer -> Text
-makeModel checkPreOnly ConstraintsState{..} fPrime =
+data ModelDescription = ModelDescription
+  { mdesc_guardAssert :: AssertionType -> Bool
+  , mdesc_guardExpect :: AssertionType -> Bool
+  }
+
+makeModel :: ModelDescription -> ConstraintsState -> Integer -> Text
+makeModel ModelDescription{..} ConstraintsState{..} fPrime =
   Text.intercalate "\n" (decls <> map (Command.assert fPrime) restrictions)
  where
   functions =
@@ -232,9 +238,8 @@ makeModel checkPreOnly ConstraintsState{..} fPrime =
   addrRestrictions =
     [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
 
-  -- If checking @pre only, only take `PreAssertion`s, no postconditions.
-  allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . snd) cs_asserts else cs_asserts
-  allowedExpects = if checkPreOnly then [] else cs_expects
+  allowedAsserts = filter (mdesc_guardAssert . snd) cs_asserts
+  allowedExpects = filter (mdesc_guardExpect . snd) cs_expects
 
   generalRestrictions =
     concat

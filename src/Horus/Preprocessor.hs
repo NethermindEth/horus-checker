@@ -130,6 +130,7 @@ data HorusResult
   = Verified
   | Counterexample (Maybe Model)
   | ContradictoryPrecondition
+  | Revert
   | Timeout (Maybe Text)
   deriving (Eq)
 
@@ -142,6 +143,7 @@ instance Show HorusResult where
   show Verified = "Verified"
   show (Counterexample mbModel) = "False" <> maybe "" (\m -> "\n" <> show m) mbModel
   show ContradictoryPrecondition = "Contradictory premises"
+  show Revert = "Reverted"
   show (Timeout reason) = "Unknown" <> maybe "" (\r -> "\n" <> unpack r) reason
 
 data Model = Model
