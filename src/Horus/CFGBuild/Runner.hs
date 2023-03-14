@@ -20,7 +20,7 @@ import Lens.Micro (Lens', at, (&), (^.), _Just)
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl ((%=), (<%=))
 
-import Horus.CFGBuild (AnnotationType, ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst, Vertex (..), isOptimising)
+import Horus.CFGBuild (AnnotationType, ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst, Vertex (..), isPreCheckingVertex)
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr, Ty (..))
 import Horus.FunctionAnalysis (FInfo)
@@ -62,17 +62,17 @@ verticesLabelledBy cfg l = [v | v <- cfg_vertices cfg, v_label v == l]
 interpret :: CFGBuildL a -> Impl a
 interpret = iterM exec . runCFGBuildL
  where
-  exec (AddVertex l optimises cont) = do
+  exec (AddVertex l mbPreCheckedF cont) = do
     freshVal <- cfgVertexCounter <%= succ
-    let newVertex = Vertex (Text.pack (show freshVal)) l optimises
+    let newVertex = Vertex (Text.pack (show freshVal)) l mbPreCheckedF
     vs <- gets cfg_vertices
     -- Currently, the design is such that it is convenient to be able to distinguish
     -- 'the unique vertex the entire codebase relies on' from vertices that exist
     -- with the same label for one reason or the other, e.g. optimisation purposes.
     -- Ideally, vertices would be treated uniformally, regardless of their raison d'etre,
     -- removing the need for enforcing invariants like this.
-    if (not . isOptimising) newVertex
-      && (not . null) [vert | vert <- vs, v_label vert == l, (not . isOptimising) vert]
+    if (not . isPreCheckingVertex) newVertex
+      && (not . null) [vert | vert <- vs, v_label vert == l, (not . isPreCheckingVertex) vert]
       then throwError "At most one salient Vertex is allowed per PC."
       else cfgVertices %= ([newVertex] `union`) >> cont newVertex
   exec (AddArc lFrom lTo insts test isF cont) = cfgArcs . at lFrom %= doAdd >> cont

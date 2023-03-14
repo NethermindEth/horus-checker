@@ -1,5 +1,3 @@
-{-# LANGUAGE InstanceSigs #-}
-
 module Horus.CFGBuild
   ( CFGBuildL (..)
   , ArcCondition (..)
@@ -15,7 +13,7 @@ module Horus.CFGBuild
   , mkInv
   , Vertex (..)
   , getVerts
-  , isOptimising
+  , isPreCheckingVertex
   )
 where
 
@@ -79,7 +77,7 @@ mkInv = (AInv,)
 data Vertex = Vertex
   { v_name :: Text
   , v_label :: Label
-  , v_optimisesF :: Maybe ScopedFunction
+  , v_preCheckedF :: Maybe ScopedFunction
   }
   deriving (Show)
 
@@ -87,11 +85,10 @@ instance Eq Vertex where
   (==) lhs rhs = v_name lhs == v_name rhs
 
 instance Ord Vertex where
-  compare :: Vertex -> Vertex -> Ordering
-  compare lhs rhs = v_name lhs `compare` v_name rhs
+  v1 <= v2 = v_name v1 <= v_name v2
 
-isOptimising :: Vertex -> Bool
-isOptimising = isJust . v_optimisesF
+isPreCheckingVertex :: Vertex -> Bool
+isPreCheckingVertex = isJust . v_preCheckedF
 
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
@@ -155,7 +152,7 @@ getSvarSpecs = liftF' (GetSvarSpecs id)
 getVerts :: Label -> CFGBuildL [Vertex]
 getVerts l = liftF' (GetVerts l id)
 
-{- | Saliant vertices can be thought of as 'main' vertices of the CFG, meaning that
+{- | Salient vertices can be thought of as 'main' vertices of the CFG, meaning that
 if one wants to reason about flow control of the program, one should query salient vertices.
 
 Certain program transformations and optimisations can add various additional nodes into the CFG,
@@ -165,10 +162,11 @@ It is enforced that for any one PC, one can add at most a single salient vertex.
 -}
 getSalientVertex :: Label -> CFGBuildL Vertex
 getSalientVertex l = do
-  verts <- filter (not . isOptimising) <$> getVerts l
+  verts <- filter (not . isPreCheckingVertex) <$> getVerts l
   case verts of
+    [] -> throw $ "No salient vertex with label: " <> tShow l
     [vert] -> pure vert
-    _ -> throw $ "No vertex with label: " <> tShow l
+    _ -> throw $ "Multiple salient vertices with label: " <> tShow l
 
 throw :: Text -> CFGBuildL a
 throw t = liftF' (Throw t)
@@ -233,11 +231,10 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
       -- An inlined call pretends as though the stream of instructions continues without breaking
       -- through the function being inlined.
 
-      -- An abstracted call does not break control flow and CONCEPTUALLY asserts 'pre implies post'.
-      -- Conceptually is the operative word here because due to the way that APs 'flow'
-      -- in the program thus making the actual implication unnecessary plus the existance
-      -- of the optimisation in optimiseCheckingOfPre makes it such that the pre is checked
-      -- in a separate module.
+      -- An abstracted call does not break control flow and CONCEPTUALLY asserts `pre => post`.
+      -- Conceptually is the operative word here because:
+      -- (1) the way APs 'flow' in the program makes the actual implication unnecessary,
+      -- (2) the precondition is checked in a separate module (see optimiseCheckingOfPre).
       if callee `Set.member` inlinables then beginInlining else abstractOver
   | Ret <- i_opCode endInst =
       -- Find the function corresponding to `endPc` and lookup its label. If we

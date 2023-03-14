@@ -8,11 +8,11 @@ module Horus.Module
   , ModuleSpec (..)
   , PlainSpec (..)
   , richToPlainSpec
-  , isOptimising
+  , isPreChecking
   , dropMain
   , moduleData
   , ModuleData (..)
-  , moduleOptimisesPreForF
+  , getPreCheckedFuncWithCallStack
   )
 where
 
@@ -29,7 +29,7 @@ import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
-import Horus.CFGBuild (ArcCondition (..), Label (unLabel), Vertex (v_label, v_optimisesF))
+import Horus.CFGBuild (ArcCondition (..), Label (unLabel), Vertex (..))
 import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
 import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, stackTrace, top)
 import Horus.ContractInfo (pcToFun)
@@ -56,7 +56,7 @@ data ModuleData = ModuleData
 
 data Module
   = StandardModule ModuleData
-  | OptimisingModule ModuleData (CallStack, ScopedFunction)
+  | PreCheckingModule ModuleData (CallStack, ScopedFunction)
   deriving stock (Show)
 
 data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
@@ -67,15 +67,15 @@ data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
 
 moduleData :: Module -> ModuleData
 moduleData (StandardModule md) = md
-moduleData (OptimisingModule md _) = md
+moduleData (PreCheckingModule md _) = md
 
-moduleOptimisesPreForF :: Module -> Maybe (CallStack, ScopedFunction)
-moduleOptimisesPreForF (StandardModule _) = Nothing
-moduleOptimisesPreForF (OptimisingModule _ f) = Just f
+getPreCheckedFuncWithCallStack :: Module -> Maybe (CallStack, ScopedFunction)
+getPreCheckedFuncWithCallStack (StandardModule _) = Nothing
+getPreCheckedFuncWithCallStack (PreCheckingModule _ f) = Just f
 
-isOptimising :: Module -> Bool
-isOptimising (StandardModule _) = False
-isOptimising (OptimisingModule _ _) = True
+isPreChecking :: Module -> Bool
+isPreChecking (StandardModule _) = False
+isPreChecking (PreCheckingModule _ _) = True
 
 richToPlainSpec :: FuncSpec -> PlainSpec
 richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
@@ -179,7 +179,8 @@ descrOfOracle oracle =
     else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ oracle
 
 {- | Return a quadruple of the function name, the label summary, the oracle and
-    optimisation suffix.
+    precondition check suffix (indicates, for precondition-checking modules,
+    which function's precondition is being checked).
 
  The oracle is a string of `1` and `2` characters, representing a path
  through the control flow graph of the function. For example, if we have a
@@ -216,13 +217,13 @@ getModuleNameParts idents mdl =
       let scopedNames = labelNamesOfPc idents label
           isFloatingLabel = label /= calledF
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
-       in (prefix, labelsSummary, descrOfOracle oracle, optimisingSuffix)
+       in (prefix, labelsSummary, descrOfOracle oracle, preCheckingSuffix)
  where
   (ModuleData spec prog oracle calledF _) = moduleData mdl
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
-  optimisingSuffix = case mdl of
+  preCheckingSuffix = case mdl of
     StandardModule _ -> ""
-    OptimisingModule _ (callstack, f) ->
+    PreCheckingModule _ (callstack, f) ->
       let fName = toText . dropMain . sf_scopedName $ f
           stackDigest = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
        in " Pre<" <> fName <> "|" <> stackDigest <> ">"
@@ -367,19 +368,19 @@ gatherFromSource cfg function fSpec = do
     assertions = map snd (cfg_assertions cfg ^. ix v)
     onFinalNode = null (cfg_arcs cfg ^. ix v)
 
-    optimisingStackFrame = (fCallerPc, fCalledF)
+    preCheckingStackFrame = (fCallerPc, fCalledF)
      where
       labelledCall@(fCallerPc, _) = last acc
       fCalledF = uncheckedCallDestination labelledCall
-    optimContext =
-      (push optimisingStackFrame callstack',) <$> v_optimisesF v
+    preCheckingContext =
+      (push preCheckingStackFrame callstack',) <$> v_preCheckedF v
 
-    emitPlain pre post = emit optimContext . MSPlain $ PlainSpec pre post
-    emitRich pre post = emit optimContext . MSRich . FuncSpec pre post $ fs_storage fSpec
+    emitPlain pre post = emit preCheckingContext . MSPlain $ PlainSpec pre post
+    emitRich pre post = emit preCheckingContext . MSRich . FuncSpec pre post $ fs_storage fSpec
 
     emit mbTrace spec = case mbTrace of
       Nothing -> emitModule (StandardModule md)
-      Just trace -> emitModule (OptimisingModule md trace)
+      Just trace -> emitModule (PreCheckingModule md trace)
      where
       md = ModuleData spec acc oracle' (fu_pc function) (callstack', l)
 

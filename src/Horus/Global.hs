@@ -39,7 +39,7 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleData (md_calledF, md_prog), ModuleL, gatherModules, getModuleNameParts, moduleData, moduleOptimisesPreForF)
+import Horus.Module (Module (..), ModuleData (md_calledF, md_prog), ModuleL, gatherModules, getModuleNameParts, getPreCheckedFuncWithCallStack, moduleData)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
@@ -167,7 +167,7 @@ data SolvingInfo = SolvingInfo
   , si_funcName :: Text
   , si_result :: HorusResult
   , si_inlinable :: Bool
-  , si_optimisesF :: Maybe (CallStack, ScopedFunction)
+  , si_preCheckingContext :: Maybe (CallStack, ScopedFunction)
   }
   deriving (Eq, Show)
 
@@ -195,8 +195,8 @@ solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
   identifiers <- getIdentifiers
-  let (qualifiedFuncName, labelsSummary, oracleSuffix, optimisingSuffix) = getModuleNameParts identifiers m
-      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> optimisingSuffix
+  let (qualifiedFuncName, labelsSummary, oracleSuffix, preCheckingSuffix) = getModuleNameParts identifiers m
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> preCheckingSuffix
       inlinable = md_calledF (moduleData m) `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
   pure
@@ -205,7 +205,7 @@ solveModule m = do
       , si_funcName = qualifiedFuncName
       , si_result = result
       , si_inlinable = inlinable
-      , si_optimisesF = moduleOptimisesPreForF m
+      , si_preCheckingContext = getPreCheckedFuncWithCallStack m
       }
  where
   mkResult :: Text -> GlobalL HorusResult
@@ -298,10 +298,10 @@ solveSMT cs = do
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
 -- | Add an oracle suffix to the module name when the module name *is* the function name.
-appendMissingDefaultOracleSuffixes :: SolvingInfo -> SolvingInfo
-appendMissingDefaultOracleSuffixes si@(SolvingInfo moduleName funcName result inlinable optimisesF) =
+appendMissingDefaultOracleSuffix :: SolvingInfo -> SolvingInfo
+appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inlinable preCheckingContext) =
   if moduleName == funcName
-    then SolvingInfo (moduleName <> ":::default") funcName result inlinable optimisesF
+    then SolvingInfo (moduleName <> ":::default") funcName result inlinable preCheckingContext
     else si
 
 {- |  Collapse a list of modules for the same function if they are all `Unsat`.
@@ -323,7 +323,7 @@ collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
   | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
-  | otherwise = map appendMissingDefaultOracleSuffixes infos
+  | otherwise = map appendMissingDefaultOracleSuffix infos
  where
   reportInlinable = all si_inlinable infos
 

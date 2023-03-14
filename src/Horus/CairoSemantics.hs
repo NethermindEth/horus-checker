@@ -56,7 +56,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (Module (..), ModuleData (ModuleData, md_lastPc, md_prog, md_spec), ModuleSpec (..), PlainSpec (..), isOptimising, moduleData, moduleOptimisesPreForF, richToPlainSpec)
+import Horus.Module (Module (..), ModuleData (ModuleData, md_lastPc, md_prog, md_spec), ModuleSpec (..), PlainSpec (..), getPreCheckedFuncWithCallStack, isPreChecking, moduleData, richToPlainSpec)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
@@ -272,7 +272,7 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec mdl plainSpec
   accumulatedStorage <- getStorage
-  unless (isOptimising mdl) $
+  unless (isPreChecking mdl) $
     expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec
@@ -296,11 +296,11 @@ encodePlainSpec mdl PlainSpec{..} = do
             mkInstructionConstraints
               instr
               (getNextPcInlinedWithFallback instrs idx)
-              (moduleOptimisesPreForF mdl)
+              (getPreCheckedFuncWithCallStack mdl)
               oracle
         )
 
-  expect =<< preparePost apEnd lastFp ps_post (isOptimising mdl)
+  expect =<< preparePost apEnd lastFp ps_post (isPreChecking mdl)
 
   whenJust (nonEmpty instrs) $ \neInsts -> do
     -- Normally, 'call's are accompanied by 'ret's for inlined functions. With the optimisation
@@ -314,7 +314,7 @@ encodePlainSpec mdl PlainSpec{..} = do
     resetStack
     mkApConstraints apEnd neInsts
     resetStack
-    mkBuiltinConstraints apEnd neInsts (moduleOptimisesPreForF mdl)
+    mkBuiltinConstraints apEnd neInsts (getPreCheckedFuncWithCallStack mdl)
  where
   (ModuleData _ instrs oracle _ _) = moduleData mdl
 
@@ -384,11 +384,11 @@ mkInstructionConstraints ::
   Maybe (CallStack, ScopedFunction) ->
   Map (NonEmpty Label, Label) Bool ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc optimisingF jnzOracle = do
+mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc mbPreCheckedFuncWithCallStack jnzOracle = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
-    Call -> mkCallConstraints pc nextPc fp optimisingF =<< getCallee lInst
+    Call -> mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack =<< getCallee lInst
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst) $> Nothing
     Nop -> do
       stackTrace <- getOracle
@@ -406,7 +406,7 @@ mkCallConstraints ::
   Maybe (CallStack, ScopedFunction) ->
   ScopedFunction ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkCallConstraints pc nextPc fp optimisingF f = do
+mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
   calleeFp <- withExecutionCtx stackFrame getFp
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
   saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
@@ -445,9 +445,9 @@ mkCallConstraints pc nextPc fp optimisingF f = do
   -- Determine whether the current function matches the function being optimised exactly -
   -- this necessitates comparing execution traces.
   isModuleCheckingPre = do
-    executionContext <- getStackTraceDescr
-    optimisedFExecutionContext <- getStackTraceDescr' ((^. _1) <$> optimisingF)
-    pure (isJust optimisingF && executionContext == optimisedFExecutionContext)
+    stackDescr <- getStackTraceDescr
+    preCheckedFuncStackDescr <- getStackTraceDescr' ((^. _1) <$> mbPreCheckedFuncWithCallStack)
+    pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
   guardWith condM val cont = do cond <- condM; if cond then val else cont
 
 traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
