@@ -85,9 +85,9 @@ func wish{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}(
     return (res,);
 }
 
-// N.B.: We cannot spec this without revert semantics!
+// N.B.: We cannot spec this (prudently) without revert semantics!
 // @pre True
-// @post True
+// @post _live().live == 1
 func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_ptr}() {
     with_attr error_message("Vat/not-live") {
         let (live) = _live.read();
@@ -102,9 +102,8 @@ func require_live{syscall_ptr: felt*, pedersen_ptr: HashBuiltin*, range_check_pt
 // @storage_update _urns(i, u).urn.art := _urns(i, u).urn.art + dart
 // @storage_update _debt().debt := _debt().debt + (_ilks(i).ilk.rate * dart)
 
-// We cannot spec this because we cannot spec `require_live()`!
-//  post _live().live == 1
-
+// We cannot spec this because we cannot (prudently) spec `require_live()`!
+// @post _live().live == 1
 // @post _ilks(i).ilk.rate != 0
 // @post $Return.Art == _ilks(i).ilk.Art + dart
 // @post $Return.ink == _urns(i, u).urn.ink + dink
@@ -237,7 +236,7 @@ func frob4{
 // @storage_update _urns(i, u).urn.ink := _urns(i, u).urn.ink + dink
 // @storage_update _urns(i, u).urn.art := _urns(i, u).urn.art + dart
 // @storage_update _debt().debt := _debt().debt + (_ilks(i).ilk.rate * dart)
-//  post _live().live == 1
+// @post _live().live == 1
 // @post _ilks(i).ilk.rate != 0
 // @post $Art * _ilks(i).ilk.rate <= _ilks(i).ilk.line
 // @post $debt <= _ilks(i).ilk.line
