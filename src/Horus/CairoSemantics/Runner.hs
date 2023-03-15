@@ -46,7 +46,7 @@ import Horus.FunctionAnalysis (ScopedFunction (sf_scopedName))
 import Horus.SW.Builtin qualified as Builtin (rcBound)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (read)
-import Horus.Util (tShow, unlessM)
+import Horus.Util (tShow)
 
 data AssertionBuilder
   = QFAss (Expr TBool)
@@ -176,10 +176,8 @@ interpret = iterM exec
   exec (Top cont) = do
     get >>= cont . top . (^. csCallStack) . e_constraints
   exec (EnableStorage cont) = eStorageEnabled .= True >> cont
-  exec (ReadStorage name args cont) = do
-    unlessM (use eStorageEnabled) $
-      throwError (plainSpecStorageAccessErr <> " '" <> tShow name <> "'.")
-    storage <- use eStorage
+  exec (ReadStorage mbStorage name args cont) = do
+    storage <- case mbStorage of Nothing -> use eStorage; Just st -> pure st
     cont (Storage.read storage name args)
   exec (ResetStack cont) = eConstraints . csCallStack %= reset >> cont
   exec (UpdateStorage newStorage cont) = do
@@ -189,10 +187,7 @@ interpret = iterM exec
     oldStorage <- use eStorage
     let combined = Map.unionWith (<>) newStorage oldStorage
     eStorage .= combined >> cont
-  exec (GetStorage cont) = do
-    unlessM (use eStorageEnabled) $
-      throwError plainSpecStorageAccessErr
-    use eStorage >>= cont
+  exec (GetStorage cont) = use eStorage >>= cont
   exec (Throw t) = throwError t
 
   plainSpecStorageAccessErr :: Text
