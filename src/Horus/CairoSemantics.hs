@@ -56,7 +56,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (Module (..), ModuleData (ModuleData, md_lastPc, md_prog, md_spec), ModuleSpec (..), PlainSpec (..), getPreCheckedFuncWithCallStack, isPreChecking, moduleData, richToPlainSpec)
+import Horus.Module (Module (..), apEqualsFp, isPreChecking)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
@@ -274,68 +274,38 @@ getFp = getFp' Nothing
 
 moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleStartAp mdl =
-  case md_prog (moduleData mdl) of
+  case m_prog mdl of
     [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
     (pc0, _) : _ -> getAp pc0
 
 moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleEndAp mdl =
-  case md_prog (moduleData mdl) of
+  case m_prog mdl of
     [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
-    _ -> getAp' (Just callstack) pc where (callstack, pc) = md_lastPc (moduleData mdl)
-
-encodeModule :: Module -> CairoSemanticsL ()
-encodeModule mdl = case md_spec (moduleData mdl) of
-  MSRich spec -> encodeRichSpec mdl spec
-  MSPlain spec -> encodePlainSpec mdl spec
+    _ -> getAp' (Just callstack) pc where (callstack, pc) = m_lastPc mdl
 
 {- | Gather the assertions and other state (in the `ConstraintsState` contained
- in `CairoSemanticsL`) associated with a function specification that contains
- a storage update.
-
- Note that `rich` in `RichSpec` means "has a `@storage_update`".
+ in `CairoSemanticsL`) associated with a function specification that may
+ contain a storage update.
 -}
-encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
-encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
+encodeModule :: Module -> CairoSemanticsL ()
+encodeModule mdl@(Module (FuncSpec pre post storage) instrs oracle _ _ mbPreCheckedFuncWithCallStack) = do
   enableStorage
   fp <- getFp
   apEnd <- moduleEndAp mdl
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
-  encodePlainSpec mdl plainSpec
-  accumulatedStorage <- getStorage
-  unless (isPreChecking mdl) $
-    expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
- where
-  plainSpec = richToPlainSpec funcSpec
 
-{- | Gather the assertions and other state associated with a storage
- update-less function specification.
--}
-encodePlainSpec :: Module -> PlainSpec -> CairoSemanticsL ()
-encodePlainSpec mdl PlainSpec{..} = do
   apStart <- moduleStartAp mdl
-  apEnd <- moduleEndAp mdl
-  fp <- getFp
-
   assert (fp .<= apStart)
-  assertPre =<< prepare' apStart fp ps_pre
-
+  assertPre =<< prepare' apStart fp (pre .&& apEqualsFp)
   -- The last FP might be influenced in the optimizing case, we need to grab it as propagated
   -- by the encoding of the semantics of the call.
   lastFp <-
     fromMaybe fp . join . safeLast
       <$> for
         (zip [0 ..] instrs)
-        ( \(idx, instr) ->
-            mkInstructionConstraints
-              instr
-              (getNextPcInlinedWithFallback instrs idx)
-              (getPreCheckedFuncWithCallStack mdl)
-              oracle
-        )
-
-  expect =<< preparePost apEnd lastFp ps_post (isPreChecking mdl)
-
+        (mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack oracle)
+  expect =<< preparePost apEnd lastFp post (isPreChecking mdl)
   whenJust (nonEmpty instrs) $ \neInsts -> do
     -- Normally, 'call's are accompanied by 'ret's for inlined functions. With the optimisation
     -- that splits modules on pre of every non-inlined function, some modules 'finish' their
@@ -348,9 +318,11 @@ encodePlainSpec mdl PlainSpec{..} = do
     resetStack
     mkApConstraints apEnd neInsts
     resetStack
-    mkBuiltinConstraints apEnd neInsts (getPreCheckedFuncWithCallStack mdl)
- where
-  (ModuleData _ instrs oracle _ _) = moduleData mdl
+    mkBuiltinConstraints apEnd neInsts mbPreCheckedFuncWithCallStack
+
+  accumulatedStorage <- getStorage
+  unless (isPreChecking mdl) $
+    expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
 
 exMemoryRemoval :: Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
 exMemoryRemoval expr = do
@@ -429,12 +401,12 @@ withExecutionCtx ctx action = do
  point when the execution is interrupted.
 -}
 mkInstructionConstraints ::
-  LabeledInst ->
-  Label ->
+  [LabeledInst] ->
   Maybe (CallStack, ScopedFunction) ->
   Map (NonEmpty Label, Label) Bool ->
+  (Int, LabeledInst) ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc mbPreCheckedFuncWithCallStack jnzOracle = do
+mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lInst@(pc, Instruction{..})) = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
@@ -447,6 +419,8 @@ mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc mbPreCheckedFuncWith
         Just True -> assert (dst ./= 0) $> Nothing
         Nothing -> pure Nothing
     Ret -> pop $> Nothing
+ where
+  nextPc = getNextPcInlinedWithFallback instrs idx
 
 -- | A particular case of mkInstructionConstraints for the instruction 'call'.
 mkCallConstraints ::
