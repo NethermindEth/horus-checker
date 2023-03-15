@@ -3,16 +3,11 @@ module Horus.Module
   , ModuleL (..)
   , ModuleF (..)
   , Error (..)
+  , apEqualsFp
   , gatherModules
   , getModuleNameParts
-  , ModuleSpec (..)
-  , PlainSpec (..)
-  , richToPlainSpec
   , isPreChecking
   , dropMain
-  , moduleData
-  , ModuleData (..)
-  , getPreCheckedFuncWithCallStack
   )
 where
 
@@ -24,6 +19,7 @@ import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
 import Data.Map qualified as Map (elems, empty, insert, map, null, toList)
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
@@ -45,40 +41,21 @@ import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 
-data ModuleData = ModuleData
-  { md_spec :: ModuleSpec
-  , md_prog :: [LabeledInst]
-  , md_jnzOracle :: Map (NonEmpty Label, Label) Bool
-  , md_calledF :: Label
-  , md_lastPc :: (CallStack, Label)
+data Module = Module
+  { m_spec :: FuncSpec
+  , m_prog :: [LabeledInst]
+  , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
+  , m_calledF :: Label
+  , m_lastPc :: (CallStack, Label)
+  , m_preCheckedFuncAndCallStack :: Maybe (CallStack, ScopedFunction)
   }
   deriving stock (Show)
 
-data Module
-  = StandardModule ModuleData
-  | PreCheckingModule ModuleData (CallStack, ScopedFunction)
-  deriving stock (Show)
-
-data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
-  deriving stock (Show)
-
-data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
-  deriving stock (Show)
-
-moduleData :: Module -> ModuleData
-moduleData (StandardModule md) = md
-moduleData (PreCheckingModule md _) = md
-
-getPreCheckedFuncWithCallStack :: Module -> Maybe (CallStack, ScopedFunction)
-getPreCheckedFuncWithCallStack (StandardModule _) = Nothing
-getPreCheckedFuncWithCallStack (PreCheckingModule _ f) = Just f
+apEqualsFp :: Expr TBool
+apEqualsFp = ap .== fp
 
 isPreChecking :: Module -> Bool
-isPreChecking (StandardModule _) = False
-isPreChecking (PreCheckingModule _ _) = True
-
-richToPlainSpec :: FuncSpec -> PlainSpec
-richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
+isPreChecking = isJust . m_preCheckedFuncAndCallStack
 
 beginOfModule :: [LabeledInst] -> Maybe Label
 beginOfModule [] = Nothing
@@ -210,7 +187,7 @@ descrOfOracle oracle =
  it does not contain the rest of the labels.
 -}
 getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
-getModuleNameParts idents mdl =
+getModuleNameParts idents (Module spec prog oracle calledF _ mbPreCheckedFuncAndCallStack) =
   case beginOfModule prog of
     Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
@@ -219,23 +196,22 @@ getModuleNameParts idents mdl =
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, preCheckingSuffix)
  where
-  (ModuleData spec prog oracle calledF _) = moduleData mdl
-  post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
-  preCheckingSuffix = case mdl of
-    StandardModule _ -> ""
-    PreCheckingModule _ (callstack, f) ->
+  post = fs_post spec
+  preCheckingSuffix = case mbPreCheckedFuncAndCallStack of
+    Nothing -> ""
+    Just (callstack, f) ->
       let fName = toText . dropMain . sf_scopedName $ f
           stackDigest = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
        in " Pre<" <> fName <> "|" <> stackDigest <> ">"
 
 data Error
   = ELoopNoInvariant Label
-  | ESpecNotPlainHasState
+  | EInvariantWithSVarUpdateSpec
 
 instance Show Error where
   show (ELoopNoInvariant at) = printf "There is a loop at PC %d with no invariant" (unLabel at)
-  show ESpecNotPlainHasState =
-    "Some function contains an assertion or invariant, but uses a rich specification (i.e. @storage_update annotations)."
+  show EInvariantWithSVarUpdateSpec =
+    "Some function contains an assertion or invariant, but has a spec with @storage_update annotations."
 
 data ModuleF a
   = EmitModule Module a
@@ -277,9 +253,9 @@ catch m h = liftF' (Catch m h id)
 data SpecBuilder = SBRich | SBPlain (Expr TBool)
 
 extractPlainBuilder :: FuncSpec -> ModuleL SpecBuilder
-extractPlainBuilder fs@(FuncSpec _pre _post state)
-  | not (null state) = throwError ESpecNotPlainHasState
-  | PlainSpec{..} <- richToPlainSpec fs = pure (SBPlain ps_pre)
+extractPlainBuilder (FuncSpec pre _ storage)
+  | not (null storage) = throwError EInvariantWithSVarUpdateSpec
+  | otherwise = pure (SBPlain (pre .&& (ap .== fp)))
 
 gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
@@ -375,14 +351,10 @@ gatherFromSource cfg function fSpec = do
     preCheckingContext =
       (push preCheckingStackFrame callstack',) <$> v_preCheckedF v
 
-    emitPlain pre post = emit preCheckingContext . MSPlain $ PlainSpec pre post
-    emitRich pre post = emit preCheckingContext . MSRich . FuncSpec pre post $ fs_storage fSpec
+    emitPlain pre post = emit preCheckingContext $ FuncSpec pre post Map.empty
+    emitRich pre post = emit preCheckingContext $ FuncSpec pre post $ fs_storage fSpec
 
-    emit mbTrace spec = case mbTrace of
-      Nothing -> emitModule (StandardModule md)
-      Just trace -> emitModule (PreCheckingModule md trace)
-     where
-      md = ModuleData spec acc oracle' (fu_pc function) (callstack', l)
+    emit mbTrace spec = emitModule $ Module spec acc oracle' (fu_pc function) (callstack', l) mbTrace
 
     visitArcs newOracle acc' pre v' = do
       let outArcs = cfg_arcs cfg ^. ix v'
