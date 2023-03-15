@@ -1,0 +1,31 @@
+
+inc
+Verified
+
+main Pre<inc|<73=inc/root>>
+Verified
+
+main Pre<tt|<75=tt/root>>
+False
+
+main Pre<inc|<82=inc/root>>
+Verified
+
+main Pre<tt|<84=tt/root>>
+Verified
+
+main Pre<inc|<91=inc/root>>
+Verified
+
+main Pre<tt|<93=tt/root>>
+Verified
+
+main Pre<tt|<102=tt/root>>
+Verified
+
+main:::default
+Verified
+
+tt
+Verified
+

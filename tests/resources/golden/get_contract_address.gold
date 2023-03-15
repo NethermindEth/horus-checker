@@ -1,4 +1,8 @@
-test_invalid_1
+
+test_invalid_1 Pre<starkware.starknet.common.syscalls.get_contract_address|<12=get_contract_address/root>>
+Verified
+
+test_invalid_1:::default
 False
 
 test_invalid_2
@@ -6,3 +10,4 @@ False
 
 test_valid
 Verified
+

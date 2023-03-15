@@ -12,6 +12,7 @@ module Horus.CallStack
   , digestOfCallStack
   , digestOfStackTrace
   , initialWithFunc
+  , reset
   )
 where
 
@@ -52,6 +53,10 @@ push x (NonEmptyStack xs) = NonEmptyStack (x :| NonEmpty.toList xs)
 pop :: CallStack -> (CallEntry, CallStack)
 pop st@(NonEmptyStack (x :| [])) = (x, st)
 pop (NonEmptyStack (x :| xs)) = (x, NonEmptyStack (NonEmpty.fromList xs))
+
+reset :: CallStack -> CallStack
+reset st@(NonEmptyStack (_ :| [])) = st
+reset (NonEmptyStack (_ :| xs)) = reset $ NonEmptyStack (NonEmpty.fromList xs)
 
 top :: CallStack -> CallEntry
 top (NonEmptyStack (x :| _)) = x

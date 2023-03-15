@@ -1,4 +1,14 @@
-main_
+
+main_ Pre<starkware.cairo.lang.compiler.lib.registers.get_ap|<22=get_ap/33=lit/root>>
+Verified
+
+main_ Pre<starkware.cairo.lang.compiler.lib.registers.get_ap|<22=get_ap/37=lit/root>>
+Verified
+
+main_ Pre<starkware.cairo.lang.compiler.lib.registers.get_ap|<15=get_ap/39=add/root>>
+Verified
+
+main_:::default
 False
 
 _Stack.empty [inlined]

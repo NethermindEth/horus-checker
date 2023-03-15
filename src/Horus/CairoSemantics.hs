@@ -10,22 +10,24 @@ module Horus.CairoSemantics
   )
 where
 
-import Control.Monad (forM_, unless, when)
+import Control.Monad (forM_, join, unless, when)
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, toList, traverse_)
-import Data.Functor ((<&>))
+import Data.Functor (($>), (<&>))
 import Data.List (tails)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
 import Data.List.NonEmpty qualified as NonEmpty (head, last, tail, toList)
 import Data.Map (Map)
 import Data.Map qualified as Map ((!?))
+import Data.Maybe (fromMaybe, isJust)
 import Data.Set qualified as Set (Set, member)
 import Data.Text (Text)
+import Data.Traversable (for)
+import Lens.Micro ((^.), _1)
 
 import Horus.CallStack as CS (CallEntry, CallStack)
 import Horus.Expr (Cast (..), Expr ((:+)), Ty (..), (.&&), (./=), (.<), (.<=), (.==), (.=>), (.||))
 import Horus.Expr qualified as Expr
-import Horus.Expr qualified as TSMT
 import Horus.Expr.Util (gatherLogicalVariables, suffixLogicalVariables)
 import Horus.Expr.Vars
   ( builtinAligned
@@ -54,7 +56,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (Module (..), ModuleSpec (..), PlainSpec (..), richToPlainSpec)
+import Horus.Module (Module (..), ModuleData (ModuleData, md_lastPc, md_prog, md_spec), ModuleSpec (..), PlainSpec (..), getPreCheckedFuncWithCallStack, isPreChecking, moduleData, richToPlainSpec)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (name)
@@ -63,7 +65,7 @@ import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.ScopedName qualified as ScopedName (fromText)
 import Horus.SW.Storage (Storage)
 import Horus.SW.Storage qualified as Storage (equivalenceExpr)
-import Horus.Util (enumerate, tShow, whenJust, whenJustM)
+import Horus.Util (enumerate, safeLast, tShow, whenJust, whenJustM)
 
 data MemoryVariable = MemoryVariable
   { mv_varName :: Text
@@ -81,7 +83,6 @@ data AssertionType
 data CairoSemanticsF a
   = Assert' (Expr TBool) AssertionType a
   | Expect' (Expr TBool) AssertionType a
-  | CheckPoint ([MemoryVariable] -> Expr TBool) a
   | DeclareMem (Expr TFelt) (Expr TFelt -> a)
   | DeclareLocalMem (Expr TFelt) (MemoryVariable -> a)
   | GetApTracking Label (ApTracking -> a)
@@ -90,18 +91,21 @@ data CairoSemanticsF a
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
   | GetFunPc Label (Label -> a)
   | GetInlinable (Set.Set ScopedFunction -> a)
+  | GetMemVars ([MemoryVariable] -> a)
   | GetStackTraceDescr (Maybe CallStack) (Text -> a)
   | GetOracle (NonEmpty Label -> a)
   | IsInlinable ScopedFunction (Bool -> a)
   | Push CallEntry a
   | Pop a
+  | ResetStack a
   | Top (CallEntry -> a)
   | EnableStorage a
   | ReadStorage ScopedName [Expr TFelt] (Expr TFelt -> a)
   | UpdateStorage Storage a
   | GetStorage (Storage -> a)
   | Throw Text
-  deriving stock (Functor)
+
+deriving instance Functor CairoSemanticsF
 
 type CairoSemanticsL = F CairoSemanticsF
 
@@ -110,9 +114,6 @@ assert' assType a = liftF (Assert' a assType ())
 
 expect' :: Expr TBool -> CairoSemanticsL ()
 expect' a = liftF (Expect' a PostAssertion ())
-
-checkPoint :: ([MemoryVariable] -> Expr TBool) -> CairoSemanticsL ()
-checkPoint a = liftF (CheckPoint a ())
 
 declareMem :: Expr TFelt -> CairoSemanticsL (Expr TFelt)
 declareMem address = liftF (DeclareMem address id)
@@ -132,6 +133,9 @@ getFuncSpec name = liftF (GetFuncSpec name id)
 getFunPc :: Label -> CairoSemanticsL Label
 getFunPc l = liftF (GetFunPc l id)
 
+getMemVars :: CairoSemanticsL [MemoryVariable]
+getMemVars = liftF (GetMemVars id)
+
 declareLocalMem :: Expr TFelt -> CairoSemanticsL MemoryVariable
 declareLocalMem address = liftF (DeclareLocalMem address id)
 
@@ -143,6 +147,9 @@ enableStorage = liftF (EnableStorage ())
 
 readStorage :: ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
 readStorage name args = liftF (ReadStorage name args id)
+
+resetStack :: CairoSemanticsL ()
+resetStack = liftF (ResetStack ())
 
 updateStorage :: Storage -> CairoSemanticsL ()
 updateStorage storage = liftF (UpdateStorage storage ())
@@ -199,6 +206,7 @@ substitute what forWhat = Expr.canonicalize . Expr.transformId step
  where
   step :: Expr b -> Expr b
   step (Expr.cast @TFelt -> CastOk (Expr.Fun name)) | name == what = forWhat
+  step (Expr.cast @TBool -> CastOk (Expr.ExistsFelt name expr)) = Expr.ExistsFelt name (substitute what forWhat expr)
   step e = e
 
 {- | Prepare the expression for usage in the model.
@@ -212,11 +220,15 @@ prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
 prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare' ap fp expr = memoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
-prepareCheckPoint ::
-  Label -> Expr TFelt -> Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
-prepareCheckPoint pc fp expr = do
-  ap <- getAp pc
-  exMemoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
+preparePost ::
+  Expr TFelt -> Expr TFelt -> Expr TBool -> Bool -> CairoSemanticsL (Expr TBool)
+preparePost ap fp expr isOptim = do
+  if isOptim
+    then do
+      memVars <- getMemVars
+      post <- storageRemoval expr
+      ($ memVars) <$> exMemoryRemoval (substitute "fp" fp (substitute "ap" ap post))
+    else prepare' ap fp expr
 
 encodeApTracking :: Text -> ApTracking -> Expr TFelt
 encodeApTracking traceDescr ApTracking{..} =
@@ -236,17 +248,21 @@ getFp :: CairoSemanticsL (Expr TFelt)
 getFp = getFp' Nothing
 
 moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
-moduleStartAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
-moduleStartAp Module{m_prog = (pc0, _) : _} = getAp pc0
+moduleStartAp mdl =
+  case md_prog (moduleData mdl) of
+    [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
+    (pc0, _) : _ -> getAp pc0
 
 moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
-moduleEndAp Module{m_prog = []} = getStackTraceDescr <&> Expr.const . ("ap!" <>)
-moduleEndAp m@Module{m_prog = _} = getAp' (Just callstack) pc where (callstack, pc) = m_lastPc m
+moduleEndAp mdl =
+  case md_prog (moduleData mdl) of
+    [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
+    _ -> getAp' (Just callstack) pc where (callstack, pc) = md_lastPc (moduleData mdl)
 
 encodeModule :: Module -> CairoSemanticsL ()
-encodeModule m@Module{..} = case m_spec of
-  MSRich spec -> encodeRichSpec m spec
-  MSPlain spec -> encodePlainSpec m spec
+encodeModule mdl = case md_spec (moduleData mdl) of
+  MSRich spec -> encodeRichSpec mdl spec
+  MSPlain spec -> encodePlainSpec mdl spec
 
 encodeRichSpec :: Module -> FuncSpec -> CairoSemanticsL ()
 encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
@@ -256,7 +272,8 @@ encodeRichSpec mdl funcSpec@(FuncSpec _pre _post storage) = do
   preparedStorage <- traverseStorage (prepare' apEnd fp) storage
   encodePlainSpec mdl plainSpec
   accumulatedStorage <- getStorage
-  expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
+  unless (isPreChecking mdl) $
+    expect (Storage.equivalenceExpr accumulatedStorage preparedStorage)
  where
   plainSpec = richToPlainSpec funcSpec
 
@@ -269,15 +286,37 @@ encodePlainSpec mdl PlainSpec{..} = do
   assert (fp .<= apStart)
   assertPre =<< prepare' apStart fp ps_pre
 
-  let instrs = m_prog mdl
-  for_ (zip [0 ..] instrs) $ \(idx, instr) ->
-    mkInstructionConstraints instr (getNextPcInlinedWithFallback instrs idx) (m_jnzOracle mdl)
+  -- The last FP might be influenced in the optimizing case, we need to grab it as propagated
+  -- by the encoding of the semantics of the call.
+  lastFp <-
+    fromMaybe fp . join . safeLast
+      <$> for
+        (zip [0 ..] instrs)
+        ( \(idx, instr) ->
+            mkInstructionConstraints
+              instr
+              (getNextPcInlinedWithFallback instrs idx)
+              (getPreCheckedFuncWithCallStack mdl)
+              oracle
+        )
 
-  expect =<< prepare' apEnd fp ps_post
+  expect =<< preparePost apEnd lastFp ps_post (isPreChecking mdl)
 
-  whenJust (nonEmpty (m_prog mdl)) $ \neInsts -> do
+  whenJust (nonEmpty instrs) $ \neInsts -> do
+    -- Normally, 'call's are accompanied by 'ret's for inlined functions. With the optimisation
+    -- that splits modules on pre of every non-inlined function, some modules 'finish' their
+    -- enconding without actually reaching a subsequent 'ret' for every inlined 'call', thus
+    -- leaving the callstack in a not-initial state, which is necessary to start subsequent
+    -- passes of the analysis.
+
+    -- Resetting the stack might seem excessive, but it is simpler than counting 'call's and
+    -- making up for missing 'ret's.
+    resetStack
     mkApConstraints apEnd neInsts
-    mkBuiltinConstraints apEnd neInsts
+    resetStack
+    mkBuiltinConstraints apEnd neInsts (getPreCheckedFuncWithCallStack mdl)
+ where
+  (ModuleData _ instrs oracle _ _) = moduleData mdl
 
 exMemoryRemoval :: Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool)
 exMemoryRemoval expr = do
@@ -339,47 +378,77 @@ withExecutionCtx ctx action = do
   pop
   pure res
 
-mkInstructionConstraints :: LabeledInst -> Label -> Map (NonEmpty Label, Label) Bool -> CairoSemanticsL ()
-mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc jnzOracle = do
+mkInstructionConstraints ::
+  LabeledInst ->
+  Label ->
+  Maybe (CallStack, ScopedFunction) ->
+  Map (NonEmpty Label, Label) Bool ->
+  CairoSemanticsL (Maybe (Expr TFelt))
+mkInstructionConstraints lInst@(pc, Instruction{..}) nextPc mbPreCheckedFuncWithCallStack jnzOracle = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
-    Call -> mkCallConstraints pc nextPc fp =<< getCallee lInst
-    AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst)
+    Call -> mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack =<< getCallee lInst
+    AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst) $> Nothing
     Nop -> do
       stackTrace <- getOracle
       case jnzOracle Map.!? (stackTrace, pc) of
-        Just False -> assert (dst .== 0)
-        Just True -> assert (dst ./= 0)
-        Nothing -> pure ()
-    Ret -> pop
+        Just False -> assert (dst .== 0) $> Nothing
+        Just True -> assert (dst ./= 0) $> Nothing
+        Nothing -> pure Nothing
+    Ret -> pop $> Nothing
 
-mkCallConstraints :: Label -> Label -> Expr TFelt -> ScopedFunction -> CairoSemanticsL ()
-mkCallConstraints pc nextPc fp f = do
+-- | A particular case of mkInstructionConstraints for the instruction 'call'.
+mkCallConstraints ::
+  Label ->
+  Label ->
+  Expr TFelt ->
+  Maybe (CallStack, ScopedFunction) ->
+  ScopedFunction ->
+  CairoSemanticsL (Maybe (Expr TFelt))
+mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
   calleeFp <- withExecutionCtx stackFrame getFp
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
   saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
   setNextPc <- prepare pc fp (memory (Vars.ap + 1) .== fromIntegral (unLabel nextPc))
-  assert (TSMT.and [nextAp, saveOldFp, setNextPc])
+  assert (Expr.and [nextAp, saveOldFp, setNextPc])
   push stackFrame
-  canInline <- isInlinable f
-  unless canInline $ do
-    (FuncSpec pre post storage) <- getFuncSpec f <&> toFuncSpec
-    let pre' = suffixLogicalVariables lvarSuffix pre
-        post' = suffixLogicalVariables lvarSuffix post
-    removedStorage <- storageRemoval pre'
-    preparedPre <- prepare calleePc calleeFp removedStorage
-    preparedPreCheckPoint <- prepareCheckPoint calleePc calleeFp =<< storageRemoval pre'
-    dbgStrg <- traverseStorage (prepare nextPc calleeFp) storage
-    updateStorage dbgStrg
-    pop
-    preparedPost <- prepare nextPc calleeFp =<< storageRemoval =<< storageRemoval post'
-    checkPoint preparedPreCheckPoint
-    assert (preparedPre .&& preparedPost)
+  -- Considering we have already pushed the stackFrame by now, we need to make sure that either
+  -- the function is inlinable and we'll encounter a 'ret', or we need to pop right away
+  -- once we encode semantics of the function.
+
+  -- We need only a part of the call instruction's semantics for optimizing modules.
+  guardWith isModuleCheckingPre (Just <$> getFp <* pop) $ do
+    -- This is reachable unless the module is optimizing, in which case the precondition
+    -- of the function is necessarily the last thing being checked; as such, the semantics
+    -- of the function being invoked must not be considered.
+    guardWith (isInlinable f) (pure Nothing) $ do
+      -- An inlined function will have a 'ret' at some point, do not pop here.
+      (FuncSpec pre post storage) <- getFuncSpec f <&> toFuncSpec
+      let pre' = suffixLogicalVariables lvarSuffix pre
+          post' = suffixLogicalVariables lvarSuffix post
+      preparedPre <- prepare nextPc calleeFp =<< storageRemoval pre'
+      updateStorage =<< traverseStorage (prepare nextPc calleeFp) storage
+      pop
+      preparedPost <- prepare nextPc calleeFp =<< storageRemoval post'
+      -- One would normally expect to see assert (pre -> post).
+      -- However, pre will be checked in a separate 'optimising' module and we can therefore simply
+      -- assert it holds here. If it does not, the corresponding pre-checking module will fail,
+      -- thus failing the judgement for the entire function.
+      assert preparedPre
+      assert preparedPost
+      pure Nothing
  where
   lvarSuffix = "+" <> tShowLabel pc
   calleePc = sf_pc f
   stackFrame = (pc, calleePc)
+  -- Determine whether the current function matches the function being optimised exactly -
+  -- this necessitates comparing execution traces.
+  isModuleCheckingPre = do
+    stackDescr <- getStackTraceDescr
+    preCheckedFuncStackDescr <- getStackTraceDescr' ((^. _1) <$> mbPreCheckedFuncWithCallStack)
+    pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
+  guardWith condM val cont = do cond <- condM; if cond then val else cont
 
 traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
@@ -402,30 +471,31 @@ mkApConstraints apEnd insts = do
       ap2 <- getAp pcNext
       fp <- getFp
       getApIncrement fp lInst >>= \case
-        Just apIncrement -> let res = assert (ap1 + apIncrement .== ap2) in res
+        Just apIncrement -> assert (ap1 + apIncrement .== ap2)
         Nothing | not isNewStackframe -> assert (ap1 .< ap2)
         Nothing -> pure ()
   lastAp <- getAp lastPc
   when (isRet lastInst) pop
   fp <- getFp
   getApIncrement fp lastLInst >>= \case
-    Just lastApIncrement -> let res = assert (lastAp + lastApIncrement .== apEnd) in res
+    Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
     Nothing -> assert (lastAp .< apEnd)
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
-mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
-mkBuiltinConstraints apEnd insts = do
-  fp <- getFp
-  funPc <- getFunPc (fst (NonEmpty.head insts))
-  for_ enumerate $ \b ->
-    getBuiltinOffsets funPc b >>= \case
-      Just bo -> do
-        let (pre, post) = getBuiltinContract fp apEnd b bo
-        assert pre *> expect post
-        for_ (zip (NonEmpty.toList insts) [0 ..]) $ \(inst, i) ->
-          mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
-      Nothing -> checkBuiltinNotRequired b (toList insts)
+mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
+mkBuiltinConstraints apEnd insts optimisesF =
+  unless (isJust optimisesF) $ do
+    fp <- getFp
+    funPc <- getFunPc (fst (NonEmpty.head insts))
+    for_ enumerate $ \b -> do
+      getBuiltinOffsets funPc b >>= \case
+        Just bo -> do
+          let (pre, post) = getBuiltinContract fp apEnd b bo
+          assert pre *> expect post
+          for_ (zip (NonEmpty.toList insts) [0 ..]) $ \(inst, i) ->
+            mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
+        Nothing -> checkBuiltinNotRequired b (toList insts)
 
 getBuiltinContract ::
   Expr TFelt -> Expr TFelt -> Builtin -> BuiltinOffsets -> (Expr TBool, Expr TBool)

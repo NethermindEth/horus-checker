@@ -15,13 +15,14 @@ import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
 
 import Data.List.NonEmpty (NonEmpty)
+import Horus.CFGBuild (Vertex)
 import Horus.Label (Label (..))
 import Horus.Module (Error, Module (..), ModuleF (..), ModuleL (..))
 import Horus.Util (tShow)
 
 type Impl =
   ReaderT
-    (Set (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label))
+    (Set (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex))
     (WriterT (DList Module) (Except Error))
 
 interpret :: ModuleL a -> Impl a
@@ -31,7 +32,7 @@ interpret = iterM exec . runModuleL
   exec (EmitModule m cont) = tell (D.singleton m) *> cont
   exec (Visiting l action cont) = do
     visited <- ask
-    local (Set.insert l) $ do
+    local (Set.insert l) $
       interpret (action (Set.member l visited)) >>= cont
   exec (Throw t) = throwError t
   exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont

@@ -39,7 +39,7 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
+import Horus.Module (Module (..), ModuleData (md_calledF, md_prog), ModuleL, gatherModules, getModuleNameParts, getPreCheckedFuncWithCallStack, moduleData)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
@@ -159,13 +159,15 @@ makeModules (cfg, allow) =
     =<< getSources
 
 extractConstraints :: Module -> GlobalL ConstraintsState
-extractConstraints mdl = runCairoSemanticsL (initialWithFunc $ m_calledF mdl) (encodeModule mdl)
+extractConstraints mdl =
+  runCairoSemanticsL (initialWithFunc . md_calledF . moduleData $ mdl) (encodeModule mdl)
 
 data SolvingInfo = SolvingInfo
   { si_moduleName :: Text
   , si_funcName :: Text
   , si_result :: HorusResult
   , si_inlinable :: Bool
+  , si_preCheckingContext :: Maybe (CallStack, ScopedFunction)
   }
   deriving (Eq, Show)
 
@@ -193,11 +195,18 @@ solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
   identifiers <- getIdentifiers
-  let (qualifiedFuncName, labelsSummary, oracleSuffix) = getModuleNameParts identifiers m
-      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix
-      inlinable = m_calledF m `elem` Set.map sf_pc inlinables
+  let (qualifiedFuncName, labelsSummary, oracleSuffix, preCheckingSuffix) = getModuleNameParts identifiers m
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> preCheckingSuffix
+      inlinable = md_calledF (moduleData m) `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
-  pure SolvingInfo{si_moduleName = moduleName, si_funcName = qualifiedFuncName, si_result = result, si_inlinable = inlinable}
+  pure
+    SolvingInfo
+      { si_moduleName = moduleName
+      , si_funcName = qualifiedFuncName
+      , si_result = result
+      , si_inlinable = inlinable
+      , si_preCheckingContext = getPreCheckedFuncWithCallStack m
+      }
  where
   mkResult :: Text -> GlobalL HorusResult
   mkResult moduleName = printingErrors $ do
@@ -245,7 +254,7 @@ removeMathSAT :: Module -> GlobalL a -> GlobalL a
 removeMathSAT m run = do
   conf <- getConfig
   let solver = cfg_solver conf
-  usesLvars <- or <$> traverse instUsesLvars (m_prog m)
+  usesLvars <- or <$> traverse instUsesLvars (md_prog (moduleData m))
   if includesMathsat solver && usesLvars
     then do
       let solver' = filterMathsat solver
@@ -275,6 +284,7 @@ solveSMT cs = do
   let preQuery = makeModel True cs fPrime
   res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
   preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
+
   -- Convert the `SolverResult` to a `HorusResult`.
   --
   -- Note that the special case where the normal query is `Unsat` *and* the
@@ -288,10 +298,10 @@ solveSMT cs = do
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
 -- | Add an oracle suffix to the module name when the module name *is* the function name.
-appendMissingDefaultOracleSuffixes :: SolvingInfo -> SolvingInfo
-appendMissingDefaultOracleSuffixes si@(SolvingInfo moduleName funcName result inlinable) =
+appendMissingDefaultOracleSuffix :: SolvingInfo -> SolvingInfo
+appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inlinable preCheckingContext) =
   if moduleName == funcName
-    then SolvingInfo (moduleName <> ":::default") funcName result inlinable
+    then SolvingInfo (moduleName <> ":::default") funcName result inlinable preCheckingContext
     else si
 
 {- |  Collapse a list of modules for the same function if they are all `Unsat`.
@@ -310,10 +320,12 @@ appendMissingDefaultOracleSuffixes si@(SolvingInfo moduleName funcName result in
 -}
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
-collapseAllUnsats infos@(SolvingInfo _ funcName result inlinable : _)
-  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result inlinable]
+collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
+  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
-  | otherwise = map appendMissingDefaultOracleSuffixes infos
+  | otherwise = map appendMissingDefaultOracleSuffix infos
+ where
+  reportInlinable = all si_inlinable infos
 
 {- | Return a solution of SMT queries corresponding with the contract.
 
@@ -337,7 +349,7 @@ solveContract = do
   let isUntrusted :: Module -> Bool
       isUntrusted m = labeledFuncName `notElem` trustedStdFuncs
        where
-        (qualifiedFuncName, labelsSummary, _) = getModuleNameParts identifiers m
+        (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
         labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
   infos <- for (filter isUntrusted modules) solveModule
   pure $
@@ -351,13 +363,13 @@ solveContract = do
   isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
 
   sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
-  sameFuncName (SolvingInfo _ nameA _ _) (SolvingInfo _ nameB _ _) = nameA == nameB
+  sameFuncName (SolvingInfo _ nameA _ _ _) (SolvingInfo _ nameB _ _ _) = nameA == nameB
 
   ignorableFuncPrefixes :: [Text]
   ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
 
   isVerifiedIgnorable :: SolvingInfo -> Bool
-  isVerifiedIgnorable (SolvingInfo name _ res _) =
+  isVerifiedIgnorable (SolvingInfo name _ res _ _) =
     res == Verified && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
 
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()

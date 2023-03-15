@@ -8,6 +8,11 @@ module Horus.Module
   , ModuleSpec (..)
   , PlainSpec (..)
   , richToPlainSpec
+  , isPreChecking
+  , dropMain
+  , moduleData
+  , ModuleData (..)
+  , getPreCheckedFuncWithCallStack
   )
 where
 
@@ -18,34 +23,40 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
-import Data.Map qualified as Map (elems, empty, insert, null, toList)
+import Data.Map qualified as Map (elems, empty, insert, map, null, toList)
 import Data.Text (Text)
 import Data.Text qualified as Text (concat, intercalate)
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
-import Horus.CFGBuild (ArcCondition (..), Label (unLabel))
-import Horus.CFGBuild.Runner (CFG (..))
-import Horus.CallStack (CallStack, calledFOfCallEntry, callerPcOfCallEntry, initialWithFunc, pop, push, stackTrace, top)
+import Horus.CFGBuild (ArcCondition (..), Label (unLabel), Vertex (..))
+import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
+import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, stackTrace, top)
+import Horus.ContractInfo (pcToFun)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
-import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), isRetArc, sizeOfCall)
-import Horus.Instruction (LabeledInst)
+import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
+import Horus.Instruction (LabeledInst, uncheckedCallDestination)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
-import Horus.SW.ScopedName (ScopedName (..))
+import Horus.SW.ScopedName (ScopedName (..), toText)
 
-data Module = Module
-  { m_spec :: ModuleSpec
-  , m_prog :: [LabeledInst]
-  , m_jnzOracle :: Map (NonEmpty Label, Label) Bool
-  , m_calledF :: Label
-  , m_lastPc :: (CallStack, Label)
+data ModuleData = ModuleData
+  { md_spec :: ModuleSpec
+  , md_prog :: [LabeledInst]
+  , md_jnzOracle :: Map (NonEmpty Label, Label) Bool
+  , md_calledF :: Label
+  , md_lastPc :: (CallStack, Label)
   }
+  deriving stock (Show)
+
+data Module
+  = StandardModule ModuleData
+  | PreCheckingModule ModuleData (CallStack, ScopedFunction)
   deriving stock (Show)
 
 data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
@@ -53,6 +64,18 @@ data ModuleSpec = MSRich FuncSpec | MSPlain PlainSpec
 
 data PlainSpec = PlainSpec {ps_pre :: Expr TBool, ps_post :: Expr TBool}
   deriving stock (Show)
+
+moduleData :: Module -> ModuleData
+moduleData (StandardModule md) = md
+moduleData (PreCheckingModule md _) = md
+
+getPreCheckedFuncWithCallStack :: Module -> Maybe (CallStack, ScopedFunction)
+getPreCheckedFuncWithCallStack (StandardModule _) = Nothing
+getPreCheckedFuncWithCallStack (PreCheckingModule _ f) = Just f
+
+isPreChecking :: Module -> Bool
+isPreChecking (StandardModule _) = False
+isPreChecking (PreCheckingModule _ _) = True
 
 richToPlainSpec :: FuncSpec -> PlainSpec
 richToPlainSpec FuncSpec{..} = PlainSpec{ps_pre = fs_pre .&& ap .== fp, ps_post = fs_post}
@@ -70,10 +93,9 @@ labelNamesOfPc idents lblpc =
   ]
 
 -- | Remove the `__main__` prefix from top-level function names.
-dropMain :: [Text] -> [Text]
-dropMain [] = []
-dropMain ("__main__" : xs) = xs
-dropMain xs = xs
+dropMain :: ScopedName -> ScopedName
+dropMain (ScopedName ("__main__" : xs)) = ScopedName xs
+dropMain name = name
 
 {- | Summarize a list of labels for a function.
 
@@ -139,7 +161,7 @@ normalizedName :: [ScopedName] -> Bool -> (Text, Text)
 normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
  where
   -- Extract list of scopes from each ScopedName, dropping `__main__`.
-  names = filter (not . null) $ sansCommonAncestor $ map (dropMain . sn_path) scopedNames
+  names = filter (not . null) $ sansCommonAncestor $ map (sn_path . dropMain) scopedNames
   -- If we have a floating label, we need to drop the last scope, because it is
   -- the label name itself.
   scopes = map (Text.intercalate ".") (if isFloatingLabel then map init names else names)
@@ -156,7 +178,9 @@ descrOfOracle oracle =
     then ""
     else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ oracle
 
-{- | Return a triple of the function name, the label summary, and the oracle.
+{- | Return a quadruple of the function name, the label summary, the oracle and
+    precondition check suffix (indicates, for precondition-checking modules,
+    which function's precondition is being checked).
 
  The oracle is a string of `1` and `2` characters, representing a path
  through the control flow graph of the function. For example, if we have a
@@ -185,17 +209,24 @@ descrOfOracle oracle =
  Note: while we do have the name of the called function in the `Module` type,
  it does not contain the rest of the labels.
 -}
-getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text)
-getModuleNameParts idents (Module spec prog oracle calledF _) =
+getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
+getModuleNameParts idents mdl =
   case beginOfModule prog of
-    Nothing -> ("", "empty: " <> pprExpr post, "")
+    Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
       let scopedNames = labelNamesOfPc idents label
           isFloatingLabel = label /= calledF
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
-       in (prefix, labelsSummary, descrOfOracle oracle)
+       in (prefix, labelsSummary, descrOfOracle oracle, preCheckingSuffix)
  where
+  (ModuleData spec prog oracle calledF _) = moduleData mdl
   post = case spec of MSRich fs -> fs_post fs; MSPlain ps -> ps_post ps
+  preCheckingSuffix = case mdl of
+    StandardModule _ -> ""
+    PreCheckingModule _ (callstack, f) ->
+      let fName = toText . dropMain . sf_scopedName $ f
+          stackDigest = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
+       in " Pre<" <> fName <> "|" <> stackDigest <> ">"
 
 data Error
   = ELoopNoInvariant Label
@@ -208,7 +239,7 @@ instance Show Error where
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label) (Bool -> ModuleL b) (b -> a)
+  | forall b. Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -234,7 +265,7 @@ emitModule m = liftF' (EmitModule m ())
 'm' additionally takes a parameter that tells whether 'l' has been
 visited before.
 -}
-visiting :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Label) -> (Bool -> ModuleL b) -> ModuleL b
+visiting :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
 visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
 
 throw :: Error -> ModuleL a
@@ -253,59 +284,110 @@ extractPlainBuilder fs@(FuncSpec _pre _post state)
 gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
 
+{- | This function represents a depth first search through the CFG that uses as sentinels
+(for where to begin and where to end) assertions in nodes, such that nodes that are not annotated
+are traversed without stopping the search, gathering labels from respective edges that
+represent instructions and concatenating them into final Modules, that are subsequently
+transformed into actual *.smt2 queries.
+
+Thus, a module can comprise of 0 to several segments, where the precondition of the module
+is the annotation of the node 'begin' that begins the first segment, the postcondition of the module
+is the annotation of the node 'end' that ends the last segment and instructions of the module
+are a concatenation of edge labels for the given path through the graph from 'begin' to 'end'.
+
+Note that NO node with an annotation can be encountered in the middle of one such path,
+because annotated nodes are sentinels and the search would terminate.
+
+We distinguish between plain and rich modules.
+A plain module is a self-contained 'sub-program' with its own semantics that is referentially pure
+in the sense that it has no side-effects on the environment, i.e. does not access storage variables.
+
+A rich module is very much like a plain module except it allows side effects,
+i.e. accesses to storage variables.
+-}
 gatherFromSource :: CFG -> Function -> FuncSpec -> ModuleL ()
-gatherFromSource cfg function fSpec =
-  visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich (fu_pc function) ACNone Nothing
+gatherFromSource cfg function fSpec = do
+  let verticesAtFuPc = verticesLabelledBy cfg $ fu_pc function
+  for_ verticesAtFuPc $ \v ->
+    visit Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing
  where
+  {- Revisiting nodes (thus looping) within the CFG is verboten in all cases but one,
+     specifically when we are jumping back to a label that is annotated with an invariant 'inv'.
+     In this case, we pretend that the 'begin' and 'end' is the same node, both of which
+     annotated with 'inv'.
+
+     Thus, visit needs a way to keep track of nodes that have already been visited. However,
+     it is important to note that it is not sufficient to keep track of which program counters
+     we have touched in the CFG, as there are several ways to 'validly' revisit the same PC
+     without loopy behaviour, most prominently stemming from existence of ifs that converge
+     on the same path and presence of inlining where the same function can be called multiple times.
+
+     In order to distinguish valid nodes in this context, we need the oracle for ifs as described in
+     the docs of getModuleNameParts and we need the callstack which keeps track of inlined functions
+     in very much the same way as 'normal' callstacks work, thus allowing us to identify
+     whether the execution of the current function is unique, or being revisited through
+     a 'wrong' path through the CFG.
+
+     Oracles need a bit of extra information about which booltest passed - in the form of ArcCondition
+     and CallStack needs a bit of extra information about when call/ret are called, in the form of FInfo. -}
   visit ::
     Map (NonEmpty Label, Label) Bool ->
     CallStack ->
     [LabeledInst] ->
     SpecBuilder ->
-    Label ->
+    Vertex ->
     ArcCondition ->
     FInfo ->
     ModuleL ()
-  visit oracle callstack acc builder l arcCond f =
-    visiting (stackTrace callstack', oracle, l) $ \alreadyVisited ->
+  visit oracle callstack acc builder v arcCond f =
+    visiting (stackTrace callstack', oracle, v) $ \alreadyVisited ->
       if alreadyVisited then visitLoop builder else visitLinear builder
    where
+    l = v_label v
+
     visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
     visitLoop (SBPlain pre)
       | null assertions = throwError (ELoopNoInvariant l)
       | otherwise = emitPlain pre (Expr.and assertions)
 
     visitLinear SBRich
-      | onFinalNode = emitRich (fs_pre fSpec) (Expr.and $ cfg_assertions cfg ^. ix l)
-      | null assertions = visitArcs oracle' acc builder l
+      | onFinalNode = emitRich (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
+      | null assertions = visitArcs oracle' acc builder v
       | otherwise = extractPlainBuilder fSpec >>= visitLinear
     visitLinear (SBPlain pre)
-      | null assertions = visitArcs oracle' acc builder l
+      | null assertions = visitArcs oracle' acc builder v
       | otherwise = do
           emitPlain pre (Expr.and assertions)
-          visitArcs Map.empty [] (SBPlain (Expr.and assertions)) l
+          visitArcs Map.empty [] (SBPlain (Expr.and assertions)) v
 
     callstack' = case f of
       Nothing -> callstack
       Just (ArcCall fCallerPc fCalledF) -> push (fCallerPc, fCalledF) callstack
       Just ArcRet -> snd $ pop callstack
     oracle' = updateOracle arcCond callstack' oracle
-    assertions = cfg_assertions cfg ^. ix l
-    onFinalNode = null (cfg_arcs cfg ^. ix l)
-    emitPlain pre post = emit . MSPlain $ PlainSpec pre post
-    emitRich pre post = emit . MSRich $ FuncSpec pre post $ fs_storage fSpec
-    emit spec = emitModule $ Module spec acc oracle' (calledFOfCallEntry $ top callstack') (callstack', l)
+    assertions = map snd (cfg_assertions cfg ^. ix v)
+    onFinalNode = null (cfg_arcs cfg ^. ix v)
 
-    -- Visit all arcs from the current node.
-    --
-    -- This is here because a ret from a function adds a graph arc to
-    -- everything that ever calls it, and then we filter which one we want
-    -- during module generation, thus ignoring some outgoing edges.
-    visitArcs :: Map (NonEmpty Label, Label) Bool -> [LabeledInst] -> SpecBuilder -> Label -> ModuleL ()
-    visitArcs newOracle acc' pre l' = do
-      let outArcs = cfg_arcs cfg ^. ix l'
+    preCheckingStackFrame = (fCallerPc, fCalledF)
+     where
+      labelledCall@(fCallerPc, _) = last acc
+      fCalledF = uncheckedCallDestination labelledCall
+    preCheckingContext =
+      (push preCheckingStackFrame callstack',) <$> v_preCheckedF v
+
+    emitPlain pre post = emit preCheckingContext . MSPlain $ PlainSpec pre post
+    emitRich pre post = emit preCheckingContext . MSRich . FuncSpec pre post $ fs_storage fSpec
+
+    emit mbTrace spec = case mbTrace of
+      Nothing -> emitModule (StandardModule md)
+      Just trace -> emitModule (PreCheckingModule md trace)
+     where
+      md = ModuleData spec acc oracle' (fu_pc function) (callstack', l)
+
+    visitArcs newOracle acc' pre v' = do
+      let outArcs = cfg_arcs cfg ^. ix v'
       unless (null outArcs) $
-        let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==)
+        let isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
             outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
          in for_ outArcs' $ \(lTo, insts, test, f') ->
               visit newOracle callstack' (acc' <> insts) pre lTo test f'

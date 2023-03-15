@@ -1,3 +1,6 @@
+max Pre<starkware.cairo.common.math_cmp.is_le|<87=is_le/root>>
+Verified
+
 max:::1
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
@@ -5,3 +8,4 @@ Error: The function doesn't require the 'range-check' builtin, but calls a funct
 max:::2
 Unknown
 Error: The function doesn't require the 'range-check' builtin, but calls a function (at PC 78) that does require it
+

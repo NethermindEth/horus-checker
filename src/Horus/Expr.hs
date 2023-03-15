@@ -78,7 +78,14 @@ data Expr (a :: Ty) where
 
 infixl 4 :*:
 
-deriving stock instance Show (Expr a)
+instance Show (Expr a) where
+  show (Felt a) = show a
+  show True = "True"
+  show False = "False"
+  show (Fun args) = show args
+  show ((:*:) lhs rhs) = "(" ++ show lhs ++ " " ++ show rhs ++ ")"
+  show (ExistsFelt w h) = "exists " ++ show w ++ ", " ++ show h
+  show (ExitField a) = show a
 
 instance Eq (Expr a) where
   Felt a == Felt b = a == b
