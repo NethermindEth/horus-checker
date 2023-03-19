@@ -14,15 +14,15 @@ import Data.Set (Set)
 import Data.Set qualified as Set (empty, insert, member)
 import Data.Text (Text)
 
-import Data.List.NonEmpty (NonEmpty)
 import Horus.CFGBuild (Vertex)
+import Horus.CallStack (CallStack)
 import Horus.Label (Label (..))
 import Horus.Module (Error, Module (..), ModuleF (..), ModuleL (..))
 import Horus.Util (tShow)
 
 type Impl =
   ReaderT
-    (Set (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex))
+    (Set (CallStack, Map (CallStack, Label) Bool, Vertex))
     (WriterT (DList Module) (Except Error))
 
 interpret :: ModuleL a -> Impl a

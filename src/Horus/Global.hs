@@ -158,6 +158,7 @@ verbosePrint what = verbosePutStrLn (tShow what)
 makeModules :: (CFG, ScopedFunction -> Bool) -> GlobalL [Module]
 makeModules (cfg, allow) =
   (runModuleL . gatherModules cfg)
+    . map (\(f, _, spec) -> (f, spec))
     . filter (\(Function fpc _, name, _) -> allow $ ScopedFunction name fpc)
     =<< getSources
 
@@ -198,8 +199,8 @@ solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
   identifiers <- getIdentifiers
-  let (qualifiedFuncName, labelsSummary, oracleSuffix, preCheckingSuffix) = getModuleNameParts identifiers m
-      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> preCheckingSuffix
+  let (qualifiedFuncName, labelsSummary, branchIdentifiersSuffix, preCheckingSuffix) = getModuleNameParts identifiers m
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> branchIdentifiersSuffix <> preCheckingSuffix
       inlinable = m_calledF m `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
   pure
@@ -300,9 +301,9 @@ solveSMT cs = do
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
--- | Add an oracle suffix to the module name when the module name *is* the function name.
-appendMissingDefaultOracleSuffix :: SolvingInfo -> SolvingInfo
-appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inlinable preCheckingContext) =
+-- | Add a branch suffix to the module name when the module name *is* the function name.
+appendMissingDefaultBranchIdentifiersSuffix :: SolvingInfo -> SolvingInfo
+appendMissingDefaultBranchIdentifiersSuffix si@(SolvingInfo moduleName funcName result inlinable preCheckingContext) =
   if moduleName == funcName
     then SolvingInfo (moduleName <> ":::default") funcName result inlinable preCheckingContext
     else si
@@ -318,7 +319,7 @@ appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inli
 
  We break the remaining cases into two subcases:
   * If it is just a single module, we return the list as-is.
-  * If there are multiple modules, we add a `:::default` oracle suffix to the
+  * If there are multiple modules, we add a `:::default` branch suffix to the
     module name that would otherwise just be `<funcName>`.
 -}
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
@@ -326,7 +327,7 @@ collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
   | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
-  | otherwise = map appendMissingDefaultOracleSuffix infos
+  | otherwise = map appendMissingDefaultBranchIdentifiersSuffix infos
  where
   reportInlinable = all si_inlinable infos
 

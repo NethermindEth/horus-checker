@@ -32,7 +32,7 @@ import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
 import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
-import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, stackTrace, top)
+import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr (ExitField, Fun), Ty (..), (.&&), (.<), (.<=), (.==), (.=>))
@@ -167,7 +167,7 @@ interpret = iterM exec
   exec (GetMemVars cont) = do
     use (eConstraints . csMemoryVariables) >>= cont
   exec (GetOracle cont) = do
-    get >>= cont . stackTrace . (^. csCallStack) . e_constraints
+    get >>= cont . (^. csCallStack) . e_constraints
   exec (IsInlinable label cont) = do
     inlinableFs <- asks ci_inlinables
     cont (label `elem` inlinableFs)
