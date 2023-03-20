@@ -66,8 +66,8 @@ data Config = Config
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
   | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ConstraintsState -> a)
-  | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
+  | RunModuleL (ModuleL [Module]) ([Module] -> a)
   | GetCallee LabeledInst (ScopedFunction -> a)
   | GetConfig (Config -> a)
   | GetFuncSpec ScopedFunction (FuncSpec' -> a)
@@ -101,7 +101,7 @@ runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 runCairoSemanticsL :: CallStack -> CairoSemanticsL a -> GlobalL ConstraintsState
 runCairoSemanticsL initStack smt2Builder = liftF' (RunCairoSemanticsL initStack smt2Builder id)
 
-runModuleL :: ModuleL a -> GlobalL [Module]
+runModuleL :: ModuleL [Module] -> GlobalL [Module]
 runModuleL builder = liftF' (RunModuleL builder id)
 
 runPreprocessorL :: PreprocessorEnv -> PreprocessorL a -> GlobalL a
