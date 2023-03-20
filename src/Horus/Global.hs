@@ -258,7 +258,7 @@ removeMathSAT :: Module -> GlobalL a -> GlobalL a
 removeMathSAT m run = do
   conf <- getConfig
   let solver = cfg_solver conf
-  usesLvars <- or <$> traverse instUsesLvars (m_prog m)
+  usesLvars <- or <$> traverse instUsesLvars (m_instrs m)
   if includesMathsat solver && usesLvars
     then do
       let solver' = filterMathsat solver

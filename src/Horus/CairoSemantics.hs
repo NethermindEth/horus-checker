@@ -55,7 +55,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (IfThenElseBranchMap, Module (..), apEqualsFp, isPreChecking)
+import Horus.Module (IfThenElseOutcomeMap, Module (..), apEqualsFp, isPreChecking)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin
@@ -273,13 +273,13 @@ getFp = getFp' Nothing
 
 moduleStartAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleStartAp mdl =
-  case m_prog mdl of
+  case m_instrs mdl of
     [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
     (pc0, _) : _ -> getAp pc0
 
 moduleEndAp :: Module -> CairoSemanticsL (Expr TFelt)
 moduleEndAp mdl =
-  case m_prog mdl of
+  case m_instrs mdl of
     [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
     _ -> getAp' (Just callstack) pc where (callstack, pc) = m_lastPc mdl
 
@@ -288,7 +288,7 @@ moduleEndAp mdl =
  contain a storage update.
 -}
 encodeModule :: Module -> CairoSemanticsL ()
-encodeModule mdl@(Module (FuncSpec pre post storage) instrs branchesByCallStackAndIfPc _ _ mbPreCheckedFuncWithCallStack) = do
+encodeModule mdl@(Module (FuncSpec pre post storage) instrs ifThenElseOutcomes _ _ mbPreCheckedFuncAndCallStack) = do
   enableStorage
   fp <- getFp
   apEnd <- moduleEndAp mdl
@@ -303,7 +303,7 @@ encodeModule mdl@(Module (FuncSpec pre post storage) instrs branchesByCallStackA
     fromMaybe fp . join . safeLast
       <$> for
         (zip [0 ..] instrs)
-        (mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack branchesByCallStackAndIfPc)
+        (mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifThenElseOutcomes)
   expect =<< preparePost apEnd lastFp post (isPreChecking mdl)
   whenJust (nonEmpty instrs) $ \neInsts -> do
     -- Normally, 'call's are accompanied by 'ret's for inlined functions. With the optimisation
@@ -317,7 +317,7 @@ encodeModule mdl@(Module (FuncSpec pre post storage) instrs branchesByCallStackA
     resetStack
     mkApConstraints apEnd neInsts
     resetStack
-    mkBuiltinConstraints apEnd neInsts mbPreCheckedFuncWithCallStack
+    mkBuiltinConstraints apEnd neInsts mbPreCheckedFuncAndCallStack
 
   accumulatedStorage <- getStorage
   unless (isPreChecking mdl) $
@@ -402,18 +402,18 @@ withExecutionCtx ctx action = do
 mkInstructionConstraints ::
   [LabeledInst] ->
   Maybe (CallStack, ScopedFunction) ->
-  IfThenElseBranchMap ->
+  IfThenElseOutcomeMap ->
   (Int, LabeledInst) ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack branchesByCallStackAndIfPc (idx, lInst@(pc, Instruction{..})) = do
+mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifThenElseOutcomes (idx, lInst@(pc, Instruction{..})) = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
-    Call -> mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack =<< getCallee lInst
+    Call -> mkCallConstraints pc nextPc fp mbPreCheckedFuncAndCallStack =<< getCallee lInst
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst) $> Nothing
     Nop -> do
       callstack <- getOracle
-      case branchesByCallStackAndIfPc Map.!? (callstack, pc) of
+      case ifThenElseOutcomes Map.!? (callstack, pc) of
         Just False -> assert (dst .== 0) $> Nothing
         Just True -> assert (dst ./= 0) $> Nothing
         Nothing -> pure Nothing
@@ -429,7 +429,7 @@ mkCallConstraints ::
   Maybe (CallStack, ScopedFunction) ->
   ScopedFunction ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
+mkCallConstraints pc nextPc fp mbPreCheckedFuncAndCallStack f = do
   calleeFp <- withExecutionCtx stackFrame getFp
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
   saveOldFp <- prepare pc fp (memory Vars.ap .== Vars.fp)
@@ -472,8 +472,8 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
   -- this necessitates comparing execution traces.
   isModuleCheckingPre = do
     stackDescr <- getStackTraceDescr
-    preCheckedFuncStackDescr <- getStackTraceDescr' ((^. _1) <$> mbPreCheckedFuncWithCallStack)
-    pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
+    preCheckedFuncStackDescr <- getStackTraceDescr' ((^. _1) <$> mbPreCheckedFuncAndCallStack)
+    pure (isJust mbPreCheckedFuncAndCallStack && stackDescr == preCheckedFuncStackDescr)
   guardWith condM val cont = do cond <- condM; if cond then val else cont
 
 traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage

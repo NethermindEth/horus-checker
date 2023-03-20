@@ -3,7 +3,7 @@ module Horus.Module
   , ModuleL (..)
   , ModuleF (..)
   , Error (..)
-  , IfThenElseBranchMap
+  , IfThenElseOutcomeMap
   , apEqualsFp
   , gatherModules
   , getModuleNameParts
@@ -45,12 +45,12 @@ import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 
 -- Given a callstack and the PC of an if-then-else, tells which branch is taken.
-type IfThenElseBranchMap = Map (CallStack, Label) Bool
+type IfThenElseOutcomeMap = Map (CallStack, Label) Bool
 
 data Module = Module
   { m_spec :: FuncSpec
-  , m_prog :: [LabeledInst]
-  , m_branchesByCallStackAndIfPc :: IfThenElseBranchMap
+  , m_instrs :: [LabeledInst]
+  , m_ifThenElseOutcomes :: IfThenElseOutcomeMap
   , m_calledF :: Label
   , m_lastPc :: (CallStack, Label)
   , m_preCheckedFuncAndCallStack :: Maybe (CallStack, ScopedFunction)
@@ -159,19 +159,21 @@ formatScopes (ys : yss) isFloatingLabel
   isAssertName :: NonEmpty Text -> Bool
   isAssertName xs = length xs == 1 && all ("!anonymous_assert_label" `Text.isPrefixOf`) xs
 
+-- | The second argument tells whether this is a "floating" label or not.
 summarizeLabels :: [NonEmpty Text] -> Bool -> Text
 summarizeLabels [] _ = ""
-summarizeLabels names isFloatingLabel = if isFloatingLabel then summarizeLabels' (map NE.last names) else ""
+summarizeLabels _ False = ""
+summarizeLabels names True = summarizeLabels' (map NE.last names)
 
 descrOfBool :: Bool -> Text
 descrOfBool True = "1"
 descrOfBool False = "2"
 
-descrOfBranches :: IfThenElseBranchMap -> Text
-descrOfBranches branchesByCallStackAndIfPc =
-  if Map.null branchesByCallStackAndIfPc
+descrOfBranches :: IfThenElseOutcomeMap -> Text
+descrOfBranches ifThenElseOutcomes =
+  if Map.null ifThenElseOutcomes
     then ""
-    else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ branchesByCallStackAndIfPc
+    else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ ifThenElseOutcomes
 
 {- | Return a quadruple of the function name, the label summary, the branch identifiers and
     precondition check suffix (indicates, for precondition-checking modules,
@@ -205,7 +207,7 @@ descrOfBranches branchesByCallStackAndIfPc =
  it does not contain the rest of the labels.
 -}
 getModuleNameParts :: Identifiers -> Module -> (Text, Text, Text, Text)
-getModuleNameParts idents (Module spec prog branchesByCallStackAndIfPc calledF _ mbPreCheckedFuncAndCallStack) =
+getModuleNameParts idents (Module spec prog ifThenElseOutcomes calledF _ mbPreCheckedFuncAndCallStack) =
   case beginOfModule prog of
     Nothing -> ("", "empty: " <> pprExpr post, "", "")
     Just label ->
@@ -214,7 +216,7 @@ getModuleNameParts idents (Module spec prog branchesByCallStackAndIfPc calledF _
           scopes = preprocessScopes $ L.sort scopedNames
           prefix = formatScopes scopes isFloatingLabel
           labelsSummary = summarizeLabels scopes isFloatingLabel
-       in (prefix, labelsSummary, descrOfBranches branchesByCallStackAndIfPc, preCheckingSuffix)
+       in (prefix, labelsSummary, descrOfBranches ifThenElseOutcomes, preCheckingSuffix)
  where
   post = fs_post spec
   preCheckingSuffix = case mbPreCheckedFuncAndCallStack of
@@ -235,7 +237,7 @@ instance Show Error where
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting (CallStack, IfThenElseBranchMap, Vertex) (Bool -> ModuleL b) (b -> a)
+  | forall b. Visiting (CallStack, IfThenElseOutcomeMap, Vertex) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -259,7 +261,7 @@ emitModule m = liftF' (EmitModule m ())
   as visited. The `action` parameter takes a boolean argument determining
   whether the vertex has already been visited.
 -}
-visiting :: (CallStack, IfThenElseBranchMap, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
+visiting :: (CallStack, IfThenElseOutcomeMap, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
 visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
 
 throw :: Error -> ModuleL a
@@ -283,7 +285,7 @@ visitArcs ::
   FuncSpec ->
   Function ->
   CallStack ->
-  IfThenElseBranchMap ->
+  IfThenElseOutcomeMap ->
   [LabeledInst] ->
   SpecBuilder ->
   Vertex ->
@@ -310,11 +312,7 @@ visitArcs cfg fSpec function callstack' newBranchesByCallStackAndIfPc acc' pre v
    and presence of inlining where the same function can be called multiple
    times.
 
-   In order to distinguish valid nodes in this context, we need the
-   IfThenElseBranchMap for ifs as described in the docstring of
-   getModuleNameParts and we need the callstack which keeps track of inlined
-   functions in very much the same way as 'normal' callstacks work, thus
-   allowing us to identify whether the execution of the current function is
+   Our goal is to identify whether the execution of the current function is
    unique, or being revisited through a 'wrong' path through the CFG.
 
    Branch maps need a bit of extra information about which booltest passed - in
@@ -325,7 +323,7 @@ visit ::
   CFG ->
   FuncSpec ->
   Function ->
-  IfThenElseBranchMap ->
+  IfThenElseOutcomeMap ->
   CallStack ->
   [LabeledInst] ->
   SpecBuilder ->
@@ -333,8 +331,8 @@ visit ::
   ArcCondition ->
   FInfo ->
   ModuleL ()
-visit cfg fSpec function branchesByCallStackAndIfPc callstack acc builder v@(Vertex _ label preCheckedF) arcCond f =
-  visiting (callstack', branchesByCallStackAndIfPc, v) $ \alreadyVisited ->
+visit cfg fSpec function ifThenElseOutcomes callstack acc builder v@(Vertex _ label preCheckedF) arcCond f =
+  visiting (callstack', ifThenElseOutcomes, v) $ \alreadyVisited ->
     if alreadyVisited
       then visitLoop builder
       else visitLinear builder
@@ -348,10 +346,10 @@ visit cfg fSpec function branchesByCallStackAndIfPc callstack acc builder v@(Ver
   visitLinear :: SpecBuilder -> ModuleL ()
   visitLinear SBRich
     | onFinalNode = emit (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
-    | null assertions = visitArcs cfg fSpec function callstack' branchesByCallStackAndIfPc' acc builder v
+    | null assertions = visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc builder v
     | otherwise = extractPlainBuilder fSpec >>= visitLinear
   visitLinear (SBPlain pre)
-    | null assertions = visitArcs cfg fSpec function callstack' branchesByCallStackAndIfPc' acc builder v
+    | null assertions = visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc builder v
     | otherwise = do
         emit pre (Expr.and assertions)
         visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions)) v
@@ -361,7 +359,7 @@ visit cfg fSpec function branchesByCallStackAndIfPc callstack acc builder v@(Ver
     (Just (ArcCall callerPc calleePc)) -> push (callerPc, calleePc) callstack
     (Just ArcRet) -> snd (pop callstack)
 
-  branchesByCallStackAndIfPc' = updateIfBranchMap arcCond callstack' branchesByCallStackAndIfPc
+  ifThenElseOutcomes' = updateIfThenElseOutcomes arcCond callstack' ifThenElseOutcomes
   assertions = map snd (cfg_assertions cfg ^. ix v)
   onFinalNode = null (cfg_arcs cfg ^. ix v)
 
@@ -370,7 +368,7 @@ visit cfg fSpec function branchesByCallStackAndIfPc callstack acc builder v@(Ver
   preCheckingContext = (push preCheckingStackFrame callstack',) <$> preCheckedF
 
   emit :: Expr TBool -> Expr TBool -> ModuleL ()
-  emit pre post = emitModule (Module spec acc branchesByCallStackAndIfPc' pc (callstack', label) preCheckingContext)
+  emit pre post = emitModule (Module spec acc ifThenElseOutcomes' pc (callstack', label) preCheckingContext)
    where
     pc = fu_pc function
     spec = FuncSpec pre post (fs_storage fSpec)
@@ -406,11 +404,11 @@ gatherFromSource cfg (function, fSpec) = do
   for_ verticesAtFuPc $ \v ->
     visit cfg fSpec function Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing
 
-updateIfBranchMap ::
+updateIfThenElseOutcomes ::
   ArcCondition ->
   CallStack ->
-  IfThenElseBranchMap ->
-  IfThenElseBranchMap
-updateIfBranchMap ACNone _ = id
-updateIfBranchMap (ACJnz ifStatementPc isSat) callstack =
+  IfThenElseOutcomeMap ->
+  IfThenElseOutcomeMap
+updateIfThenElseOutcomes ACNone _ = id
+updateIfThenElseOutcomes (ACJnz ifStatementPc isSat) callstack =
   Map.insert (callstack, ifStatementPc) isSat
