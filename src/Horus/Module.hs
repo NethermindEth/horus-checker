@@ -23,8 +23,10 @@ import Data.List.NonEmpty qualified as NE
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (isJust, mapMaybe)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, intercalate, isPrefixOf)
+import Data.Text qualified as Text
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
@@ -33,7 +35,7 @@ import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
 import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, top)
 import Horus.ContractInfo (pcToFun)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
-import Horus.Expr qualified as Expr (and)
+import Horus.Expr qualified as Expr
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
 import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
@@ -175,12 +177,12 @@ descrOfBranches ifThenElseOutcomes =
     then ""
     else (<>) ":::" . Text.concat . map descrOfBool . Map.elems $ ifThenElseOutcomes
 
-{- | Return a quadruple of the function name, the label summary, the branch identifiers and
-    precondition check suffix (indicates, for precondition-checking modules,
-    which function's precondition is being checked).
+{- | Return a quadruple of the function name, the label summary, the branch
+ identifiers and precondition check suffix (indicates, for precondition-checking
+ modules, which function's precondition is being checked).
 
- The branch identifiers are a string of `1` and `2` characters, representing a path
- through the control flow graph of the function. For example, if we have a
+ The branch identifiers are a string of `1` and `2` characters, representing a
+ path through the control flow graph of the function. For example, if we have a
  function
 
  ```cairo
@@ -237,7 +239,6 @@ instance Show Error where
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting (CallStack, IfThenElseOutcomeMap, Vertex) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -257,13 +258,6 @@ liftF' = ModuleL . liftF
 emitModule :: Module -> ModuleL ()
 emitModule m = liftF' (EmitModule m ())
 
-{- | Perform the action on the path where the label 'l' has been marked
-  as visited. The `action` parameter takes a boolean argument determining
-  whether the vertex has already been visited.
--}
-visiting :: (CallStack, IfThenElseOutcomeMap, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
-visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
-
 throw :: Error -> ModuleL a
 throw t = liftF' (Throw t)
 
@@ -277,8 +271,7 @@ extractPlainBuilder (FuncSpec pre _ storage)
   | not (null storage) = throwError EInvariantWithSVarUpdateSpec
   | otherwise = pure (SBPlain (pre .&& (ap .== fp)))
 
-gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL ()
-gatherModules = traverse_ . gatherFromSource
+type VertexContext = (CallStack, IfThenElseOutcomeMap, Vertex)
 
 visitArcs ::
   CFG ->
@@ -289,15 +282,25 @@ visitArcs ::
   [LabeledInst] ->
   SpecBuilder ->
   Vertex ->
+  Set VertexContext ->
   ModuleL ()
-visitArcs cfg fSpec function callstack' newBranchesByCallStackAndIfPc acc' pre v' = do
+visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc' pre v' visited = do
   unless (null outArcs) $
     for_ outArcs' $ \(lTo, insts, test, f') ->
-      visit cfg fSpec function newBranchesByCallStackAndIfPc callstack' (acc' <> insts) pre lTo test f'
+      visit cfg fSpec function ifThenElseOutcomes' callstack' (acc' <> insts) pre lTo test f' visited
  where
   outArcs = cfg_arcs cfg ^. ix v'
   isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
   outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
+
+updateIfThenElseOutcomes ::
+  ArcCondition ->
+  CallStack ->
+  IfThenElseOutcomeMap ->
+  IfThenElseOutcomeMap
+updateIfThenElseOutcomes ACNone _ = id
+updateIfThenElseOutcomes (ACJnz ifStatementPc isSat) callstack =
+  Map.insert (callstack, ifStatementPc) isSat
 
 {- Revisiting nodes (thus looping) within the CFG is verboten in all cases but
     one, specifically when we are jumping back to a label that is annotated
@@ -330,12 +333,12 @@ visit ::
   Vertex ->
   ArcCondition ->
   FInfo ->
+  Set VertexContext ->
   ModuleL ()
-visit cfg fSpec function ifThenElseOutcomes callstack acc builder v@(Vertex _ label preCheckedF) arcCond f =
-  visiting (callstack', ifThenElseOutcomes, v) $ \alreadyVisited ->
-    if alreadyVisited
-      then visitLoop builder
-      else visitLinear builder
+visit cfg fSpec function ifThenElseOutcomes callstack acc builder v@(Vertex _ label preCheckedF) arcCond f visited =
+  if (callstack', ifThenElseOutcomes, v) `Set.member` visited
+    then visitLoop builder
+    else visitLinear builder
  where
   visitLoop :: SpecBuilder -> ModuleL ()
   visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
@@ -345,14 +348,14 @@ visit cfg fSpec function ifThenElseOutcomes callstack acc builder v@(Vertex _ la
 
   visitLinear :: SpecBuilder -> ModuleL ()
   visitLinear SBRich
-    | onFinalNode = emit (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
-    | null assertions = visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc builder v
+    | onFinalNode = emit (fs_pre fSpec) (Expr.and assertions)
+    | null assertions = visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc builder v visited'
     | otherwise = extractPlainBuilder fSpec >>= visitLinear
   visitLinear (SBPlain pre)
-    | null assertions = visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc builder v
+    | null assertions = visitArcs cfg fSpec function callstack' ifThenElseOutcomes' acc builder v visited'
     | otherwise = do
         emit pre (Expr.and assertions)
-        visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions)) v
+        visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions)) v visited'
 
   callstack' = case f of
     Nothing -> callstack
@@ -362,6 +365,8 @@ visit cfg fSpec function ifThenElseOutcomes callstack acc builder v@(Vertex _ la
   ifThenElseOutcomes' = updateIfThenElseOutcomes arcCond callstack' ifThenElseOutcomes
   assertions = map snd (cfg_assertions cfg ^. ix v)
   onFinalNode = null (cfg_arcs cfg ^. ix v)
+
+  visited' = Set.insert (callstack', ifThenElseOutcomes, v) visited
 
   labelledCall@(fCallerPc, _) = last acc
   preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
@@ -380,11 +385,11 @@ visit cfg fSpec function ifThenElseOutcomes callstack acc builder v@(Vertex _ la
   concatenating them into final Modules, that are subsequently transformed into
   actual *.smt2 queries.
 
-  Thus, a module can comprise of 0 to several segments, where the precondition
-  of the module is the annotation of the node 'begin' that begins the first
-  segment, the postcondition of the module is the annotation of the node 'end'
-  that ends the last segment and instructions of the module are a concatenation
-  of edge labels for the given path through the graph from 'begin' to 'end'.
+  A module is 0 or more segments where the precondition of the module is the
+  annotation of the node 'begin' that begins the first segment, the
+  postcondition of the module is the annotation of the node 'end' that ends the
+  last segment and instructions of the module are a concatenation of edge
+  labels for the given path through the graph from 'begin' to 'end'.
 
   Note that NO node with an annotation can be encountered in the middle of one
   such path, because annotated nodes are sentinels and the search would
@@ -402,13 +407,7 @@ gatherFromSource :: CFG -> (Function, FuncSpec) -> ModuleL ()
 gatherFromSource cfg (function, fSpec) = do
   let verticesAtFuPc = verticesLabelledBy cfg $ fu_pc function
   for_ verticesAtFuPc $ \v ->
-    visit cfg fSpec function Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing
+    visit cfg fSpec function Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing Set.empty
 
-updateIfThenElseOutcomes ::
-  ArcCondition ->
-  CallStack ->
-  IfThenElseOutcomeMap ->
-  IfThenElseOutcomeMap
-updateIfThenElseOutcomes ACNone _ = id
-updateIfThenElseOutcomes (ACJnz ifStatementPc isSat) callstack =
-  Map.insert (callstack, ifStatementPc) isSat
+gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL ()
+gatherModules = traverse_ . gatherFromSource
