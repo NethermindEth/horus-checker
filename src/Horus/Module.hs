@@ -228,12 +228,12 @@ getModuleNameParts idents (Module spec prog ifThenElseOutcomes calledF _ mbPreCh
 
 data Error
   = ELoopNoInvariant Label
-  | EInvariantWithSVarUpdateSpec
+  | ELoopWithSVarUpdateSpec
 
 instance Show Error where
   show (ELoopNoInvariant at) = printf "There is a loop at PC %d with no invariant" (unLabel at)
-  show EInvariantWithSVarUpdateSpec =
-    "Some function contains an assertion or invariant, but has a spec with @storage_update annotations."
+  show ELoopWithSVarUpdateSpec =
+    "Some function contains a loop, but has a spec with @storage_update annotations."
 
 data ModuleF a
   = Throw Error
@@ -256,9 +256,6 @@ throw t = liftF' (Throw t)
 
 catch :: ModuleL a -> (Error -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
-
-data SpecBuilder = SBRich | SBPlain (Expr TBool)
-type VertexContext = (CallStack, IfThenElseOutcomeMap, Vertex)
 
 updateIfThenElseOutcomes ::
   ArcCondition ->
@@ -296,25 +293,20 @@ visit ::
   IfThenElseOutcomeMap ->
   CallStack ->
   [LabeledInst] ->
-  SpecBuilder ->
+  Expr TBool ->
   ArcCondition ->
   FInfo ->
-  Set VertexContext ->
+  Set (CallStack, Vertex) ->
   Vertex ->
   ModuleL [Module]
-visit cfg fSpec@(FuncSpec pre _ storage) function ifThenElseOutcomes callstack acc builder arcCond f visited v@(Vertex _ label preCheckedF)
+visit cfg fSpec@(FuncSpec _ _ storage) function ifThenElseOutcomes callstack acc preOfPrevVertex arcCond f visited v@(Vertex _ label preCheckedF)
   | alreadyVisited && null assertions = throwError (ELoopNoInvariant label)
-  | alreadyVisited, SBRich <- builder = pure [mkModule (pre .&& (ap .== fp))]
-  | alreadyVisited, SBPlain pre' <- builder = pure [mkModule pre']
-  | null assertions = concat <$> mapM (visitArc ifThenElseOutcomes' acc builder) filteredOutArcs
-  | SBRich <- builder, onFinalNode = pure [mkModule pre]
-  | SBRich <- builder, not (null storage) = throwError EInvariantWithSVarUpdateSpec
-  | SBRich <- builder =
-      (mkModule (pre .&& (ap .== fp)) :) . concat
-        <$> mapM (visitArc Map.empty [] (SBPlain (Expr.and assertions))) filteredOutArcs
-  | SBPlain pre' <- builder =
-      (mkModule pre' :) . concat
-        <$> mapM (visitArc Map.empty [] (SBPlain (Expr.and assertions))) filteredOutArcs
+  | alreadyVisited && not (null storage) = throwError ELoopWithSVarUpdateSpec
+  | alreadyVisited = pure [mkModule preOfPrevVertex]
+  | null assertions = concat <$> mapM (visitArc ifThenElseOutcomes' acc preOfPrevVertex) filteredOutArcs
+  | onFinalNode = pure [mkModule preOfPrevVertex]
+  | otherwise =
+      (mkModule preOfPrevVertex :) . concat <$> mapM (visitArc Map.empty [] (Expr.and assertions)) filteredOutArcs
  where
   callstack' = case f of
     Nothing -> callstack
@@ -323,14 +315,14 @@ visit cfg fSpec@(FuncSpec pre _ storage) function ifThenElseOutcomes callstack a
 
   ifThenElseOutcomes' = updateIfThenElseOutcomes arcCond callstack' ifThenElseOutcomes
   assertions = map snd (cfg_assertions cfg ^. ix v)
-  onFinalNode = null (cfg_arcs cfg ^. ix v)
-  alreadyVisited = (callstack', ifThenElseOutcomes, v) `Set.member` visited
-
-  visited' = Set.insert (callstack', ifThenElseOutcomes, v) visited
+  alreadyVisited = (callstack', v) `Set.member` visited
+  visited' = Set.insert (callstack', v) visited
 
   outArcs = cfg_arcs cfg ^. ix v
   isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
   filteredOutArcs = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
+
+  onFinalNode = null outArcs
 
   labelledCall@(fCallerPc, _) = last acc
   preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
@@ -342,9 +334,9 @@ visit cfg fSpec@(FuncSpec pre _ storage) function ifThenElseOutcomes callstack a
     pc = fu_pc function
     spec = FuncSpec pre' (Expr.and assertions) storage
 
-  visitArc :: IfThenElseOutcomeMap -> [LabeledInst] -> SpecBuilder -> (Vertex, [LabeledInst], ArcCondition, FInfo) -> ModuleL [Module]
-  visitArc ifThenElseOutcomes'' acc' builder' (dst, instrs, test, f') =
-    visit cfg fSpec function ifThenElseOutcomes'' callstack' (acc' <> instrs) builder' test f' visited' dst
+  visitArc :: IfThenElseOutcomeMap -> [LabeledInst] -> Expr TBool -> (Vertex, [LabeledInst], ArcCondition, FInfo) -> ModuleL [Module]
+  visitArc ifThenElseOutcomes'' acc' preOfPrevVertex' (dst, instrs, test, f') =
+    visit cfg fSpec function ifThenElseOutcomes'' callstack' (acc' <> instrs) preOfPrevVertex' test f' visited' dst
 
 {- | This function represents a depth first search through the CFG that uses as
   sentinels (for where to begin and where to end) assertions in nodes, such
@@ -372,11 +364,13 @@ visit cfg fSpec@(FuncSpec pre _ storage) function ifThenElseOutcomes callstack a
   i.e. accesses to storage variables.
 -}
 gatherFromSource :: CFG -> (Function, FuncSpec) -> ModuleL [Module]
-gatherFromSource cfg (function, fSpec) =
+gatherFromSource cfg (function, FuncSpec pre post storage) =
   concat
     <$> mapM
-      (visit cfg fSpec function Map.empty (initialWithFunc (fu_pc function)) [] SBRich ACNone Nothing Set.empty)
+      (visit cfg (FuncSpec funcBeginPre post storage) function Map.empty (initialWithFunc (fu_pc function)) [] funcBeginPre ACNone Nothing Set.empty)
       (verticesLabelledBy cfg (fu_pc function))
+ where
+  funcBeginPre = pre .&& (ap .== fp)
 
 gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL [Module]
 gatherModules cfg fs = concat <$> mapM (gatherFromSource cfg) fs
