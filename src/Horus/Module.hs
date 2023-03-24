@@ -258,15 +258,6 @@ throw t = liftF' (Throw t)
 catch :: ModuleL a -> (Error -> ModuleL a) -> ModuleL a
 catch m h = liftF' (Catch m h id)
 
-updateIfElseOutcomes ::
-  ArcCondition ->
-  CallStack ->
-  IfElseOutcomeMap ->
-  IfElseOutcomeMap
-updateIfElseOutcomes ACNone _ = id
-updateIfElseOutcomes (ACJnz ifStatementPc isSat) callstack =
-  Map.insert (callstack, ifStatementPc) isSat
-
 {- Revisiting nodes (thus looping) within the CFG is verboten in all cases but
     one, specifically when we are jumping back to a label that is annotated
     with an invariant 'inv'. In this case, we pretend that the 'begin' and
@@ -286,11 +277,11 @@ updateIfElseOutcomes (ACJnz ifStatementPc isSat) callstack =
    Branch maps need a bit of extra information about which booltest passed - in
    the form of ArcCondition and CallStack needs a bit of extra information
    about when call/ret are called, in the form of FInfo.
-     -}
+   -}
 visit ::
   CFG ->
   Storage ->
-  Function ->
+  Label ->
   IfElseOutcomeMap ->
   CallStack ->
   [LabeledInst] ->
@@ -300,44 +291,43 @@ visit ::
   Set (CallStack, Vertex) ->
   Vertex ->
   ModuleL [Module]
-visit cfg storage function ifElseOutcomes callstack insts preOfPrevVertex arcCond f visited v@(Vertex _ label preCheckedF)
+visit cfg storage fPc ifElseOutcomes callstack insts pre arcCond f visited v@(Vertex _ label preCheckedF)
   | alreadyVisited && null assertions = throwError (ELoopNoInvariant label)
   | alreadyVisited && not (null storage) = throwError ELoopWithSVarUpdateSpec
-  | alreadyVisited || onFinalNode = pure [mkModule preOfPrevVertex]
-  | null assertions = concat <$> mapM (visitArc preOfPrevVertex) filteredOutArcs
-  | otherwise = (mkModule preOfPrevVertex :) . concat <$> mapM (visitArc (Expr.and assertions)) filteredOutArcs
+  | alreadyVisited || null outArcs = pure [mdl]
+  | null assertions = concat <$> mapM (visitArc pre) outArcs
+  | otherwise = (mdl :) . concat <$> mapM (visitArc (Expr.and assertions)) outArcs
  where
   visitArc :: Expr TBool -> (Vertex, [LabeledInst], ArcCondition, FInfo) -> ModuleL [Module]
-  visitArc preOfPrevVertex' (dst, arcInsts, arcCond', f') =
+  visitArc pre' (dst, arcInsts, arcCond', f') =
     case assertions of
-      [] -> visit cfg storage function ifElseOutcomes' callstack' (insts <> arcInsts) preOfPrevVertex' arcCond' f' visited' dst
-      _ -> visit cfg storage function Map.empty callstack' arcInsts preOfPrevVertex' arcCond' f' visited' dst
+      [] -> visit cfg storage fPc ifElseOutcomes' callstack' (insts <> arcInsts) pre' arcCond' f' visited' dst
+      _ -> visit cfg storage fPc Map.empty callstack' arcInsts pre' arcCond' f' visited' dst
+
+  isCalledBy :: Vertex -> Bool
+  isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
+
+  outArcs = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) $ cfg_arcs cfg ^. ix v
 
   callstack' = case f of
     Nothing -> callstack
     (Just (ArcCall callerPc calleePc)) -> push (callerPc, calleePc) callstack
     (Just ArcRet) -> snd (pop callstack)
 
-  ifElseOutcomes' = updateIfElseOutcomes arcCond callstack' ifElseOutcomes
+  ifElseOutcomes' = case arcCond of
+    ACNone -> ifElseOutcomes
+    ACIfElse ifElsePc isSat -> Map.insert (callstack', ifElsePc) isSat ifElseOutcomes
+
   assertions = map snd (cfg_assertions cfg ^. ix v)
   alreadyVisited = (callstack', v) `Set.member` visited
   visited' = Set.insert (callstack', v) visited
-
-  outArcs = cfg_arcs cfg ^. ix v
-  isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
-  filteredOutArcs = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
-
-  onFinalNode = null outArcs
 
   labelledCall@(fCallerPc, _) = last insts
   preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
   preCheckingContext = (push preCheckingStackFrame callstack',) <$> preCheckedF
 
-  mkModule :: Expr TBool -> Module
-  mkModule pre' = Module spec insts ifElseOutcomes' pc (callstack', label) preCheckingContext
-   where
-    pc = fu_pc function
-    spec = FuncSpec pre' (Expr.and assertions) storage
+  spec = FuncSpec pre (Expr.and assertions) storage
+  mdl = Module spec insts ifElseOutcomes' fPc (callstack', label) preCheckingContext
 
 {- | This function represents a depth first search through the CFG that uses as
   sentinels (for where to begin and where to end) assertions in nodes, such
@@ -368,9 +358,11 @@ gatherFromSource :: CFG -> (Function, FuncSpec) -> ModuleL [Module]
 gatherFromSource cfg (function, FuncSpec pre _ storage) =
   concat
     <$> mapM
-      (visit cfg storage function Map.empty (initialWithFunc (fu_pc function)) [] funcBeginPre ACNone Nothing Set.empty)
-      (verticesLabelledBy cfg (fu_pc function))
+      (visit cfg storage fPc Map.empty callstack [] funcBeginPre ACNone Nothing Set.empty)
+      (verticesLabelledBy cfg fPc)
  where
+  fPc = fu_pc function
+  callstack = initialWithFunc fPc
   funcBeginPre = pre .&& (ap .== fp)
 
 gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL [Module]

@@ -90,7 +90,7 @@ instance Ord Vertex where
 isPreCheckingVertex :: Vertex -> Bool
 isPreCheckingVertex = isJust . v_preCheckedF
 
-data ArcCondition = ACNone | ACJnz Label Bool
+data ArcCondition = ACNone | ACIfElse Label Bool
   deriving stock (Show)
 
 data CFGBuildF a
@@ -250,8 +250,8 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
   | Jnz <- i_pcUpdate endInst = do
       lTo1 <- getSalientVertex $ nextSegmentLabel seg
       lTo2 <- getSalientVertex $ moveLabel endPc (fromInteger (i_imm endInst))
-      addArc vFrom lTo1 insts (ACJnz endPc False) Nothing
-      addArc vFrom lTo2 insts (ACJnz endPc True) Nothing
+      addArc vFrom lTo1 insts (ACIfElse endPc False) Nothing
+      addArc vFrom lTo2 insts (ACIfElse endPc True) Nothing
   | otherwise = do
       lTo <- getSalientVertex $ nextSegmentLabel seg
       addArc' vFrom lTo insts
