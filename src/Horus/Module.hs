@@ -299,14 +299,12 @@ visit ::
   Set (CallStack, Vertex) ->
   Vertex ->
   ModuleL [Module]
-visit cfg fSpec@(FuncSpec _ _ storage) function ifThenElseOutcomes callstack acc preOfPrevVertex arcCond f visited v@(Vertex _ label preCheckedF)
+visit cfg fSpec@(FuncSpec _ _ storage) function ifThenElseOutcomes callstack insts preOfPrevVertex arcCond f visited v@(Vertex _ label preCheckedF)
   | alreadyVisited && null assertions = throwError (ELoopNoInvariant label)
   | alreadyVisited && not (null storage) = throwError ELoopWithSVarUpdateSpec
-  | alreadyVisited = pure [mkModule preOfPrevVertex]
-  | null assertions = concat <$> mapM (visitArc ifThenElseOutcomes' acc preOfPrevVertex) filteredOutArcs
-  | onFinalNode = pure [mkModule preOfPrevVertex]
-  | otherwise =
-      (mkModule preOfPrevVertex :) . concat <$> mapM (visitArc Map.empty [] (Expr.and assertions)) filteredOutArcs
+  | alreadyVisited || onFinalNode = pure [mkModule preOfPrevVertex]
+  | null assertions = concat <$> mapM (visitArc ifThenElseOutcomes' insts preOfPrevVertex) filteredOutArcs
+  | otherwise = (mkModule preOfPrevVertex :) . concat <$> mapM (visitArc Map.empty [] (Expr.and assertions)) filteredOutArcs
  where
   callstack' = case f of
     Nothing -> callstack
@@ -324,19 +322,19 @@ visit cfg fSpec@(FuncSpec _ _ storage) function ifThenElseOutcomes callstack acc
 
   onFinalNode = null outArcs
 
-  labelledCall@(fCallerPc, _) = last acc
+  labelledCall@(fCallerPc, _) = last insts
   preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
   preCheckingContext = (push preCheckingStackFrame callstack',) <$> preCheckedF
 
   mkModule :: Expr TBool -> Module
-  mkModule pre' = Module spec acc ifThenElseOutcomes' pc (callstack', label) preCheckingContext
+  mkModule pre' = Module spec insts ifThenElseOutcomes' pc (callstack', label) preCheckingContext
    where
     pc = fu_pc function
     spec = FuncSpec pre' (Expr.and assertions) storage
 
   visitArc :: IfThenElseOutcomeMap -> [LabeledInst] -> Expr TBool -> (Vertex, [LabeledInst], ArcCondition, FInfo) -> ModuleL [Module]
-  visitArc ifThenElseOutcomes'' acc' preOfPrevVertex' (dst, instrs, test, f') =
-    visit cfg fSpec function ifThenElseOutcomes'' callstack' (acc' <> instrs) preOfPrevVertex' test f' visited' dst
+  visitArc ifThenElseOutcomes'' insts' preOfPrevVertex' (dst, arcInsts, arcCond', f') =
+    visit cfg fSpec function ifThenElseOutcomes'' callstack' (insts' <> arcInsts) preOfPrevVertex' arcCond' f' visited' dst
 
 {- | This function represents a depth first search through the CFG that uses as
   sentinels (for where to begin and where to end) assertions in nodes, such
