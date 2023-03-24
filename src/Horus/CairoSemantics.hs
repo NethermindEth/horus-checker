@@ -55,7 +55,7 @@ import Horus.Instruction
   , uncheckedCallDestination
   )
 import Horus.Label (Label (..), tShowLabel)
-import Horus.Module (IfThenElseOutcomeMap, Module (..), apEqualsFp, isPreChecking)
+import Horus.Module (IfElseOutcomeMap, Module (..), apEqualsFp, isPreChecking)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin
@@ -288,7 +288,7 @@ moduleEndAp mdl =
  contain a storage update.
 -}
 encodeModule :: Module -> CairoSemanticsL ()
-encodeModule mdl@(Module (FuncSpec pre post storage) instrs ifThenElseOutcomes _ _ mbPreCheckedFuncAndCallStack) = do
+encodeModule mdl@(Module (FuncSpec pre post storage) instrs ifElseOutcomes _ _ mbPreCheckedFuncAndCallStack) = do
   enableStorage
   fp <- getFp
   apEnd <- moduleEndAp mdl
@@ -303,7 +303,7 @@ encodeModule mdl@(Module (FuncSpec pre post storage) instrs ifThenElseOutcomes _
     fromMaybe fp . join . safeLast
       <$> for
         (zip [0 ..] instrs)
-        (mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifThenElseOutcomes)
+        (mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifElseOutcomes)
   expect =<< preparePost apEnd lastFp post (isPreChecking mdl)
   whenJust (nonEmpty instrs) $ \neInsts -> do
     -- Normally, 'call's are accompanied by 'ret's for inlined functions. With the optimisation
@@ -402,10 +402,10 @@ withExecutionCtx ctx action = do
 mkInstructionConstraints ::
   [LabeledInst] ->
   Maybe (CallStack, ScopedFunction) ->
-  IfThenElseOutcomeMap ->
+  IfElseOutcomeMap ->
   (Int, LabeledInst) ->
   CairoSemanticsL (Maybe (Expr TFelt))
-mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifThenElseOutcomes (idx, lInst@(pc, Instruction{..})) = do
+mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifElseOutcomes (idx, lInst@(pc, Instruction{..})) = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
   case i_opCode of
@@ -413,7 +413,7 @@ mkInstructionConstraints instrs mbPreCheckedFuncAndCallStack ifThenElseOutcomes 
     AssertEqual -> getRes fp lInst >>= \res -> assert (res .== dst) $> Nothing
     Nop -> do
       callstack <- getOracle
-      case ifThenElseOutcomes Map.!? (callstack, pc) of
+      case ifElseOutcomes Map.!? (callstack, pc) of
         Just False -> assert (dst .== 0) $> Nothing
         Just True -> assert (dst ./= 0) $> Nothing
         Nothing -> pure Nothing
