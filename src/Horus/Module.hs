@@ -1,11 +1,8 @@
 module Horus.Module
   ( Module (..)
-  , ModuleL (..)
-  , ModuleF (..)
-  , Error (..)
   , IfElseOutcomeMap
   , apEqualsFp
-  , gatherModules
+  , gatherModulesForF
   , getModuleNameParts
   , isPreChecking
   , dropMain
@@ -13,8 +10,6 @@ module Horus.Module
 where
 
 import Control.Applicative ((<|>))
-import Control.Monad.Except (MonadError (..))
-import Control.Monad.Free.Church (F, liftF)
 import Data.List qualified as L
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
@@ -36,12 +31,12 @@ import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
-import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
+import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (..), isRetArc, sizeOfCall)
 import Horus.Instruction (LabeledInst, uncheckedCallDestination)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
-import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
+import Horus.SW.Identifier (getFunctionPc, getLabelPc)
 import Horus.SW.ScopedName (ScopedName (..), toText)
 import Horus.SW.Storage (Storage)
 
@@ -227,36 +222,11 @@ getModuleNameParts idents (Module spec prog ifElseOutcomes calledF _ mbPreChecke
           stackDigest = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
        in " Pre<" <> fName <> "|" <> stackDigest <> ">"
 
-data Error
-  = ELoopNoInvariant Label
-  | ELoopWithSVarUpdateSpec
+eLoopNoInvariant :: Label -> Text
+eLoopNoInvariant at = Text.pack $ printf "There is a loop at PC %d with no invariant" (unLabel at)
 
-instance Show Error where
-  show (ELoopNoInvariant at) = printf "There is a loop at PC %d with no invariant" (unLabel at)
-  show ELoopWithSVarUpdateSpec =
-    "Some function contains a loop, but has a spec with @storage_update annotations."
-
-data ModuleF a
-  = Throw Error
-  | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
-
-deriving stock instance Functor ModuleF
-
-newtype ModuleL a = ModuleL {runModuleL :: F ModuleF a}
-  deriving newtype (Functor, Applicative, Monad)
-
-instance MonadError Error ModuleL where
-  throwError = throw
-  catchError = catch
-
-liftF' :: ModuleF a -> ModuleL a
-liftF' = ModuleL . liftF
-
-throw :: Error -> ModuleL a
-throw t = liftF' (Throw t)
-
-catch :: ModuleL a -> (Error -> ModuleL a) -> ModuleL a
-catch m h = liftF' (Catch m h id)
+eLoopWithSVarUpdateSpec :: Text
+eLoopWithSVarUpdateSpec = "Some function contains a loop, but has a spec with @storage_update annotations."
 
 {- Revisiting nodes (thus looping) within the CFG is verboten in all cases but
     one, specifically when we are jumping back to a label that is annotated
@@ -290,15 +260,15 @@ visit ::
   FInfo ->
   Set (CallStack, Vertex) ->
   Vertex ->
-  ModuleL [Module]
+  Either Text [Module]
 visit cfg storage fPc ifElseOutcomes callstack insts pre arcCond f visited v@(Vertex _ label preCheckedF)
-  | alreadyVisited && null assertions = throwError (ELoopNoInvariant label)
-  | alreadyVisited && not (null storage) = throwError ELoopWithSVarUpdateSpec
+  | alreadyVisited && null assertions = Left (eLoopNoInvariant label)
+  | alreadyVisited && not (null storage) = Left eLoopWithSVarUpdateSpec
   | alreadyVisited || null outArcs = pure [mdl]
   | null assertions = concat <$> mapM (visitArc pre) outArcs
   | otherwise = (mdl :) . concat <$> mapM (visitArc (Expr.and assertions)) outArcs
  where
-  visitArc :: Expr TBool -> (Vertex, [LabeledInst], ArcCondition, FInfo) -> ModuleL [Module]
+  visitArc :: Expr TBool -> (Vertex, [LabeledInst], ArcCondition, FInfo) -> Either Text [Module]
   visitArc pre' (dst, arcInsts, arcCond', f') =
     case assertions of
       [] -> visit cfg storage fPc ifElseOutcomes' callstack' (insts <> arcInsts) pre' arcCond' f' visited' dst
@@ -354,16 +324,12 @@ visit cfg storage fPc ifElseOutcomes callstack insts pre arcCond f visited v@(Ve
   A rich module is very much like a plain module except it allows side effects,
   i.e. accesses to storage variables.
 -}
-gatherFromSource :: CFG -> (Function, FuncSpec) -> ModuleL [Module]
-gatherFromSource cfg (function, FuncSpec pre _ storage) =
+gatherModulesForF :: CFG -> (ScopedFunction, FuncSpec) -> Either Text [Module]
+gatherModulesForF cfg (ScopedFunction _ fPc, FuncSpec pre _ storage) =
   concat
     <$> mapM
       (visit cfg storage fPc Map.empty callstack [] funcBeginPre ACNone Nothing Set.empty)
       (verticesLabelledBy cfg fPc)
  where
-  fPc = fu_pc function
   callstack = initialWithFunc fPc
   funcBeginPre = pre .&& (ap .== fp)
-
-gatherModules :: CFG -> [(Function, FuncSpec)] -> ModuleL [Module]
-gatherModules cfg fs = concat <$> mapM (gatherFromSource cfg) fs

@@ -38,7 +38,7 @@ data ContractInfo = ContractInfo
   , ci_functions :: Map Label ScopedFunction
   , ci_labelledInstrs :: [LabeledInst]
   , ci_program :: Program
-  , ci_sources :: [(Function, ScopedName, FuncSpec)]
+  , ci_sources :: [(ScopedFunction, FuncSpec)]
   , ci_svarSpecs :: Set ScopedName
   , ci_storageVars :: [ScopedName]
   , ci_getApTracking :: forall m. MonadError Text m => Label -> m ApTracking
@@ -218,9 +218,10 @@ mkContractInfo cd = do
    where
     msg = "Can't find 'ret' instructions for " <> tShow name <> ". Is it a function?"
 
-  mkSources :: [ScopedName] -> [(Function, ScopedName, FuncSpec)]
+  mkSources :: [ScopedName] -> [(ScopedFunction, FuncSpec)]
   mkSources generatedNames =
-    [ (f, name, toFuncSpec . getFuncSpec . ScopedFunction name $ fu_pc f)
+    [ (scopedF, toFuncSpec . getFuncSpec $ scopedF)
     | (name, IFunction f) <- Map.toList identifiers
     , name `notElem` generatedNames
+    , let scopedF = ScopedFunction name (fu_pc f)
     ]
