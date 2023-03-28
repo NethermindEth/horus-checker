@@ -21,7 +21,7 @@ import Data.Map (Map, fromList, toList)
 import Data.Maybe (catMaybes)
 import Data.Text (Text, pack, stripPrefix, unpack)
 import Data.Traversable (for)
-import SimpleSMT qualified as SMT (Result (..))
+import SimpleSMT qualified as SMT
 import Text.Printf (printf)
 import Z3.Base (Goal, Tactic)
 import Z3.Monad (Z3)

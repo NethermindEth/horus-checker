@@ -8,7 +8,7 @@ import Horus.Expr (Expr, Ty (..))
 import Horus.Expr qualified as Expr
 import Horus.JSON.Util (HSExpr (..), HSourcedSExpr (..))
 import Horus.SW.Storage (Storage)
-import Horus.SW.Storage qualified as Storage (parse)
+import Horus.SW.Storage qualified as Storage
 
 data FuncSpec = FuncSpec
   { fs_pre :: Expr TBool

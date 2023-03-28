@@ -7,18 +7,18 @@ import Control.Monad.Reader (ReaderT, asks, runReaderT)
 import Control.Monad.Trans (MonadTrans (..))
 import Data.IORef (IORef, readIORef, writeIORef)
 import Data.Text (Text, unpack)
-import Data.Text.IO qualified as Text (writeFile)
+import Data.Text.IO qualified as Text
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath.Posix (takeDirectory)
 import Text.Pretty.Simple (pPrintString)
 
-import Horus.CFGBuild.Runner qualified as CFGBuild (interpret, runImpl)
-import Horus.CairoSemantics.Runner qualified as CairoSemantics (run)
+import Horus.CFGBuild.Runner qualified as CFGBuild
+import Horus.CairoSemantics.Runner qualified as CairoSemantics
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Global (Config (..), GlobalF (..), GlobalL (..))
-import Horus.Logger.Runner qualified as Logger (interpret, runImpl)
-import Horus.Module.Runner qualified as Module (run)
-import Horus.Preprocessor.Runner qualified as Preprocessor (run)
+import Horus.Logger.Runner qualified as Logger
+import Horus.Module.Runner qualified as Module
+import Horus.Preprocessor.Runner qualified as Preprocessor
 
 data Env = Env {e_config :: IORef Config, e_contractInfo :: ContractInfo}
 

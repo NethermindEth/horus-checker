@@ -25,8 +25,8 @@ import Data.Coerce (coerce)
 import Data.Foldable (forM_, for_, toList)
 import Data.Functor ((<&>))
 import Data.List.NonEmpty (NonEmpty (..))
-import Data.List.NonEmpty qualified as NonEmpty (last, reverse, (<|))
-import Data.Map qualified as Map (lookup, toList)
+import Data.List.NonEmpty qualified as NonEmpty
+import Data.Map qualified as Map
 import Data.Maybe (isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set

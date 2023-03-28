@@ -20,13 +20,13 @@ import Control.Monad.State (MonadState (get), State, runState)
 import Data.Foldable (toList)
 import Data.Function ((&))
 import Data.Functor (($>))
-import Data.List qualified as List (find, tails)
-import Data.Map qualified as Map (map, null, unionWith)
+import Data.List qualified as List
+import Data.Map qualified as Map
 import Data.Maybe (mapMaybe)
 import Data.Singletons (sing)
 import Data.Some (foldSome)
 import Data.Text (Text)
-import Data.Text qualified as Text (intercalate)
+import Data.Text qualified as Text
 import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
@@ -43,9 +43,9 @@ import Horus.Expr.Type (STy (..))
 import Horus.Expr.Util (gatherNonStdFunctions)
 import Horus.Expr.Vars (prime, rcBound)
 import Horus.FunctionAnalysis (ScopedFunction (sf_scopedName))
-import Horus.SW.Builtin qualified as Builtin (rcBound)
+import Horus.SW.Builtin qualified as Builtin
 import Horus.SW.Storage (Storage)
-import Horus.SW.Storage qualified as Storage (read)
+import Horus.SW.Storage qualified as Storage
 import Horus.Util (tShow)
 
 data AssertionBuilder

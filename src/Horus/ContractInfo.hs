@@ -18,7 +18,7 @@ import Horus.Instruction (LabeledInst, callDestination, isRet, labelInstructions
 import Horus.Label (Label)
 import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..), sizeOfType)
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
-import Horus.SW.Builtin qualified as Builtin (ptrName)
+import Horus.SW.Builtin qualified as Builtin
 import Horus.SW.CairoType (CairoType (..))
 import Horus.SW.FuncSpec
   ( FuncSpec (..)
