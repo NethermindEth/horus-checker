@@ -68,8 +68,13 @@ jobs:
 
       - name: Install SMT solvers
         run: |
+          echo "${{ secrets.MATHSAT_INSTALL_DEPLOY_KEY }}" >> mathsat_id_ed25519
+          chmod 400 mathsat_id_ed25519
+          ssh-agent bash -c 'ssh-add mathsat_id_ed25519; git clone git@github.com:NethermindEth/mathsat-install.git'
+          cp mathsat-install/install-mathsat.sh ./scripts/ci/install-mathsat.sh
           sh ./scripts/ci/install-z3-linux-amd64.sh
           sh ./scripts/ci/install-cvc5-linux.sh
+          sh ./scripts/ci/install-mathsat.sh
 
       - uses: actions/setup-python@v4
         with:
