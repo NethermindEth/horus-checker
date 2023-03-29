@@ -5,7 +5,7 @@ empty: (= 5 6)
 False
 
 bar_broken
-Verified
+Contradictory premises
 
 baz
 Verified
@@ -14,7 +14,7 @@ baz_broken:::default
 False
 
 baz_broken.!anonymous_assert_label_3
-Verified
+Contradictory premises
 
 foo
 Verified
@@ -23,4 +23,4 @@ empty: (= 5 6)
 False
 
 foo_broken
-Verified
+Contradictory premises
