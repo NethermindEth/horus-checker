@@ -1,37 +1,61 @@
 add
 Verified
 
-add_broken_1:::T
+add_broken_1:::1 Pre<add|<19=add/root>>
 Verified
 
-add_broken_1:::F
+add_broken_1:::1 Pre<inc|<21=inc/root>>
+Verified
+
+add_broken_1:::1
+Verified
+
+add_broken_1:::2
 False
 
 add_broken_1.!anonymous_assert_label_4
 False
 
-add_broken_2:::T
+add_broken_2:::1
 False
+
+add_broken_2.!anonymous_assert_label_5 Pre<add|<31=add/root>>
+Verified
+
+add_broken_2.!anonymous_assert_label_5 Pre<inc|<33=inc/root>>
+Verified
 
 add_broken_2.!anonymous_assert_label_5
 Verified
 
-add_broken_2:::F
+add_broken_2:::2
 Verified
 
-add_broken_3:::T
+add_broken_3:::1 Pre<add|<43=add/root>>
+Verified
+
+add_broken_3:::1
 False
+
+add_broken_3.!anonymous_assert_label_6 Pre<inc|<45=inc/root>>
+Verified
 
 add_broken_3.!anonymous_assert_label_6
 False
 
-add_broken_3:::F
+add_broken_3:::2
 Verified
 
-add_broken_4:::T
+add_broken_4:::1 Pre<add|<55=add/root>>
+Verified
+
+add_broken_4:::1 Pre<inc|<57=inc/root>>
+Verified
+
+add_broken_4:::1
 False
 
-add_broken_4:::F
+add_broken_4:::2
 Verified
 
 inc

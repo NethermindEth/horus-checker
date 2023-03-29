@@ -4,8 +4,14 @@ Verified
 comp_id_broken:::default
 False
 
-comp_id_broken.!anonymous_assert_label_2
+comp_id_broken.!anonymous_assert_label_2 Pre<pred|<19=pred/root>> 
 False
+
+comp_id_broken.!anonymous_assert_label_2
+Verified
+
+comp_id_broken.!anonymous_assert_label_3 Pre<pred|<21=pred/root>>
+Verified
 
 comp_id_broken.!anonymous_assert_label_3
 Verified
