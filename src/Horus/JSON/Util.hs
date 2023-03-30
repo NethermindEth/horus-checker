@@ -2,7 +2,7 @@ module Horus.JSON.Util (HSExpr (..), HSourcedSExpr (..)) where
 
 import Data.Aeson (FromJSON (..), withObject, (.:))
 import Data.Text (Text)
-import Data.Text qualified as Text (intercalate, unpack)
+import Data.Text qualified as Text
 import Data.Typeable (Typeable)
 
 import Horus.Expr (Expr, canonicalize)

@@ -21,9 +21,9 @@ import Data.List (groupBy, partition)
 import Data.Map qualified as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set (Set, singleton, toAscList, (\\))
-import Data.Set qualified as Set (fromList, map, member)
+import Data.Set qualified as Set
 import Data.Text (Text, unpack)
-import Data.Text qualified as Text (isPrefixOf)
+import Data.Text qualified as Text
 import Data.Traversable (for)
 import System.FilePath.Posix ((</>))
 
@@ -40,7 +40,7 @@ import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), callgraph, functionsOf, graphOfCG, isWrapper)
-import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
+import Horus.Logger qualified as L
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
