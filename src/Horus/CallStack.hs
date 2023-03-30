@@ -3,7 +3,6 @@ module Horus.CallStack
   , push
   , pop
   , top
-  , stackTrace
   , CallEntry
   , CallStack
   , callerOfRoot
@@ -20,7 +19,6 @@ import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.List.NonEmpty qualified as NonEmpty
   ( NonEmpty
   , fromList
-  , map
   , reverse
   , singleton
   , toList
@@ -66,9 +64,6 @@ initialWithFunc = singleton . (callerOfRoot,)
 
 descriptiveStackTrace :: CallStack -> NonEmpty CallEntry
 descriptiveStackTrace = NonEmpty.reverse . unStack
-
-stackTrace :: CallStack -> NonEmpty Label
-stackTrace = NonEmpty.map fst . descriptiveStackTrace
 
 callerOfRoot :: Label
 callerOfRoot = Label (-1)

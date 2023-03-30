@@ -13,7 +13,7 @@ module Horus.Global
 where
 
 import Control.Monad (when)
-import Control.Monad.Except (MonadError (..))
+import Control.Monad.Except (MonadError (..), liftEither)
 import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_)
 import Data.Graph (reachable)
@@ -39,16 +39,14 @@ import Horus.CairoSemantics.Runner
 import Horus.CallStack (CallStack, initialWithFunc)
 import Horus.Expr qualified as Expr
 import Horus.Expr.Util (gatherLogicalVariables)
-import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), callgraph, functionsOf, graphOfCG, isWrapper)
+import Horus.FunctionAnalysis (ScopedFunction (..), callgraph, functionsOf, graphOfCG, isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
-import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
+import Horus.Module (Module (..), gatherModulesForF, getModuleNameParts)
 import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
 import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
 import Horus.Program (Identifiers, Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
-import Horus.SW.Identifier (Function (..))
-import Horus.SW.ScopedName (ScopedName ())
 import Horus.SW.Std (trustedStdFuncs)
 import Horus.Util (tShow, whenJust)
 import Lens.Micro ((^.), _3)
@@ -66,7 +64,6 @@ data Config = Config
 data GlobalF a
   = forall b. RunCFGBuildL (CFGBuildL b) (CFG -> a)
   | forall b. RunCairoSemanticsL CallStack (CairoSemanticsL b) (ConstraintsState -> a)
-  | forall b. RunModuleL (ModuleL b) ([Module] -> a)
   | forall b. RunPreprocessorL PreprocessorEnv (PreprocessorL b) (b -> a)
   | GetCallee LabeledInst (ScopedFunction -> a)
   | GetConfig (Config -> a)
@@ -75,7 +72,7 @@ data GlobalF a
   | GetInlinable (Set ScopedFunction -> a)
   | GetLabelledInstrs ([LabeledInst] -> a)
   | GetProgram (Program -> a)
-  | GetSources ([(Function, ScopedName, FuncSpec)] -> a)
+  | GetSources ([(ScopedFunction, FuncSpec)] -> a)
   | SetConfig Config a
   | PutStrLn' Text a
   | WriteFile' FilePath Text a
@@ -101,9 +98,6 @@ runCFGBuildL cfgBuilder = liftF' (RunCFGBuildL cfgBuilder id)
 runCairoSemanticsL :: CallStack -> CairoSemanticsL a -> GlobalL ConstraintsState
 runCairoSemanticsL initStack smt2Builder = liftF' (RunCairoSemanticsL initStack smt2Builder id)
 
-runModuleL :: ModuleL a -> GlobalL [Module]
-runModuleL builder = liftF' (RunModuleL builder id)
-
 runPreprocessorL :: PreprocessorEnv -> PreprocessorL a -> GlobalL a
 runPreprocessorL penv preprocessor =
   liftF' (RunPreprocessorL penv preprocessor id)
@@ -126,7 +120,7 @@ getLabelledInstructions = liftF' (GetLabelledInstrs id)
 getProgram :: GlobalL Program
 getProgram = liftF' (GetProgram id)
 
-getSources :: GlobalL [(Function, ScopedName, FuncSpec)]
+getSources :: GlobalL [(ScopedFunction, FuncSpec)]
 getSources = liftF' (GetSources id)
 
 getIdentifiers :: GlobalL Identifiers
@@ -157,8 +151,10 @@ verbosePrint what = verbosePutStrLn (tShow what)
 
 makeModules :: (CFG, ScopedFunction -> Bool) -> GlobalL [Module]
 makeModules (cfg, allow) =
-  (runModuleL . gatherModules cfg)
-    . filter (\(Function fpc _, name, _) -> allow $ ScopedFunction name fpc)
+  liftEither
+    . fmap concat
+    . mapM (gatherModulesForF cfg)
+    . filter (\(f, _) -> allow f)
     =<< getSources
 
 extractConstraints :: Module -> GlobalL ConstraintsState
@@ -198,8 +194,8 @@ solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
   identifiers <- getIdentifiers
-  let (qualifiedFuncName, labelsSummary, oracleSuffix, preCheckingSuffix) = getModuleNameParts identifiers m
-      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> oracleSuffix <> preCheckingSuffix
+  let (qualifiedFuncName, labelsSummary, branchIdentifiersSuffix, preCheckingSuffix) = getModuleNameParts identifiers m
+      moduleName = mkLabeledFuncName qualifiedFuncName labelsSummary <> branchIdentifiersSuffix <> preCheckingSuffix
       inlinable = m_calledF m `elem` Set.map sf_pc inlinables
   result <- removeMathSAT m (mkResult moduleName)
   pure
@@ -257,7 +253,7 @@ removeMathSAT :: Module -> GlobalL a -> GlobalL a
 removeMathSAT m run = do
   conf <- getConfig
   let solver = cfg_solver conf
-  usesLvars <- or <$> traverse instUsesLvars (m_prog m)
+  usesLvars <- or <$> traverse instUsesLvars (m_instrs m)
   if includesMathsat solver && usesLvars
     then do
       let solver' = filterMathsat solver
@@ -300,9 +296,9 @@ solveSMT cs = do
  where
   memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
--- | Add an oracle suffix to the module name when the module name *is* the function name.
-appendMissingDefaultOracleSuffix :: SolvingInfo -> SolvingInfo
-appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inlinable preCheckingContext) =
+-- | Add a branch suffix to the module name when the module name *is* the function name.
+appendMissingDefaultBranchIdentifiersSuffix :: SolvingInfo -> SolvingInfo
+appendMissingDefaultBranchIdentifiersSuffix si@(SolvingInfo moduleName funcName result inlinable preCheckingContext) =
   if moduleName == funcName
     then SolvingInfo (moduleName <> ":::default") funcName result inlinable preCheckingContext
     else si
@@ -318,7 +314,7 @@ appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inli
 
  We break the remaining cases into two subcases:
   * If it is just a single module, we return the list as-is.
-  * If there are multiple modules, we add a `:::default` oracle suffix to the
+  * If there are multiple modules, we add a `:::default` branch suffix to the
     module name that would otherwise just be `<funcName>`.
 -}
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
@@ -326,7 +322,7 @@ collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
   | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
-  | otherwise = map appendMissingDefaultOracleSuffix infos
+  | otherwise = map appendMissingDefaultBranchIdentifiersSuffix infos
  where
   reportInlinable = all si_inlinable infos
 

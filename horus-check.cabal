@@ -81,7 +81,6 @@ library
       Horus.JSON.Util
       Horus.Logger
       Horus.Logger.Runner
-      Horus.Module.Runner
       Horus.Preprocessor
       Horus.Preprocessor.Runner
       Horus.Preprocessor.Solvers

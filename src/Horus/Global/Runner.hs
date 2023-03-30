@@ -17,7 +17,6 @@ import Horus.CairoSemantics.Runner qualified as CairoSemantics (run)
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Global (Config (..), GlobalF (..), GlobalL (..))
 import Horus.Logger.Runner qualified as Logger (interpret, runImpl)
-import Horus.Module.Runner qualified as Module (run)
 import Horus.Preprocessor.Runner qualified as Preprocessor (run)
 
 data Env = Env {e_config :: IORef Config, e_contractInfo :: ContractInfo}
@@ -34,7 +33,6 @@ interpret = iterM exec . runGlobalL
   exec (RunCairoSemanticsL initStack builder cont) = do
     ci <- asks e_contractInfo
     liftEither (CairoSemantics.run initStack ci builder) >>= cont
-  exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
   exec (RunPreprocessorL penv preprocessor cont) = do
     mPreprocessed <- lift (Preprocessor.run penv preprocessor)
     liftEither mPreprocessed >>= cont
