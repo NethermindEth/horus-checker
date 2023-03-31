@@ -145,10 +145,9 @@ throw t = liftF (Throw t)
 enableStorage :: CairoSemanticsL ()
 enableStorage = liftF (EnableStorage ())
 
-{- | Get an expression for the value of a storage variable with certain
- arguments given a value of type `Storage`, which represents the state of all
- storage variables during program execution at some specific point in time.
--}
+-- | Get an expression for the value of a storage variable with certain
+--  arguments given a value of type `Storage`, which represents the state of all
+--  storage variables during program execution at some specific point in time.
 readStorage :: Maybe Storage -> ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
 readStorage storage name args = liftF (ReadStorage storage name args id)
 
@@ -201,24 +200,23 @@ top = liftF (Top id)
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
 storageRemoval = storageRemoval' Nothing
 
-{- | Substitute a reference to a storage variable in an expression with its
- value according to `storage :: Storage`.
-
- For example, suppose we have a storage variable called `state() : felt`. If
- we reference this storage variable in the precondition for some function
- `f`, for example in `// @pre state() ==  5`, then when constructing the
- assertions to represent this constraint, we must replace the symbolic name
- `state()` in this expression with an expression for the actual value of the
- storage variable just before the function `f` is called.
-
- This substitution is what `storageRemoval'` does, and it does it with
- respect to the argument `storage :: Maybe Storage`, which represents the
- state of all storage variables during program execution at a particular
- point in time.
-
- Some better names: `resolveStorageReferences`, `resolveStorage`,
- `expandStorageExpressions`, `substituteStorage`, or `dereferenceStorage`.
--}
+-- | Substitute a reference to a storage variable in an expression with its
+--  value according to `storage :: Storage`.
+--
+--  For example, suppose we have a storage variable called `state() : felt`. If
+--  we reference this storage variable in the precondition for some function
+--  `f`, for example in `// @pre state() ==  5`, then when constructing the
+--  assertions to represent this constraint, we must replace the symbolic name
+--  `state()` in this expression with an expression for the actual value of the
+--  storage variable just before the function `f` is called.
+--
+--  This substitution is what `storageRemoval'` does, and it does it with
+--  respect to the argument `storage :: Maybe Storage`, which represents the
+--  state of all storage variables during program execution at a particular
+--  point in time.
+--
+--  Some better names: `resolveStorageReferences`, `resolveStorage`,
+--  `expandStorageExpressions`, `substituteStorage`, or `dereferenceStorage`.
 storageRemoval' :: Maybe Storage -> Expr a -> CairoSemanticsL (Expr a)
 storageRemoval' storage = Expr.transform step
  where
@@ -234,11 +232,10 @@ substitute what forWhat = Expr.canonicalize . Expr.transformId step
   step (Expr.cast @TBool -> CastOk (Expr.ExistsFelt name expr)) = Expr.ExistsFelt name (substitute what forWhat expr)
   step e = e
 
-{- | Prepare the expression for usage in the model.
-
-That is, deduce AP from the ApTracking data by PC and replace FP name
-with the given one.
--}
+-- | Prepare the expression for usage in the model.
+--
+-- That is, deduce AP from the ApTracking data by PC and replace FP name
+-- with the given one.
 prepare :: Label -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
 
@@ -284,10 +281,9 @@ moduleEndAp mdl =
     [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
     _ -> getAp' (Just callstack) pc where (callstack, pc) = m_lastPc mdl
 
-{- | Gather the assertions and other state (in the `ConstraintsState` contained
- in `CairoSemanticsL`) associated with a function specification that may
- contain a storage update.
--}
+-- | Gather the assertions and other state (in the `ConstraintsState` contained
+--  in `CairoSemanticsL`) associated with a function specification that may
+--  contain a storage update.
 encodeModule :: Module -> CairoSemanticsL ()
 encodeModule mdl@(Module (FuncSpec pre post storage) instrs oracle _ _ mbPreCheckedFuncWithCallStack) = do
   enableStorage
@@ -384,22 +380,21 @@ withExecutionCtx ctx action = do
   pop
   pure res
 
-{- | Records in the `ConstraintsState` (and in particular, in `cs_asserts`
- field) the assertions corresponding with the semantics of `assert_eq` and
- `call`, and possibly returns a felt expression that represents an FP.
-
- This is only used in `encodePlainSpec`, and so is essentially a helper function.
-
- We need this information because sometimes, when we call `getFp` in
- `encodePlainSpec`, we get a value that is misleading as a result of the
- optimising modules, which interrupt execution, meaning there may be a
- missing Cairo `ret`.
-
- The return value is usually `Nothing` because most functions execute until
- the end, matching every call with a `ret`. A return value of `Just fp`
- represents the FP of the function that is on the top of the stack at the
- point when the execution is interrupted.
--}
+-- | Records in the `ConstraintsState` (and in particular, in `cs_asserts`
+--  field) the assertions corresponding with the semantics of `assert_eq` and
+--  `call`, and possibly returns a felt expression that represents an FP.
+--
+--  This is only used in `encodePlainSpec`, and so is essentially a helper function.
+--
+--  We need this information because sometimes, when we call `getFp` in
+--  `encodePlainSpec`, we get a value that is misleading as a result of the
+--  optimising modules, which interrupt execution, meaning there may be a
+--  missing Cairo `ret`.
+--
+--  The return value is usually `Nothing` because most functions execute until
+--  the end, matching every call with a `ret`. A return value of `Just fp`
+--  represents the FP of the function that is on the top of the stack at the
+--  point when the execution is interrupted.
 mkInstructionConstraints ::
   [LabeledInst] ->
   Maybe (CallStack, ScopedFunction) ->

@@ -6,11 +6,10 @@ import SimpleSMT qualified as SMT
 
 import Horus.Expr.Type (STy (..), Ty)
 
-{- | For the type of a function 'ty' return it's SExpr representation of
- the form 'resType :| argTypes'.
-
-Example: toSMT (TFelt :-> TBool :-> TBool) = Bool :| [Felt, Bool]
--}
+-- | For the type of a function 'ty' return it's SExpr representation of
+--  the form 'resType :| argTypes'.
+--
+-- Example: toSMT (TFelt :-> TBool :-> TBool) = Bool :| [Felt, Bool]
 toSMT :: forall ty. SingI (ty :: Ty) => NonEmpty SMT.SExpr
 toSMT = go [] (sing @ty)
  where

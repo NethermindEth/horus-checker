@@ -20,13 +20,12 @@ data FuncSpec = FuncSpec
 emptyFuncSpec :: FuncSpec
 emptyFuncSpec = FuncSpec{fs_pre = Expr.True, fs_post = Expr.True, fs_storage = mempty}
 
-{- | A version of `FuncSpec` that distinguishes omitted preconditions and
- postconditions from trivial ones.
-
- We define this in addition to `FuncSpec` for separation of concerns. Note
- that `FuncSpec` has a direct mapping from JSON, but conflates `True` with
- `Nothing`.
--}
+-- | A version of `FuncSpec` that distinguishes omitted preconditions and
+--  postconditions from trivial ones.
+--
+--  We define this in addition to `FuncSpec` for separation of concerns. Note
+--  that `FuncSpec` has a direct mapping from JSON, but conflates `True` with
+--  `Nothing`.
 data FuncSpec' = FuncSpec'
   { fs'_pre :: Maybe (Expr TBool)
   , fs'_post :: Maybe (Expr TBool)

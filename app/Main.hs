@@ -62,13 +62,12 @@ compatibleHorusCompileVersionLower = makeVersion [0, 0, 6, 8]
 compatibleHorusCompileVersionHigher :: Version
 compatibleHorusCompileVersionHigher = makeVersion [0, 0, 7]
 
-{- | The main entrypoint of everything that happens in our monad stack.
- The contract is a 1-1 representation of the data in the compiled JSON file.
- The contract is then used to create a 'ContractInfo' which is a more
- convenient representation of the contract.
- We run `solveContract`, which is the entrypoint into the *rest* of the
- program, and gather the results for pretty-printing.
--}
+-- | The main entrypoint of everything that happens in our monad stack.
+--  The contract is a 1-1 representation of the data in the compiled JSON file.
+--  The contract is then used to create a 'ContractInfo' which is a more
+--  convenient representation of the contract.
+--  We run `solveContract`, which is the entrypoint into the *rest* of the
+--  program, and gather the results for pretty-printing.
 main' :: Arguments -> FilePath -> FilePath -> EIO ()
 main' Arguments{..} filename specFileName = do
   contract <- eioDecodeFileStrict filename specFileName <&> cdSpecs %~ (<> stdSpecs)
@@ -125,14 +124,13 @@ ppSolvingInfo SolvingInfo{..} =
  where
   inlinedIndicator = if si_inlinable then " [inlined]" else ""
 
-{- | Main entrypoint of the program.
- Cases
- =====
- 1. No arguments are passed. In this case, we print the help message.
- 2. The `--version` flag is passed. In this case, we print the version number.
- 3. No file is passed. In this case, we print an error.
- 4. A file is passed. In this case, we run `main'`.
--}
+-- | Main entrypoint of the program.
+--  Cases
+--  =====
+--  1. No arguments are passed. In this case, we print the help message.
+--  2. The `--version` flag is passed. In this case, we print the version number.
+--  3. No file is passed. In this case, we print an error.
+--  4. A file is passed. In this case, we run `main'`.
 main :: IO ()
 main = do
   TextIO.putStrLn issuesMsg'

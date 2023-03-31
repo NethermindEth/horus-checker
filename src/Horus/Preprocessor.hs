@@ -120,12 +120,11 @@ interpConst model name = do
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text) deriving (Eq)
 
-{- | The set of user-facing results for a given module or function.
-
- This is just like `SolverResult`, except that we rename the constructors to
- match more closely what a person unfamiliar with SMT solvers would expect,
- and we add the `ContradictoryPrecondition` constructor.
--}
+-- | The set of user-facing results for a given module or function.
+--
+--  This is just like `SolverResult`, except that we rename the constructors to
+--  match more closely what a person unfamiliar with SMT solvers would expect,
+--  and we add the `ContradictoryPrecondition` constructor.
 data HorusResult
   = Verified
   | Counterexample (Maybe Model)
@@ -161,9 +160,8 @@ instance Show Model where
     showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
     showLVar (lvar, value) = printf "%8s\t=\t%d\n" lvar value
 
-{- | Optimize the query into a list of `Goal`s, and then fold the results of
- each goal together into a single `SolverResult`.
--}
+-- | Optimize the query into a list of `Goal`s, and then fold the results of
+--  each goal together into a single `SolverResult`.
 solve :: Integer -> Text -> PreprocessorL SolverResult
 solve fPrime smtQuery = do
   optimizeQuery smtQuery >>= foldlM combineResult (Unknown Nothing)

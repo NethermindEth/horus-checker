@@ -184,26 +184,24 @@ data SolvingInfo = SolvingInfo
   }
   deriving (Eq, Show)
 
-{- | Construct a function name from a qualified function name and a summary of
- the label(s) (usually just one).
-
- Basically, just concatenates the function name with the label(s), separated
- by a dot. But crucially, it does this safely, so that if the label is empty,
- it doesn't add a dot, and vice-versa if tghe function name is empty.
-
- This terminology comes from the `normalizedName` function in `Module.hs`.
--}
+-- | Construct a function name from a qualified function name and a summary of
+--  the label(s) (usually just one).
+--
+--  Basically, just concatenates the function name with the label(s), separated
+--  by a dot. But crucially, it does this safely, so that if the label is empty,
+--  it doesn't add a dot, and vice-versa if tghe function name is empty.
+--
+--  This terminology comes from the `normalizedName` function in `Module.hs`.
 mkLabeledFuncName :: Text -> Text -> Text
 mkLabeledFuncName qualifiedFuncName "" = qualifiedFuncName
 mkLabeledFuncName "" labelsSummary = labelsSummary
 mkLabeledFuncName qualifiedFuncName labelsSummary = qualifiedFuncName <> "." <> labelsSummary
 
-{- | Solve the constraints for a single module.
-
- Here, a module is a label-delimited section of a function (or possibly the
- whole function). In general, we have multiple modules in a function when
- that function contains multiple branches (an if-then-else, for example).
--}
+-- | Solve the constraints for a single module.
+--
+--  Here, a module is a label-delimited section of a function (or possibly the
+--  whole function). In general, we have multiple modules in a function when
+--  that function contains multiple branches (an if-then-else, for example).
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
@@ -321,20 +319,19 @@ appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inli
     then SolvingInfo (moduleName <> ":::default") funcName result inlinable preCheckingContext
     else si
 
-{- |  Collapse a list of modules for the same function if they are all `Unsat`.
-
- Given a list of `SolvingInfo`s, each associated with a module, under the
- assumption that they all have the same `si_funcName`, if they are all `Unsat`,
- we collapse them into a singleton list of one `SolvingInfo`, where we
- hot-patch the `moduleName`, replacing it with the `funcName`.
-
- Otherwise, we have at least one `Sat`.
-
- We break the remaining cases into two subcases:
-  * If it is just a single module, we return the list as-is.
-  * If there are multiple modules, we add a `:::default` oracle suffix to the
-    module name that would otherwise just be `<funcName>`.
--}
+-- |  Collapse a list of modules for the same function if they are all `Unsat`.
+--
+--  Given a list of `SolvingInfo`s, each associated with a module, under the
+--  assumption that they all have the same `si_funcName`, if they are all `Unsat`,
+--  we collapse them into a singleton list of one `SolvingInfo`, where we
+--  hot-patch the `moduleName`, replacing it with the `funcName`.
+--
+--  Otherwise, we have at least one `Sat`.
+--
+--  We break the remaining cases into two subcases:
+--   * If it is just a single module, we return the list as-is.
+--   * If there are multiple modules, we add a `:::default` oracle suffix to the
+--     module name that would otherwise just be `<funcName>`.
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
@@ -345,11 +342,10 @@ collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
  where
   reportInlinable = all si_inlinable infos
 
-{- | Return a solution of SMT queries corresponding with the contract.
-
-  For the purposes of reporting results,
-  we also remember which SMT query corresponding to a function was inlined.
--}
+-- | Return a solution of SMT queries corresponding with the contract.
+--
+--   For the purposes of reporting results,
+--   we also remember which SMT query corresponding to a function was inlined.
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   lInstructions <- getLabelledInstructions

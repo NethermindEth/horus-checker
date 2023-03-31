@@ -152,14 +152,13 @@ getSvarSpecs = liftF' (GetSvarSpecs id)
 getVerts :: Label -> CFGBuildL [Vertex]
 getVerts l = liftF' (GetVerts l id)
 
-{- | Salient vertices can be thought of as 'main' vertices of the CFG, meaning that
-if one wants to reason about flow control of the program, one should query salient vertices.
-
-Certain program transformations and optimisations can add various additional nodes into the CFG,
-whose primary purpose is not to reason about control flow.
-
-It is enforced that for any one PC, one can add at most a single salient vertex.
--}
+-- | Salient vertices can be thought of as 'main' vertices of the CFG, meaning that
+-- if one wants to reason about flow control of the program, one should query salient vertices.
+--
+-- Certain program transformations and optimisations can add various additional nodes into the CFG,
+-- whose primary purpose is not to reason about control flow.
+--
+-- It is enforced that for any one PC, one can add at most a single salient vertex.
 getSalientVertex :: Label -> CFGBuildL Vertex
 getSalientVertex l = do
   verts <- filter (not . isPreCheckingVertex) <$> getVerts l
@@ -200,10 +199,9 @@ buildFrame inlinables rows prog = do
   segmentsWithVerts <- for segments $ \s -> addVertex (segmentLabel s) <&> (s,)
   for_ segmentsWithVerts . uncurry $ addArcsFrom inlinables prog rows
 
-{- | A simple procedure for splitting a stream of instructions into nonempty Segments based
-on program labels, which more-or-less correspond with changes in control flow in the program.
-We thus obtain linear segments of instructions without control flow.
--}
+-- | A simple procedure for splitting a stream of instructions into nonempty Segments based
+-- on program labels, which more-or-less correspond with changes in control flow in the program.
+-- We thus obtain linear segments of instructions without control flow.
 breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
 breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
@@ -218,13 +216,12 @@ breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
 addArc' :: Vertex -> Vertex -> [LabeledInst] -> CFGBuildL ()
 addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
 
-{- | This function adds arcs (edges) into the CFG and labels them with instructions that are
-to be executed when traversing from one vertex to another.
-
-Currently, we do not have an optimisation post-processing pass in Horus and we therefore
-also include an optimisation here that generates an extra vertex in order to implement
-separate checking of preconditions for abstracted functions.
--}
+-- | This function adds arcs (edges) into the CFG and labels them with instructions that are
+-- to be executed when traversing from one vertex to another.
+--
+-- Currently, we do not have an optimisation post-processing pass in Horus and we therefore
+-- also include an optimisation here that generates an extra vertex in order to implement
+-- separate checking of preconditions for abstracted functions.
 addArcsFrom :: Set ScopedFunction -> Program -> [LabeledInst] -> Segment -> Vertex -> CFGBuildL ()
 addArcsFrom inlinables prog rows seg@(Segment s) vFrom
   | Call <- i_opCode endInst =
