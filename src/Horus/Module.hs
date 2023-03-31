@@ -119,9 +119,9 @@ commonPrefix (x : xs) (y : ys)
 --  names, and then adding the prefix itself as a new name.
 sansCommonAncestor :: [[Text]] -> [[Text]]
 sansCommonAncestor xss = prefix : remainders
- where
-  prefix = foldl1 commonPrefix xss
-  remainders = map (drop (length prefix)) xss
+  where
+    prefix = foldl1 commonPrefix xss
+    remainders = map (drop (length prefix)) xss
 
 -- | Returns the function name parts, in particular the fully qualified
 --  function name and the label summary.
@@ -148,14 +148,14 @@ sansCommonAncestor xss = prefix : remainders
 --  top-level function names, if it exists.
 normalizedName :: [ScopedName] -> Bool -> (Text, Text)
 normalizedName scopedNames isFloatingLabel = (Text.concat scopes, labelsSummary)
- where
-  -- Extract list of scopes from each ScopedName, dropping `__main__`.
-  names = filter (not . null) $ sansCommonAncestor $ map (sn_path . dropMain) scopedNames
-  -- If we have a floating label, we need to drop the last scope, because it is
-  -- the label name itself.
-  scopes = map (Text.intercalate ".") (if isFloatingLabel then map init names else names)
-  -- This will almost always just be the name of the single label.
-  labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
+  where
+    -- Extract list of scopes from each ScopedName, dropping `__main__`.
+    names = filter (not . null) $ sansCommonAncestor $ map (sn_path . dropMain) scopedNames
+    -- If we have a floating label, we need to drop the last scope, because it is
+    -- the label name itself.
+    scopes = map (Text.intercalate ".") (if isFloatingLabel then map init names else names)
+    -- This will almost always just be the name of the single label.
+    labelsSummary = if isFloatingLabel then summarizeLabels (map last names) else ""
 
 descrOfBool :: Bool -> Text
 descrOfBool True = "1"
@@ -206,14 +206,14 @@ getModuleNameParts idents (Module spec prog oracle calledF _ mbPreCheckedFuncAnd
           isFloatingLabel = label /= calledF
           (prefix, labelsSummary) = normalizedName scopedNames isFloatingLabel
        in (prefix, labelsSummary, descrOfOracle oracle, preCheckingSuffix)
- where
-  post = fs_post spec
-  preCheckingSuffix = case mbPreCheckedFuncAndCallStack of
-    Nothing -> ""
-    Just (callstack, f) ->
-      let fName = toText . dropMain . sf_scopedName $ f
-          stackDigest = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
-       in " Pre<" <> fName <> "|" <> stackDigest <> ">"
+  where
+    post = fs_post spec
+    preCheckingSuffix = case mbPreCheckedFuncAndCallStack of
+      Nothing -> ""
+      Just (callstack, f) ->
+        let fName = toText . dropMain . sf_scopedName $ f
+            stackDigest = digestOfCallStack (Map.map sf_scopedName (pcToFun idents)) callstack
+         in " Pre<" <> fName <> "|" <> stackDigest <> ">"
 
 data Error
   = ELoopNoInvariant Label
@@ -284,10 +284,10 @@ visitArcs cfg fSpec function callstack' newOracle acc' pre v' = do
   unless (null outArcs) $
     for_ outArcs' $ \(lTo, insts, test, f') ->
       visit cfg fSpec function newOracle callstack' (acc' <> insts) pre lTo test f'
- where
-  outArcs = cfg_arcs cfg ^. ix v'
-  isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
-  outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
+  where
+    outArcs = cfg_arcs cfg ^. ix v'
+    isCalledBy = (moveLabel (callerPcOfCallEntry $ top callstack') sizeOfCall ==) . v_label
+    outArcs' = filter (\(dst, _, _, f') -> not (isRetArc f') || isCalledBy dst) outArcs
 
 {- Revisiting nodes (thus looping) within the CFG is verboten in all cases but
     one, specifically when we are jumping back to a label that is annotated
@@ -330,42 +330,42 @@ visit cfg fSpec function oracle callstack acc builder v@(Vertex _ label preCheck
     if alreadyVisited
       then visitLoop builder
       else visitLinear builder
- where
-  visitLoop :: SpecBuilder -> ModuleL ()
-  visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
-  visitLoop (SBPlain pre)
-    | null assertions = throwError (ELoopNoInvariant label)
-    | otherwise = emit pre (Expr.and assertions)
+  where
+    visitLoop :: SpecBuilder -> ModuleL ()
+    visitLoop SBRich = extractPlainBuilder fSpec >>= visitLoop
+    visitLoop (SBPlain pre)
+      | null assertions = throwError (ELoopNoInvariant label)
+      | otherwise = emit pre (Expr.and assertions)
 
-  visitLinear :: SpecBuilder -> ModuleL ()
-  visitLinear SBRich
-    | onFinalNode = emit (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
-    | null assertions = visitArcs cfg fSpec function callstack' oracle' acc builder v
-    | otherwise = extractPlainBuilder fSpec >>= visitLinear
-  visitLinear (SBPlain pre)
-    | null assertions = visitArcs cfg fSpec function callstack' oracle' acc builder v
-    | otherwise = do
-        emit pre (Expr.and assertions)
-        visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions)) v
+    visitLinear :: SpecBuilder -> ModuleL ()
+    visitLinear SBRich
+      | onFinalNode = emit (fs_pre fSpec) (Expr.and $ map snd (cfg_assertions cfg ^. ix v))
+      | null assertions = visitArcs cfg fSpec function callstack' oracle' acc builder v
+      | otherwise = extractPlainBuilder fSpec >>= visitLinear
+    visitLinear (SBPlain pre)
+      | null assertions = visitArcs cfg fSpec function callstack' oracle' acc builder v
+      | otherwise = do
+          emit pre (Expr.and assertions)
+          visitArcs cfg fSpec function callstack' Map.empty [] (SBPlain (Expr.and assertions)) v
 
-  callstack' = case f of
-    Nothing -> callstack
-    (Just (ArcCall callerPc calleePc)) -> push (callerPc, calleePc) callstack
-    (Just ArcRet) -> snd (pop callstack)
+    callstack' = case f of
+      Nothing -> callstack
+      (Just (ArcCall callerPc calleePc)) -> push (callerPc, calleePc) callstack
+      (Just ArcRet) -> snd (pop callstack)
 
-  oracle' = updateOracle arcCond callstack' oracle
-  assertions = map snd (cfg_assertions cfg ^. ix v)
-  onFinalNode = null (cfg_arcs cfg ^. ix v)
+    oracle' = updateOracle arcCond callstack' oracle
+    assertions = map snd (cfg_assertions cfg ^. ix v)
+    onFinalNode = null (cfg_arcs cfg ^. ix v)
 
-  labelledCall@(fCallerPc, _) = last acc
-  preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
-  preCheckingContext = (push preCheckingStackFrame callstack',) <$> preCheckedF
+    labelledCall@(fCallerPc, _) = last acc
+    preCheckingStackFrame = (fCallerPc, uncheckedCallDestination labelledCall)
+    preCheckingContext = (push preCheckingStackFrame callstack',) <$> preCheckedF
 
-  emit :: Expr TBool -> Expr TBool -> ModuleL ()
-  emit pre post = emitModule (Module spec acc oracle' pc (callstack', label) preCheckingContext)
-   where
-    pc = fu_pc function
-    spec = FuncSpec pre post (fs_storage fSpec)
+    emit :: Expr TBool -> Expr TBool -> ModuleL ()
+    emit pre post = emitModule (Module spec acc oracle' pc (callstack', label) preCheckingContext)
+      where
+        pc = fu_pc function
+        spec = FuncSpec pre post (fs_storage fSpec)
 
 -- | This function represents a depth first search through the CFG that uses as
 --   sentinels (for where to begin and where to end) assertions in nodes, such

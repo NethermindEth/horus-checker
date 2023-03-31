@@ -54,8 +54,8 @@ toSMT' (Felt b) = SMT.int b
 toSMT' (f :*: x) = let (h, args) = splitApp (f :*: x) in SMT.app h (reverse args)
 toSMT' (Fun s) = SMT.Atom (unpack s)
 toSMT' (ExistsFelt name e) = SMT.fun "exists" [bindings, toSMT' e]
- where
-  bindings = SMT.List [SMT.List [SMT.Atom (unpack name), SMT.tInt]]
+  where
+    bindings = SMT.List [SMT.List [SMT.Atom (unpack name), SMT.tInt]]
 toSMT' (ExitField e) = toSMT' e
 
 splitApp :: Expr b -> (SMT.SExpr, [SMT.SExpr])
@@ -82,19 +82,19 @@ parseArithmetic = parse
 
 inlineLets :: SMT.SExpr -> SMT.SExpr
 inlineLets = flip runReader Map.empty . go
- where
-  go :: SMT.SExpr -> Reader (Map String SMT.SExpr) SMT.SExpr
-  go (SMT.Atom s) = view (at s . non (SMT.Atom s))
-  go (SMT.List [SMT.Atom "let", SMT.List bs, body]) = do
-    extension <- bindingsToMap bs
-    local (<> extension) (go body)
-  go (SMT.List l) = SMT.List <$> traverse go l
+  where
+    go :: SMT.SExpr -> Reader (Map String SMT.SExpr) SMT.SExpr
+    go (SMT.Atom s) = view (at s . non (SMT.Atom s))
+    go (SMT.List [SMT.Atom "let", SMT.List bs, body]) = do
+      extension <- bindingsToMap bs
+      local (<> extension) (go body)
+    go (SMT.List l) = SMT.List <$> traverse go l
 
-  bindingsToMap :: [SMT.SExpr] -> Reader (Map String SMT.SExpr) (Map String SMT.SExpr)
-  bindingsToMap bs =
-    [(s, v) | SMT.List [SMT.Atom s, v] <- bs]
-      & traverse (\(s, v) -> (s,) <$> go v)
-      & fmap Map.fromList
+    bindingsToMap :: [SMT.SExpr] -> Reader (Map String SMT.SExpr) (Map String SMT.SExpr)
+    bindingsToMap bs =
+      [(s, v) | SMT.List [SMT.Atom s, v] <- bs]
+        & traverse (\(s, v) -> (s,) <$> go v)
+        & fmap Map.fromList
 
 -- parsing per se
 
@@ -105,9 +105,9 @@ informativeCast :: forall b a. Typeable b => Expr a -> Either Text (Expr b)
 informativeCast e = case cast' @b e of
   Just e' -> pure e'
   Nothing -> Left (pack (printf "Can't cast '%s' to '%s'." aType bType))
- where
-  aType = show (typeRep @a \\ isProper e)
-  bType = show (typeRep @b)
+  where
+    aType = show (typeRep @a \\ isProper e)
+    bType = show (typeRep @b)
 
 pureSome :: Applicative m => f a -> m (Some f)
 pureSome = pure . Some
@@ -131,26 +131,26 @@ parseSexp' s@(SMT.List (SMT.Atom f : x1 : xTail))
   | f == "not" = parseUnary Expr.not
   | f == "abs" = parseUnary @TFelt abs
   | otherwise = parseStorageVar
- where
-  fText = pack f
+  where
+    fText = pack f
 
-  parseVariadic :: forall arg res. (IsProper arg, IsProper res) => Either Text (Some Expr)
-  parseVariadic = do
-    xs <- traverse (parseSexp @arg) (x1 :| xTail)
-    pureSome (Expr.apply1 @res @arg (Fun fText) xs)
+    parseVariadic :: forall arg res. (IsProper arg, IsProper res) => Either Text (Some Expr)
+    parseVariadic = do
+      xs <- traverse (parseSexp @arg) (x1 :| xTail)
+      pureSome (Expr.apply1 @res @arg (Fun fText) xs)
 
-  parseArithL :: (Expr TFelt -> Expr TFelt -> Expr TFelt) -> Either Text (Some Expr)
-  parseArithL op = do
-    x1' <- parseSexp x1
-    xTail' <- traverse parseSexp xTail
-    pureSome (foldl' op x1' xTail')
+    parseArithL :: (Expr TFelt -> Expr TFelt -> Expr TFelt) -> Either Text (Some Expr)
+    parseArithL op = do
+      x1' <- parseSexp x1
+      xTail' <- traverse parseSexp xTail
+      pureSome (foldl' op x1' xTail')
 
-  parseUnary :: forall arg res. Typeable arg => (Expr arg -> Expr res) -> Either Text (Some Expr)
-  parseUnary con = case xTail of
-    [] -> pureSome . con =<< parseSexp x1
-    _ -> Left (eNonUnary fText s)
+    parseUnary :: forall arg res. Typeable arg => (Expr arg -> Expr res) -> Either Text (Some Expr)
+    parseUnary con = case xTail of
+      [] -> pureSome . con =<< parseSexp x1
+      _ -> Left (eNonUnary fText s)
 
-  parseStorageVar = parseVariadic @TFelt @TFelt
+    parseStorageVar = parseVariadic @TFelt @TFelt
 
 eEmptySexp :: Text
 eEmptySexp = "Can't parse an empty sexp."
@@ -170,5 +170,5 @@ eNullaryFunction s =
     ]
 eNonUnary :: Text -> SMT.SExpr -> Text
 eNonUnary f s = "'" <> f <> "' must have only one argument, but has several: '" <> sText <> "'."
- where
-  sText = pack (SMT.showsSExpr s "")
+  where
+    sText = pack (SMT.showsSExpr s "")

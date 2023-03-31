@@ -80,30 +80,30 @@ main' Arguments{..} filename specFileName = do
     TextIO.putStrLn (ppSolvingInfo si)
   let unknowns = [res | res@(Timeout{}) <- map si_result infos]
   unless (null unknowns) $ liftIO (TextIO.putStrLn hint')
- where
-  hint' = "\ESC[33m" <> (T.strip . T.unlines . map ("hint: " <>) . T.lines) hint <> "\ESC[0m"
-  guardVersion :: ContractDefinition -> EIO ()
-  guardVersion cd = do
-    compilerVersion <- case [ x
-                            | x@(_, lst) <- readP_to_S parseVersion (cd_version cd)
-                            , null lst
-                            ] of
-      [(v, [])] -> pure v
-      _ -> fail $ "Wrong version format: " <> cd_version cd
-    when
-      ( compilerVersion < compatibleHorusCompileVersionLower
-          || compilerVersion >= compatibleHorusCompileVersionHigher
-      )
-      . fail
-      . concat
-      $ [ "The *.json on input has been compiled with an incompatible version of Horus-compile.\nExpected: "
-        , ">="
-        , showVersion compatibleHorusCompileVersionLower
-        , ", <"
-        , showVersion compatibleHorusCompileVersionHigher
-        , " but got: "
-        , showVersion compilerVersion
-        ]
+  where
+    hint' = "\ESC[33m" <> (T.strip . T.unlines . map ("hint: " <>) . T.lines) hint <> "\ESC[0m"
+    guardVersion :: ContractDefinition -> EIO ()
+    guardVersion cd = do
+      compilerVersion <- case [ x
+                              | x@(_, lst) <- readP_to_S parseVersion (cd_version cd)
+                              , null lst
+                              ] of
+        [(v, [])] -> pure v
+        _ -> fail $ "Wrong version format: " <> cd_version cd
+      when
+        ( compilerVersion < compatibleHorusCompileVersionLower
+            || compilerVersion >= compatibleHorusCompileVersionHigher
+        )
+        . fail
+        . concat
+        $ [ "The *.json on input has been compiled with an incompatible version of Horus-compile.\nExpected: "
+          , ">="
+          , showVersion compatibleHorusCompileVersionLower
+          , ", <"
+          , showVersion compatibleHorusCompileVersionHigher
+          , " but got: "
+          , showVersion compilerVersion
+          ]
 
 eioDecodeFileStrict :: FromJSON a => FilePath -> FilePath -> EIO a
 eioDecodeFileStrict contractFile specFile = do
@@ -121,8 +121,8 @@ eioDecodeFileStrict contractFile specFile = do
 ppSolvingInfo :: SolvingInfo -> Text
 ppSolvingInfo SolvingInfo{..} =
   si_moduleName <> inlinedIndicator <> "\n" <> tShow si_result <> "\n"
- where
-  inlinedIndicator = if si_inlinable then " [inlined]" else ""
+  where
+    inlinedIndicator = if si_inlinable then " [inlined]" else ""
 
 -- | Main entrypoint of the program.
 --  Cases
@@ -151,26 +151,26 @@ main = do
       (_, Nothing) -> putStrLn "Missing specification JSON file. Use --help for more information."
       (Just filename, Just specFileName) -> do
         runExceptT (main' arguments filename specFileName) >>= either (fail . T.unpack) pure
- where
-  issuesMsg' =
-    "\ESC[33m" <> (T.strip . T.unlines . map ("Warning: " <>) . T.lines) issuesMsg <> "\ESC[0m\n"
-  opts =
-    info
-      (argParser <**> helper)
-      ( fullDesc
-          <> progDescDoc
-            ( Just $
-                text "Verifies "
-                  <> text (T.unpack fileArgument)
-                  <> text " (a JSON contract compiled with horus-compile) with the specification file "
-                  <> text (T.unpack specFileArgument)
-                  <> text " provided by horus-compile \n\n"
-                  <> text "Example using solver cvc5 (default):\n"
-                  <> text "  $ horus-check a.json spec.json\n\n"
-                  <> text "Example using solver mathsat:\n"
-                  <> text "  $ horus-check -s mathsat a.json spec.json\n\n"
-                  <> text "Example using solvers z3, mathsat:\n"
-                  <> text "  $ horus-check -s z3 -s mathsat a.json spec.json\n"
-            )
-          <> header "horus-check: an SMT-based checker for StarkNet contracts"
-      )
+  where
+    issuesMsg' =
+      "\ESC[33m" <> (T.strip . T.unlines . map ("Warning: " <>) . T.lines) issuesMsg <> "\ESC[0m\n"
+    opts =
+      info
+        (argParser <**> helper)
+        ( fullDesc
+            <> progDescDoc
+              ( Just $
+                  text "Verifies "
+                    <> text (T.unpack fileArgument)
+                    <> text " (a JSON contract compiled with horus-compile) with the specification file "
+                    <> text (T.unpack specFileArgument)
+                    <> text " provided by horus-compile \n\n"
+                    <> text "Example using solver cvc5 (default):\n"
+                    <> text "  $ horus-check a.json spec.json\n\n"
+                    <> text "Example using solver mathsat:\n"
+                    <> text "  $ horus-check -s mathsat a.json spec.json\n\n"
+                    <> text "Example using solvers z3, mathsat:\n"
+                    <> text "  $ horus-check -s z3 -s mathsat a.json spec.json\n"
+              )
+            <> header "horus-check: an SMT-based checker for StarkNet contracts"
+        )

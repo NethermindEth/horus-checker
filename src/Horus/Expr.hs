@@ -159,11 +159,11 @@ transform_ f = transform (\x -> f x $> x)
 
 canonicalize :: Expr a -> Expr a
 canonicalize = transformId step
- where
-  step (a :+ b) = a + b
-  step (a :- b) = a - b
-  step (Negate a) = negate a
-  step a = a
+  where
+    step (a :+ b) = a + b
+    step (a :- b) = a - b
+    step (Negate a) = negate a
+    step a = a
 
 -- pattern synonyms
 
@@ -214,13 +214,13 @@ unfoldVariadic e = do
   Refl <- eqT @res @ty \\ isProper e
   (name, args) <- gatherArgs [] e
   pure (Refl, name, args)
- where
-  gatherArgs :: [Expr arg] -> Expr ty' -> Maybe (Text, [Expr arg])
-  gatherArgs acc (f :*: x) = do
-    x' <- cast' @arg x
-    gatherArgs (x' : acc) f
-  gatherArgs acc (Fun name) = pure (name, acc)
-  gatherArgs _ _ = Nothing
+  where
+    gatherArgs :: [Expr arg] -> Expr ty' -> Maybe (Text, [Expr arg])
+    gatherArgs acc (f :*: x) = do
+      x' <- cast' @arg x
+      gatherArgs (x' : acc) f
+    gatherArgs acc (Fun name) = pure (name, acc)
+    gatherArgs _ _ = Nothing
 
 pattern FeltConst :: () => a ~ TFelt => Text -> Expr a
 pattern FeltConst name <- (cast @TFelt -> CastOk (Fun name))
@@ -297,10 +297,10 @@ and xs
   | [] <- xs' = True
   | [x] <- xs' = x
   | otherwise = And xs'
- where
-  xs' = filter (/= True) (concatMap unfold xs)
-  unfold (And cs) = cs
-  unfold x = [x]
+  where
+    xs' = filter (/= True) (concatMap unfold xs)
+    unfold (And cs) = cs
+    unfold x = [x]
 
 infixr 2 .||
 (.||) :: Expr TBool -> Expr TBool -> Expr TBool

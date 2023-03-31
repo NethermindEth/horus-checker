@@ -75,13 +75,13 @@ callerOfRoot = Label (-1)
 
 digestOfStackTrace :: Map Label ScopedName -> NonEmpty CallEntry -> Text
 digestOfStackTrace names = wrap . foldr (flip (<>) . tShowCaller) ""
- where
-  tShowCaller (Label pc, calledF) =
-    if pc == unLabel callerOfRoot
-      then "root"
-      else tShow pc <> "=" <> fName (names ! calledF) <> "/"
-  wrap trace = "<" <> trace <> ">"
-  fName (ScopedName name) = last name
+  where
+    tShowCaller (Label pc, calledF) =
+      if pc == unLabel callerOfRoot
+        then "root"
+        else tShow pc <> "=" <> fName (names ! calledF) <> "/"
+    wrap trace = "<" <> trace <> ">"
+    fName (ScopedName name) = last name
 
 digestOfCallStack :: Map Label ScopedName -> CallStack -> Text
 digestOfCallStack names = digestOfStackTrace names . descriptiveStackTrace

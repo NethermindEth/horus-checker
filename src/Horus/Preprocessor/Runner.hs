@@ -44,19 +44,19 @@ type Impl a = ReaderT PreprocessorEnv (ExceptT Text Z3) a
 
 interpret :: PreprocessorL a -> Impl a
 interpret = iterM exec . runPreprocessor
- where
-  exec :: PreprocessorF (Impl a) -> Impl a
-  exec (RunZ3 z3 cont) = do
-    lift (lift z3) >>= cont
-  exec (RunSolver tGoal cont) = do
-    externalSolver <- view peSolver
-    solverSettings <- view peSolverSettings
-    liftIO (runSolver externalSolver solverSettings tGoal) >>= cont
-  exec (GetMemsAndAddrs cont) = do
-    view peMemsAndAddrs >>= cont
-  exec (Throw e) = throwError e
-  exec (Catch preprocessor handler cont) = do
-    catchError (interpret preprocessor) (interpret . handler) >>= cont
+  where
+    exec :: PreprocessorF (Impl a) -> Impl a
+    exec (RunZ3 z3 cont) = do
+      lift (lift z3) >>= cont
+    exec (RunSolver tGoal cont) = do
+      externalSolver <- view peSolver
+      solverSettings <- view peSolverSettings
+      liftIO (runSolver externalSolver solverSettings tGoal) >>= cont
+    exec (GetMemsAndAddrs cont) = do
+      view peMemsAndAddrs >>= cont
+    exec (Throw e) = throwError e
+    exec (Catch preprocessor handler cont) = do
+      catchError (interpret preprocessor) (interpret . handler) >>= cont
 
 runImpl :: PreprocessorEnv -> Impl a -> Z3 (Either Text a)
 runImpl penv m =

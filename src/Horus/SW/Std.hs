@@ -27,16 +27,16 @@ stdSpecs = Map.fromList stdSpecsList
 
 mkReadSpec :: ScopedName -> Int -> FuncSpec
 mkReadSpec name arity = emptyFuncSpec{fs_post = memory (ap - 1) .== var}
- where
-  offsets = [-3 - arity + 1 .. -3]
-  args = [memory (fp + fromIntegral offset) | offset <- offsets]
-  var = Expr.apply (Expr.Fun (tShow name)) args
+  where
+    offsets = [-3 - arity + 1 .. -3]
+    args = [memory (fp + fromIntegral offset) | offset <- offsets]
+    var = Expr.apply (Expr.Fun (tShow name)) args
 
 mkWriteSpec :: ScopedName -> Int -> FuncSpec
 mkWriteSpec name arity = emptyFuncSpec{fs_storage = [(name, [(args, memory (fp - 3))])]}
- where
-  offsets = [-4 - arity + 1 .. -4]
-  args = [memory (fp + fromIntegral offset) | offset <- offsets]
+  where
+    offsets = [-4 - arity + 1 .. -4]
+    args = [memory (fp + fromIntegral offset) | offset <- offsets]
 
 -- | A list of names of trusted standard library functions.
 -- These functions will not be checked against their specifications.

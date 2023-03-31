@@ -21,29 +21,29 @@ equivalenceExpr a b = Expr.and [checkStorageIsSubset a b, checkStorageIsSubset b
 
 checkStorageIsSubset :: Storage -> Storage -> Expr TBool
 checkStorageIsSubset a b = Expr.and $ map equalReads (getWrites a)
- where
-  equalReads (name, args, _value) = read a name args .== read b name args
+  where
+    equalReads (name, args, _value) = read a name args .== read b name args
 
 read :: Storage -> ScopedName -> [Expr TFelt] -> Expr TFelt
 read storage name args = buildReadChain args baseCase writes
- where
-  baseCase = Expr.apply (Expr.Fun (tShow name)) args
-  writes = Map.findWithDefault [] name storage
+  where
+    baseCase = Expr.apply (Expr.Fun (tShow name)) args
+    writes = Map.findWithDefault [] name storage
 
 buildReadChain :: [Expr TFelt] -> Expr TFelt -> [([Expr TFelt], Expr TFelt)] -> Expr TFelt
 buildReadChain readAt baseCase writes = go baseCase (reverse writes)
- where
-  go acc [] = acc
-  go acc ((args, value) : rest)
-    | length args /= arity =
-        error "buildReadChain: a storage var is accessed with a wrong number of arguments."
-    | otherwise = go (Expr.ite (Expr.and (zipWith (.==) readAt args)) value acc) rest
-  arity = length readAt
+  where
+    go acc [] = acc
+    go acc ((args, value) : rest)
+      | length args /= arity =
+          error "buildReadChain: a storage var is accessed with a wrong number of arguments."
+      | otherwise = go (Expr.ite (Expr.and (zipWith (.==) readAt args)) value acc) rest
+    arity = length readAt
 
 getWrites :: Storage -> [(ScopedName, [Expr TFelt], Expr TFelt)]
 getWrites storage = concatMap getWritesForName (Map.toList storage)
- where
-  getWritesForName (name, writes) = [(name, args, value) | (args, value) <- writes]
+  where
+    getWritesForName (name, writes) = [(name, args, value) | (args, value) <- writes]
 
 parse :: Value -> Parser Storage
 parse v = fmap elimHelpersFromStorage (parseJSON v)

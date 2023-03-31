@@ -85,15 +85,15 @@ parseStorageVar e = do
   guard (not (isReg name))
   guard (not (isLVar name))
   pure res
- where
-  isStd n = n `elem` stdNames || n == "memory"
-  isReg n =
-    isJust (parseRegKind n)
-      || n == "ap"
-      || n == "fp"
-      || n == "range-check-bound"
-      || n == "prime"
-  isLVar n = "$" `Text.isPrefixOf` n
+  where
+    isStd n = n `elem` stdNames || n == "memory"
+    isReg n =
+      isJust (parseRegKind n)
+        || n == "ap"
+        || n == "fp"
+        || n == "range-check-bound"
+        || n == "prime"
+    isLVar n = "$" `Text.isPrefixOf` n
 
 pattern StorageVar :: () => a ~ TFelt => Text -> [Expr TFelt] -> Expr a
 pattern StorageVar name args <- (parseStorageVar -> Just (Refl, name, args))

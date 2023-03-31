@@ -85,8 +85,8 @@ type LabeledInst = (Label, Instruction)
 
 labelInstructions :: [Instruction] -> [LabeledInst]
 labelInstructions insts = zip (coerce pcs) insts
- where
-  pcs = scanl (+) 0 (map instructionSize insts)
+  where
+    pcs = scanl (+) 0 (map instructionSize insts)
 
 instructionSize :: Instruction -> Int
 instructionSize Instruction{i_op1Source = Imm} = 2
@@ -116,9 +116,9 @@ jumpDestination (pc, i@Instruction{i_opCode = Nop}) = case i_pcUpdate i of
   JumpAbs -> pure absDst
   Jnz -> pure relDst
   _ -> Nothing
- where
-  relDst = moveLabel pc (fromInteger (i_imm i))
-  absDst = Label (fromInteger (i_imm i))
+  where
+    relDst = moveLabel pc (fromInteger (i_imm i))
+    absDst = Label (fromInteger (i_imm i))
 jumpDestination _ = Nothing
 
 n15, n16 :: Int
@@ -191,35 +191,35 @@ readInstruction fPrime (i :| is) = do
         )
       <*> return (toSignedFelt fPrime imm)
   pure (instruction, is')
- where
-  op1Map :: Bool -> Bool -> Bool -> m Op1Source
-  op1Map True False False = return Imm
-  op1Map False True False = return $ RegisterSource AllocationPointer
-  op1Map False False True = return $ RegisterSource FramePointer
-  op1Map False False False = return Op0
-  op1Map _ _ _ = throwError "wrong op1 code"
-  resMap :: Bool -> Bool -> m ResLogic
-  resMap True False = return Add
-  resMap False True = return Mult
-  resMap False False = return Op1
-  resMap True True = return Unconstrained
-  pcMap :: Bool -> Bool -> Bool -> m PcUpdate
-  pcMap True False False = return JumpAbs
-  pcMap False True False = return JumpRel
-  pcMap False False True = return Jnz
-  pcMap False False False = return Regular
-  pcMap _ _ _ = throwError "wrong pc flag"
-  apMap :: Bool -> Bool -> m ApUpdate
-  apMap True False = return AddRes
-  apMap False True = return Add1
-  apMap False False = return NoUpdate
-  apMap _ _ = throwError "wrong ap flag"
-  opCodeMap :: Bool -> Bool -> Bool -> m OpCode
-  opCodeMap True False False = return Call
-  opCodeMap False True False = return Ret
-  opCodeMap False False True = return AssertEqual
-  opCodeMap False False False = return Nop
-  opCodeMap _ _ _ = throwError "wrong opcode"
+  where
+    op1Map :: Bool -> Bool -> Bool -> m Op1Source
+    op1Map True False False = return Imm
+    op1Map False True False = return $ RegisterSource AllocationPointer
+    op1Map False False True = return $ RegisterSource FramePointer
+    op1Map False False False = return Op0
+    op1Map _ _ _ = throwError "wrong op1 code"
+    resMap :: Bool -> Bool -> m ResLogic
+    resMap True False = return Add
+    resMap False True = return Mult
+    resMap False False = return Op1
+    resMap True True = return Unconstrained
+    pcMap :: Bool -> Bool -> Bool -> m PcUpdate
+    pcMap True False False = return JumpAbs
+    pcMap False True False = return JumpRel
+    pcMap False False True = return Jnz
+    pcMap False False False = return Regular
+    pcMap _ _ _ = throwError "wrong pc flag"
+    apMap :: Bool -> Bool -> m ApUpdate
+    apMap True False = return AddRes
+    apMap False True = return Add1
+    apMap False False = return NoUpdate
+    apMap _ _ = throwError "wrong ap flag"
+    opCodeMap :: Bool -> Bool -> Bool -> m OpCode
+    opCodeMap True False False = return Call
+    opCodeMap False True False = return Ret
+    opCodeMap False False True = return AssertEqual
+    opCodeMap False False False = return Nop
+    opCodeMap _ _ _ = throwError "wrong opcode"
 
 toSemiAsmUnsafe :: Instruction -> Text
 toSemiAsmUnsafe i = case toSemiAsm i of
@@ -242,29 +242,29 @@ toSemiAsm Instruction{..} = do
       Regular -> case i_apUpdate of
         AddRes -> withRes ("ap += " <>)
         other -> throwError ("Unexpected AP update for a NOP, non-jump opcode: " <> tShow other)
- where
-  withRes f = fmap f getRes
-  dst = mem (printReg i_dstRegister `add` i_dstOffset)
-  mbApPP = case i_apUpdate of
-    Add1 -> "; ap++"
-    _ -> ""
-  getRes = case i_resLogic of
-    Op1 -> pure op1
-    Add -> pure (op0 <> " + " <> op1)
-    Mult -> pure (op0 <> " * " <> op1)
-    Unconstrained -> throwError "Don't use the result"
-  mem addr = "[" <> addr <> "]"
-  printReg AllocationPointer = "ap"
-  printReg FramePointer = "fp"
-  op1 = case i_op1Source of
-    Op0 -> mem (op0 `add` i_op1Offset)
-    RegisterSource reg -> mem (printReg reg `add` i_op1Offset)
-    Imm -> tShow i_imm
-  op0 = mem (printReg i_op0Register `add` i_op0Offset)
-  op `add` v
-    | v < 0 = op <> " - " <> tShow (-v)
-    | v == 0 = op
-    | otherwise = op <> " + " <> tShow v
+  where
+    withRes f = fmap f getRes
+    dst = mem (printReg i_dstRegister `add` i_dstOffset)
+    mbApPP = case i_apUpdate of
+      Add1 -> "; ap++"
+      _ -> ""
+    getRes = case i_resLogic of
+      Op1 -> pure op1
+      Add -> pure (op0 <> " + " <> op1)
+      Mult -> pure (op0 <> " * " <> op1)
+      Unconstrained -> throwError "Don't use the result"
+    mem addr = "[" <> addr <> "]"
+    printReg AllocationPointer = "ap"
+    printReg FramePointer = "fp"
+    op1 = case i_op1Source of
+      Op0 -> mem (op0 `add` i_op1Offset)
+      RegisterSource reg -> mem (printReg reg `add` i_op1Offset)
+      Imm -> tShow i_imm
+    op0 = mem (printReg i_op0Register `add` i_op0Offset)
+    op `add` v
+      | v < 0 = op <> " - " <> tShow (-v)
+      | v == 0 = op
+      | otherwise = op <> " + " <> tShow v
 
 isRet :: Instruction -> Bool
 isRet Instruction{i_opCode = Ret} = True

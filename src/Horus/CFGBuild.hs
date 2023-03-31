@@ -205,13 +205,13 @@ buildFrame inlinables rows prog = do
 breakIntoSegments :: [Label] -> [LabeledInst] -> [Segment]
 breakIntoSegments _ [] = []
 breakIntoSegments ls_ (i_ : is_) = coerce (go [] (i_ :| []) ls_ is_)
- where
-  go gAcc lAcc [] rest = reverse (NonEmpty.reverse lAcc `appendList` rest : gAcc)
-  go gAcc lAcc (_ : _) [] = reverse (NonEmpty.reverse lAcc : gAcc)
-  go gAcc lAcc (l : ls) (i@(pc, _) : is)
-    | l < pc = go gAcc lAcc ls (i : is)
-    | l == pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
-    | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
+  where
+    go gAcc lAcc [] rest = reverse (NonEmpty.reverse lAcc `appendList` rest : gAcc)
+    go gAcc lAcc (_ : _) [] = reverse (NonEmpty.reverse lAcc : gAcc)
+    go gAcc lAcc (l : ls) (i@(pc, _) : is)
+      | l < pc = go gAcc lAcc ls (i : is)
+      | l == pc = go (NonEmpty.reverse lAcc : gAcc) (i :| []) ls is
+      | otherwise = go gAcc (i NonEmpty.<| lAcc) (l : ls) is
 
 addArc' :: Vertex -> Vertex -> [LabeledInst] -> CFGBuildL ()
 addArc' lFrom lTo insts = addArc lFrom lTo insts ACNone Nothing
@@ -252,67 +252,67 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
   | otherwise = do
       lTo <- getSalientVertex $ nextSegmentLabel seg
       addArc' vFrom lTo insts
- where
-  lInst@(endPc, endInst) = NonEmpty.last s
-  insts = segmentInsts seg
-  inlinableLabels = Set.map sf_pc inlinables
+  where
+    lInst@(endPc, endInst) = NonEmpty.last s
+    insts = segmentInsts seg
+    inlinableLabels = Set.map sf_pc inlinables
 
-  callee = uncheckedScopedFOfPc (p_identifiers prog) (uncheckedCallDestination lInst)
+    callee = uncheckedScopedFOfPc (p_identifiers prog) (uncheckedCallDestination lInst)
 
-  beginInlining = do
-    salientCalleeV <- getSalientVertex (sf_pc callee)
-    addArc vFrom salientCalleeV insts ACNone . Just $ ArcCall endPc (sf_pc callee)
+    beginInlining = do
+      salientCalleeV <- getSalientVertex (sf_pc callee)
+      addArc vFrom salientCalleeV insts ACNone . Just $ ArcCall endPc (sf_pc callee)
 
-  optimiseCheckingOfPre = do
-    -- Suppose F calls G where G has a precondition. We synthesize an extra module
-    -- Pre(F) -> Pre(G) to check whether Pre(G) holds. The standard module for F
-    -- is then Pre(F) -> Post(F) (conceptually, unless there's a split in the middle, etc.),
-    -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
-    -- been checked by the module induced by the ghost vertex.
-    ghostV <- addOptimisingVertex (nextSegmentLabel seg) callee
-    pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
+    optimiseCheckingOfPre = do
+      -- Suppose F calls G where G has a precondition. We synthesize an extra module
+      -- Pre(F) -> Pre(G) to check whether Pre(G) holds. The standard module for F
+      -- is then Pre(F) -> Post(F) (conceptually, unless there's a split in the middle, etc.),
+      -- in which Pre(G) is assumed to hold at the PC of the G call site, as it will have
+      -- been checked by the module induced by the ghost vertex.
+      ghostV <- addOptimisingVertex (nextSegmentLabel seg) callee
+      pre <- maybe (mkPre Expr.True) mkPre . fs'_pre <$> getFuncSpec callee
 
-    -- Important note on the way we deal with logical variables. These are @declare-d and
-    -- their values can be bound in preconditions. They generate existentials which only occur
-    -- in our models here and require special treatment, in addition to being somewhat
-    -- difficult for SMT checkers to deal with.
+      -- Important note on the way we deal with logical variables. These are @declare-d and
+      -- their values can be bound in preconditions. They generate existentials which only occur
+      -- in our models here and require special treatment, in addition to being somewhat
+      -- difficult for SMT checkers to deal with.
 
-    -- First note that these preconditions now become optimising-module postconditions.
-    -- We existentially quantify all logical variables present in the expression, thus in the
-    -- following example:
-    -- func foo:
-    --   call bar // where bar refers to $my_logical_var
-    -- We get an optimising module along the lines of:
-    -- Pre(foo) -> Pre(bar) where Pre(bar) contains \exists my_logical_var, ...
-    -- We can then check whether this instantiation exists in the optimising module exclusively.
-    -- The module that then considers that pre holds as a fact now has the luxury of not having
-    -- to deal with existential quantifiers, as it can simply 'declare' them as free variables.
-    addAssertion ghostV $ quantifyEx pre
-    addArc' vFrom ghostV insts
+      -- First note that these preconditions now become optimising-module postconditions.
+      -- We existentially quantify all logical variables present in the expression, thus in the
+      -- following example:
+      -- func foo:
+      --   call bar // where bar refers to $my_logical_var
+      -- We get an optimising module along the lines of:
+      -- Pre(foo) -> Pre(bar) where Pre(bar) contains \exists my_logical_var, ...
+      -- We can then check whether this instantiation exists in the optimising module exclusively.
+      -- The module that then considers that pre holds as a fact now has the luxury of not having
+      -- to deal with existential quantifiers, as it can simply 'declare' them as free variables.
+      addAssertion ghostV $ quantifyEx pre
+      addArc' vFrom ghostV insts
 
-  abstractOver = do
-    salientLinearV <- getSalientVertex (nextSegmentLabel seg)
-    addArc' vFrom salientLinearV insts
-    svarSpecs <- getSvarSpecs
-    when (sf_scopedName callee `Set.notMember` svarSpecs) optimiseCheckingOfPre
+    abstractOver = do
+      salientLinearV <- getSalientVertex (nextSegmentLabel seg)
+      addArc' vFrom salientLinearV insts
+      svarSpecs <- getSvarSpecs
+      when (sf_scopedName callee `Set.notMember` svarSpecs) optimiseCheckingOfPre
 
-  addRetArc :: Label -> CFGBuildL ()
-  addRetArc pc = do
-    retV <- getSalientVertex endPc
-    pastRet <- getSalientVertex pc
-    addArc retV pastRet [(endPc, endInst)] ACNone $ Just ArcRet
+    addRetArc :: Label -> CFGBuildL ()
+    addRetArc pc = do
+      retV <- getSalientVertex endPc
+      pastRet <- getSalientVertex pc
+      addArc retV pastRet [(endPc, endInst)] ACNone $ Just ArcRet
 
-  addRetArcs :: Label -> CFGBuildL ()
-  addRetArcs owner
-    | owner `Set.notMember` inlinableLabels = pure ()
-    | otherwise = forM_ returnAddrs addRetArc
-   where
-    returnAddrs = map (`moveLabel` sizeOfCall) (callersOf rows owner)
+    addRetArcs :: Label -> CFGBuildL ()
+    addRetArcs owner
+      | owner `Set.notMember` inlinableLabels = pure ()
+      | otherwise = forM_ returnAddrs addRetArc
+      where
+        returnAddrs = map (`moveLabel` sizeOfCall) (callersOf rows owner)
 
-  quantifyEx :: (AnnotationType, Expr 'TBool) -> (AnnotationType, Expr 'TBool)
-  quantifyEx = second $ \expr ->
-    let lvars = gatherLogicalVariables expr
-     in foldr Expr.ExistsFelt expr lvars
+    quantifyEx :: (AnnotationType, Expr 'TBool) -> (AnnotationType, Expr 'TBool)
+    quantifyEx = second $ \expr ->
+      let lvars = gatherLogicalVariables expr
+       in foldr Expr.ExistsFelt expr lvars
 
 -- | This function labels appropriate vertices (at 'ret'urns) with their respective postconditions.
 addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
