@@ -62,6 +62,8 @@ import Horus.SW.Identifier (Function (fu_pc), Identifier (IFunction, ILabel))
 import Horus.SW.ScopedName (ScopedName)
 import Horus.Util (appendList, tShow, whenJustM)
 
+-- === Annotation type stuff === --
+
 data AnnotationType = APre | APost | AInv
   deriving stock (Show)
 
@@ -73,6 +75,8 @@ mkPost = (APost,)
 
 mkInv :: Expr TBool -> (AnnotationType, Expr TBool)
 mkInv = (AInv,)
+
+-- === Vertex stuff === --
 
 data Vertex = Vertex
   { v_name :: Text
@@ -90,8 +94,26 @@ instance Ord Vertex where
 isPreCheckingVertex :: Vertex -> Bool
 isPreCheckingVertex = isJust . v_preCheckedF
 
+-- === ArcCondition stuff === --
+
 data ArcCondition = ACNone | ACJnz Label Bool
   deriving stock (Show)
+
+-- === Segment stuff === --
+
+newtype Segment = Segment (NonEmpty LabeledInst)
+  deriving (Show)
+
+segmentLabel :: Segment -> Label
+segmentLabel (Segment ((l, _) :| _)) = l
+
+nextSegmentLabel :: Segment -> Label
+nextSegmentLabel s = getNextPc (NonEmpty.last (coerce s))
+
+segmentInsts :: Segment -> [LabeledInst]
+segmentInsts (Segment ne) = toList ne
+
+-- === eDSL === --
 
 data CFGBuildF a
   = AddVertex Label (Maybe ScopedFunction) (Vertex -> a)
@@ -118,6 +140,12 @@ instance MonadError Text CFGBuildL where
 
 liftF' :: CFGBuildF a -> CFGBuildL a
 liftF' = CFGBuildL . liftF
+
+throw :: Text -> CFGBuildL a
+throw t = liftF' (Throw t)
+
+catch :: CFGBuildL a -> (Text -> CFGBuildL a) -> CFGBuildL a
+catch m h = liftF' (Catch m h id)
 
 addVertex :: Label -> CFGBuildL Vertex
 addVertex l = liftF' (AddVertex l Nothing id)
@@ -166,38 +194,6 @@ getSalientVertex l = do
     [] -> throw $ "No salient vertex with label: " <> tShow l
     [vert] -> pure vert
     _ -> throw $ "Multiple salient vertices with label: " <> tShow l
-
-throw :: Text -> CFGBuildL a
-throw t = liftF' (Throw t)
-
-catch :: CFGBuildL a -> (Text -> CFGBuildL a) -> CFGBuildL a
-catch m h = liftF' (Catch m h id)
-
-buildCFG :: [LabeledInst] -> Set ScopedFunction -> CFGBuildL ()
-buildCFG labeledInsts inlinables = do
-  identifiers <- askIdentifiers
-  prog <- askProgram
-  buildFrame inlinables labeledInsts prog
-  addAssertions inlinables identifiers
-
-newtype Segment = Segment (NonEmpty LabeledInst)
-  deriving (Show)
-
-segmentLabel :: Segment -> Label
-segmentLabel (Segment ((l, _) :| _)) = l
-
-nextSegmentLabel :: Segment -> Label
-nextSegmentLabel s = getNextPc (NonEmpty.last (coerce s))
-
-segmentInsts :: Segment -> [LabeledInst]
-segmentInsts (Segment ne) = toList ne
-
-buildFrame :: Set ScopedFunction -> [LabeledInst] -> Program -> CFGBuildL ()
-buildFrame inlinables rows prog = do
-  let segments = breakIntoSegments (programLabels rows $ p_identifiers prog) rows
-  -- It is necessary to add all vertices prior to calling `addArcsFrom`.
-  segmentsWithVerts <- for segments $ \s -> addVertex (segmentLabel s) <&> (s,)
-  for_ segmentsWithVerts . uncurry $ addArcsFrom inlinables prog rows
 
 -- | A simple procedure for splitting a stream of instructions into nonempty Segments based
 -- on program labels, which more-or-less correspond with changes in control flow in the program.
@@ -314,6 +310,13 @@ addArcsFrom inlinables prog rows seg@(Segment s) vFrom
       let lvars = gatherLogicalVariables expr
        in foldr Expr.ExistsFelt expr lvars
 
+buildFrame :: Set ScopedFunction -> [LabeledInst] -> Program -> CFGBuildL ()
+buildFrame inlinables rows prog = do
+  let segments = breakIntoSegments (programLabels rows $ p_identifiers prog) rows
+  -- It is necessary to add all vertices prior to calling `addArcsFrom`.
+  segmentsWithVerts <- for segments $ \s -> addVertex (segmentLabel s) <&> (s,)
+  for_ segmentsWithVerts . uncurry $ addArcsFrom inlinables prog rows
+
 -- | This function labels appropriate vertices (at 'ret'urns) with their respective postconditions.
 addAssertions :: Set ScopedFunction -> Identifiers -> CFGBuildL ()
 addAssertions inlinables identifiers = do
@@ -335,3 +338,10 @@ addAssertions inlinables identifiers = do
       whenJustM (getInvariant idName) $ \inv ->
         getSalientVertex pc >>= (`addAssertion` mkInv inv)
     _ -> pure ()
+
+buildCFG :: [LabeledInst] -> Set ScopedFunction -> CFGBuildL ()
+buildCFG labeledInsts inlinables = do
+  identifiers <- askIdentifiers
+  prog <- askProgram
+  buildFrame inlinables labeledInsts prog
+  addAssertions inlinables identifiers
