@@ -343,9 +343,7 @@ a .>= b = function ">=" a b
 
 infix 4 .==
 (.==) :: Expr TFelt -> Expr TFelt -> Expr TBool
-a .== b
-  | a == b = True
-  | otherwise = function "=" a b
+a .== b = function "=" a b
 
 infix 4 ./=
 (./=) :: Expr TFelt -> Expr TFelt -> Expr TBool

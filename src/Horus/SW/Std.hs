@@ -17,7 +17,7 @@ stdSpecs :: Map ScopedName FuncSpec
 stdSpecs = Map.fromList stdSpecsList
 
 mkReadSpec :: ScopedName -> Int -> FuncSpec
-mkReadSpec name arity = emptyFuncSpec{fs_post = memory (ap - 1) .== var}
+mkReadSpec name arity = emptyFuncSpec{fs_post = (memory (ap - 1) .== var, "Reading: " <> tShow name)}
  where
   offsets = [-3 - arity + 1 .. -3]
   args = [memory (fp + fromIntegral offset) | offset <- offsets]
@@ -40,6 +40,8 @@ trustedStdFuncs =
   , "starkware.cairo.common.math.assert_le_felt"
   ]
 
+-- TODO(chore): Fill in 'Text' representation of the specs.
+
 {- | A lexicographically sorted by fs_name list of specifications of
  standard library functions.
 
@@ -54,21 +56,21 @@ stdSpecsList =
     , emptyFuncSpec
         { fs_post =
             let diff = memory (fp - 3) - memory (fp - 4)
-             in 0 .<= diff .&& diff .< rcBound
+             in (0 .<= diff .&& diff .< rcBound, "")
         }
     )
   ,
     ( "starkware.cairo.common.math.assert_le_felt"
-    , emptyFuncSpec{fs_post = memory (fp - 4) .<= memory (fp - 3)}
+    , emptyFuncSpec{fs_post = (memory (fp - 4) .<= memory (fp - 3), "")}
     )
   ,
     ( "starkware.cairo.common.math.assert_nn"
-    , emptyFuncSpec{fs_post = 0 .<= memory (fp - 3) .&& memory (fp - 3) .< rcBound}
+    , emptyFuncSpec{fs_post = (0 .<= memory (fp - 3) .&& memory (fp - 3) .< rcBound, "")}
     )
   ,
     ( "starkware.cairo.common.math.assert_nn_le"
     , emptyFuncSpec
-        { fs_post = 0 .<= memory (fp - 4) .&& memory (fp - 4) .<= memory (fp - 3)
+        { fs_post = (0 .<= memory (fp - 4) .&& memory (fp - 4) .<= memory (fp - 3), "")
         }
     )
   ,
@@ -78,7 +80,7 @@ stdSpecsList =
             let low = memory (ap - 1)
                 high = memory (ap - 2)
                 v = memory (fp - 3)
-             in low .== v `Expr.mod` rcBound .&& high .== v `Expr.div` rcBound
+             in (low .== v `Expr.mod` rcBound .&& high .== v `Expr.div` rcBound, "")
         }
     )
   ,
@@ -86,13 +88,15 @@ stdSpecsList =
     , let (value, div') = (memory (fp - 4), memory (fp - 3))
           (q, r) = (memory (ap - 2), memory (ap - 1))
        in emptyFuncSpec
-            { fs_pre = ExitField (0 .< div' .&& div' * rcBound .<= prime)
+            { fs_pre = (ExitField (0 .< div' .&& div' * rcBound .<= prime), "")
             , fs_post =
-                Expr.and
-                  [ 0 .<= q .&& q .< rcBound
-                  , 0 .<= r .&& r .< div'
-                  , value .== q * div' + r
-                  ]
+                ( Expr.and
+                    [ 0 .<= q .&& q .< rcBound
+                    , 0 .<= r .&& r .< div'
+                    , value .== q * div' + r
+                    ]
+                , ""
+                )
             }
     )
   ,
@@ -101,48 +105,52 @@ stdSpecsList =
         { fs_post =
             let diff = memory (fp - 3) - memory (fp - 4)
                 res = memory (ap - 1)
-             in Expr.ite
-                  (0 .<= diff .&& diff .< rcBound)
-                  (res .== 1)
-                  (res .== 0)
+             in ( Expr.ite
+                    (0 .<= diff .&& diff .< rcBound)
+                    (res .== 1)
+                    (res .== 0)
+                , ""
+                )
         }
     )
   ,
     ( "starkware.cairo.common.math_cmp.is_nn"
     , emptyFuncSpec
         { fs_post =
-            Expr.ite
-              (0 .<= memory (fp - 3) .&& memory (fp - 3) .< rcBound)
-              (memory (ap - 1) .== 1)
-              (memory (ap - 1) .== 0)
+            ( Expr.ite
+                (0 .<= memory (fp - 3) .&& memory (fp - 3) .< rcBound)
+                (memory (ap - 1) .== 1)
+                (memory (ap - 1) .== 0)
+            , ""
+            )
         }
     )
   ,
     ( "starkware.cairo.lang.compiler.lib.registers.get_ap"
-    , emptyFuncSpec{fs_post = memory (ap - 1) .== fp - 2}
+    , emptyFuncSpec{fs_post = (memory (ap - 1) .== fp - 2, "")}
     )
   ,
     ( "starkware.cairo.lang.compiler.lib.registers.get_fp_and_pc"
     , emptyFuncSpec
-        { fs_post = memory (ap - 2) .== memory (fp - 2) .&& memory (ap - 1) .== memory (fp - 1)
+        { fs_post = (memory (ap - 2) .== memory (fp - 2) .&& memory (ap - 1) .== memory (fp - 1), "")
         }
     )
   ,
     ( "starkware.starknet.common.syscalls.get_block_timestamp"
     , emptyFuncSpec
-        { fs_post = memory (ap - 1) .== blockTimestamp
+        { fs_post = (memory (ap - 1) .== blockTimestamp, "")
         }
     )
   ,
     ( "starkware.starknet.common.syscalls.get_caller_address"
     , emptyFuncSpec
-        { fs_post = memory (ap - 1) .== callerAddress
+        { fs_post = (memory (ap - 1) .== callerAddress, "")
         }
     )
   ,
     ( "starkware.starknet.common.syscalls.get_contract_address"
     , emptyFuncSpec
-        { fs_post = memory (ap - 1) .== contractAddress
+        { fs_post = (memory (ap - 1) .== contractAddress, "")
         }
     )
   ]

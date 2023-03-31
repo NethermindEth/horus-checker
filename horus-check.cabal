@@ -85,6 +85,7 @@ library
       Horus.Preprocessor
       Horus.Preprocessor.Runner
       Horus.Preprocessor.Solvers
+      Horus.SMTHygiene
       Horus.SW.Builtin
       Horus.SW.CairoType
       Horus.SW.CairoType.JSON
