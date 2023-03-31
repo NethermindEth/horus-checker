@@ -1,0 +1,26 @@
+bar
+Verified
+
+empty: (= 5 6)
+False
+
+bar_broken
+Contradictory premises
+
+baz
+Verified
+
+baz_broken:::default
+False
+
+baz_broken.!anonymous_assert_label_3
+Contradictory premises
+
+foo
+Verified
+
+empty: (= 5 6)
+False
+
+foo_broken
+Contradictory premises
