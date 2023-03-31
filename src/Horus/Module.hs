@@ -27,13 +27,28 @@ import Text.Printf (printf)
 
 import Horus.CFGBuild (ArcCondition (..), Label (unLabel), Vertex (..))
 import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
-import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, stackTrace, top)
+import Horus.CallStack
+  ( CallStack
+  , callerPcOfCallEntry
+  , digestOfCallStack
+  , initialWithFunc
+  , pop
+  , push
+  , stackTrace
+  , top
+  )
 import Horus.ContractInfo (pcToFun)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
 import Horus.Expr qualified as Expr (and)
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
-import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)
+import Horus.FunctionAnalysis
+  ( FInfo
+  , FuncOp (ArcCall, ArcRet)
+  , ScopedFunction (sf_scopedName)
+  , isRetArc
+  , sizeOfCall
+  )
 import Horus.Instruction (LabeledInst, uncheckedCallDestination)
 import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
@@ -90,7 +105,7 @@ summarizeLabels labels =
         then prettyLabels
         else Text.concat ["{", prettyLabels, "}"]
 
-commonPrefix :: (Eq e) => [e] -> [e] -> [e]
+commonPrefix :: Eq e => [e] -> [e] -> [e]
 commonPrefix _ [] = []
 commonPrefix [] _ = []
 commonPrefix (x : xs) (y : ys)
@@ -215,7 +230,8 @@ instance Show Error where
 
 data ModuleF a
   = EmitModule Module a
-  | forall b. Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) (Bool -> ModuleL b) (b -> a)
+  | forall b.
+    Visiting (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) (Bool -> ModuleL b) (b -> a)
   | Throw Error
   | forall b. Catch (ModuleL b) (Error -> ModuleL b) (b -> a)
 
@@ -239,7 +255,8 @@ emitModule m = liftF' (EmitModule m ())
   as visited. The `action` parameter takes a boolean argument determining
   whether the vertex has already been visited.
 -}
-visiting :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
+visiting ::
+  (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
 visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
 
 throw :: Error -> ModuleL a

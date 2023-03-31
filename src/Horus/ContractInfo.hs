@@ -13,10 +13,30 @@ import Data.Text (Text)
 
 import Horus.ContractDefinition (ContractDefinition (..))
 import Horus.Expr (Expr, Ty (..))
-import Horus.FunctionAnalysis (ScopedFunction (..), inlinableFuns, mkGeneratedNames, storageVarsOfCD)
-import Horus.Instruction (LabeledInst, callDestination, isRet, labelInstructions, readAllInstructions, toSemiAsmUnsafe)
+import Horus.FunctionAnalysis
+  ( ScopedFunction (..)
+  , inlinableFuns
+  , mkGeneratedNames
+  , storageVarsOfCD
+  )
+import Horus.Instruction
+  ( LabeledInst
+  , callDestination
+  , isRet
+  , labelInstructions
+  , readAllInstructions
+  , toSemiAsmUnsafe
+  )
 import Horus.Label (Label)
-import Horus.Program (ApTracking, DebugInfo (..), FlowTrackingData (..), ILInfo (..), Identifiers, Program (..), sizeOfType)
+import Horus.Program
+  ( ApTracking
+  , DebugInfo (..)
+  , FlowTrackingData (..)
+  , ILInfo (..)
+  , Identifiers
+  , Program (..)
+  , sizeOfType
+  )
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
 import Horus.SW.Builtin qualified as Builtin (ptrName)
 import Horus.SW.CairoType (CairoType (..))

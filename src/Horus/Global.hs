@@ -40,9 +40,22 @@ import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
-import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
+import Horus.Preprocessor
+  ( HorusResult (..)
+  , PreprocessorL
+  , SolverResult (..)
+  , goalListToTextList
+  , optimizeQuery
+  , solve
+  )
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
-import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
+import Horus.Preprocessor.Solvers
+  ( Solver
+  , SolverSettings
+  , filterMathsat
+  , includesMathsat
+  , isEmptySolver
+  )
 import Horus.Program (Identifiers, Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.Identifier (Function (..))
@@ -240,7 +253,8 @@ outputSmtQueries moduleName constraints = do
   writeSmtFileOptimized :: Text -> FilePath -> GlobalL ()
   writeSmtFileOptimized query dir = do
     Config{..} <- getConfig
-    queries <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (getQueryList query)
+    queries <-
+      runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (getQueryList query)
     writeSmtQueries queries dir moduleName
 
 writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalL ()
@@ -259,7 +273,9 @@ removeMathSAT m run = do
     then do
       let solver' = filterMathsat solver
       if isEmptySolver solver'
-        then throw "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
+        then
+          throw
+            "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
         else do
           setConfig conf{cfg_solver = solver'}
           result <- run
@@ -283,7 +299,8 @@ solveSMT cs = do
   let query = makeModel False cs fPrime
   let preQuery = makeModel True cs fPrime
   res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
-  preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
+  preRes <-
+    runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
 
   -- Convert the `SolverResult` to a `HorusResult`.
   --
@@ -321,7 +338,8 @@ appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inli
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
-  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
+  | all ((== Verified) . si_result) infos =
+      [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
   | otherwise = map appendMissingDefaultOracleSuffix infos
  where

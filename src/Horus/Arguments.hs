@@ -12,7 +12,14 @@ import Data.Text (Text, unpack)
 import Options.Applicative
 
 import Horus.Global (Config (..))
-import Horus.Preprocessor.Solvers (MultiSolver (..), SingleSolver, SolverSettings (..), cvc5, mathsat, z3)
+import Horus.Preprocessor.Solvers
+  ( MultiSolver (..)
+  , SingleSolver
+  , SolverSettings (..)
+  , cvc5
+  , mathsat
+  , z3
+  )
 
 data Arguments = Arguments
   { arg_fileName :: Maybe FilePath
@@ -55,7 +62,9 @@ singleSolverParser =
     ( long "solver"
         <> short 's'
         <> metavar "SOLVER"
-        <> help ("Solver to check the resulting smt queries (options: " <> intercalate ", " singleSolverNames <> ").")
+        <> help
+          ( "Solver to check the resulting smt queries (options: " <> intercalate ", " singleSolverNames <> ")."
+          )
         <> completeWith singleSolverNames
     )
 

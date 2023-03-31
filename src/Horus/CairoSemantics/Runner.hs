@@ -31,7 +31,12 @@ import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CairoSemantics
+  ( AssertionType (PreAssertion)
+  , CairoSemanticsF (..)
+  , CairoSemanticsL
+  , MemoryVariable (..)
+  )
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))

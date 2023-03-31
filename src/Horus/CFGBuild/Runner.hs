@@ -20,7 +20,16 @@ import Lens.Micro (Lens', at, (&), (^.), _Just)
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl ((%=), (<%=))
 
-import Horus.CFGBuild (AnnotationType, ArcCondition (..), CFGBuildF (..), CFGBuildL (..), Label, LabeledInst, Vertex (..), isPreCheckingVertex)
+import Horus.CFGBuild
+  ( AnnotationType
+  , ArcCondition (..)
+  , CFGBuildF (..)
+  , CFGBuildL (..)
+  , Label
+  , LabeledInst
+  , Vertex (..)
+  , isPreCheckingVertex
+  )
 import Horus.ContractInfo (ContractInfo (..))
 import Horus.Expr (Expr, Ty (..))
 import Horus.FunctionAnalysis (FInfo)

@@ -35,7 +35,8 @@ buildReadChain readAt baseCase writes = go baseCase (reverse writes)
  where
   go acc [] = acc
   go acc ((args, value) : rest)
-    | length args /= arity = error "buildReadChain: a storage var is accessed with a wrong number of arguments."
+    | length args /= arity =
+        error "buildReadChain: a storage var is accessed with a wrong number of arguments."
     | otherwise = go (Expr.ite (Expr.and (zipWith (.==) readAt args)) value acc) rest
   arity = length readAt
 

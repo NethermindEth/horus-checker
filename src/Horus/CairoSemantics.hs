@@ -477,7 +477,8 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
     pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
   guardWith condM val cont = do cond <- condM; if cond then val else cont
 
-traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
+traverseStorage ::
+  (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
  where
   prepareWrites = traverse prepareWrite
@@ -510,7 +511,8 @@ mkApConstraints apEnd insts = do
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
-mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
+mkBuiltinConstraints ::
+  Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
 mkBuiltinConstraints apEnd insts optimisesF =
   unless (isJust optimisesF) $ do
     fp <- getFp

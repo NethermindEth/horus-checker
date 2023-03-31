@@ -222,30 +222,30 @@ unfoldVariadic e = do
   gatherArgs acc (Fun name) = pure (name, acc)
   gatherArgs _ _ = Nothing
 
-pattern FeltConst :: () => (a ~ TFelt) => Text -> Expr a
+pattern FeltConst :: () => a ~ TFelt => Text -> Expr a
 pattern FeltConst name <- (cast @TFelt -> CastOk (Fun name))
   where
     FeltConst = const
 
-pattern (:+) :: () => (a ~ TFelt) => Expr TFelt -> Expr TFelt -> Expr a
+pattern (:+) :: () => a ~ TFelt => Expr TFelt -> Expr TFelt -> Expr a
 pattern a :+ b <- (cast @(TFelt :-> TFelt :-> TFelt) -> CastOk (Fun "+")) :*: a :*: b
   where
     (:+) = function "+"
 
-pattern (:*) :: () => (a ~ TFelt) => Expr TFelt -> Expr TFelt -> Expr a
+pattern (:*) :: () => a ~ TFelt => Expr TFelt -> Expr TFelt -> Expr a
 pattern a :* b <- (cast @(TFelt :-> TFelt :-> TFelt) -> CastOk (Fun "*")) :*: a :*: b
   where
     (:*) = function "*"
 
-pattern (:-) :: () => (a ~ TFelt) => Expr TFelt -> Expr TFelt -> Expr a
+pattern (:-) :: () => a ~ TFelt => Expr TFelt -> Expr TFelt -> Expr a
 pattern a :- b <- (cast @(TFelt :-> TFelt :-> TFelt) -> CastOk (Fun "-")) :*: a :*: b
 
-pattern Negate :: () => (a ~ TFelt) => Expr TFelt -> Expr a
+pattern Negate :: () => a ~ TFelt => Expr TFelt -> Expr a
 pattern Negate a <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "-")) :*: a
   where
     Negate = function "-"
 
-pattern And :: () => (a ~ TBool) => [Expr TBool] -> Expr a
+pattern And :: () => a ~ TBool => [Expr TBool] -> Expr a
 pattern And cs <- (unfoldVariadic @TBool @TBool -> Just (Refl, "and", cs))
   where
     And = apply1' (Fun "and") True
