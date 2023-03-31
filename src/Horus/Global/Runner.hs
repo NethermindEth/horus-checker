@@ -26,42 +26,42 @@ type Impl = ReaderT Env (ExceptT Text IO) -- TODO replace ExceptT with exception
 
 interpret :: GlobalL a -> Impl a
 interpret = iterM exec . runGlobalL
- where
-  exec :: GlobalF (Impl a) -> Impl a
-  exec (RunCFGBuildL builder cont) = do
-    ci <- asks e_contractInfo
-    liftEither (CFGBuild.runImpl ci (CFGBuild.interpret builder)) >>= cont
-  exec (RunCairoSemanticsL initStack builder cont) = do
-    ci <- asks e_contractInfo
-    liftEither (CairoSemantics.run initStack ci builder) >>= cont
-  exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
-  exec (RunPreprocessorL penv preprocessor cont) = do
-    mPreprocessed <- lift (Preprocessor.run penv preprocessor)
-    liftEither mPreprocessed >>= cont
-  exec (GetCallee inst cont) = do
-    ci <- asks e_contractInfo
-    ci_getCallee ci inst >>= cont
-  exec (GetConfig cont) = asks e_config >>= liftIO . readIORef >>= cont
-  exec (GetFuncSpec name cont) = do
-    ci <- asks e_contractInfo
-    cont (ci_getFuncSpec ci name)
-  exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont
-  exec (GetInlinable cont) = asks (ci_inlinables . e_contractInfo) >>= cont
-  exec (GetLabelledInstrs cont) = asks (ci_labelledInstrs . e_contractInfo) >>= cont
-  exec (GetProgram cont) = asks (ci_program . e_contractInfo) >>= cont
-  exec (GetSources cont) = asks (ci_sources . e_contractInfo) >>= cont
-  exec (SetConfig conf cont) = do
-    configRef <- asks e_config
-    liftIO (writeIORef configRef conf)
-    cont
-  exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
-  exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
-  exec (Log logger cont) = do
-    (_, vs) <- liftEither $ Logger.runImpl (Logger.interpret logger)
-    liftIO $ mapM_ print vs
-    cont
-  exec (Throw t) = throwError t
-  exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
+  where
+    exec :: GlobalF (Impl a) -> Impl a
+    exec (RunCFGBuildL builder cont) = do
+      ci <- asks e_contractInfo
+      liftEither (CFGBuild.runImpl ci (CFGBuild.interpret builder)) >>= cont
+    exec (RunCairoSemanticsL initStack builder cont) = do
+      ci <- asks e_contractInfo
+      liftEither (CairoSemantics.run initStack ci builder) >>= cont
+    exec (RunModuleL builder cont) = liftEither (Module.run builder) >>= cont
+    exec (RunPreprocessorL penv preprocessor cont) = do
+      mPreprocessed <- lift (Preprocessor.run penv preprocessor)
+      liftEither mPreprocessed >>= cont
+    exec (GetCallee inst cont) = do
+      ci <- asks e_contractInfo
+      ci_getCallee ci inst >>= cont
+    exec (GetConfig cont) = asks e_config >>= liftIO . readIORef >>= cont
+    exec (GetFuncSpec name cont) = do
+      ci <- asks e_contractInfo
+      cont (ci_getFuncSpec ci name)
+    exec (GetIdentifiers cont) = asks (ci_identifiers . e_contractInfo) >>= cont
+    exec (GetInlinable cont) = asks (ci_inlinables . e_contractInfo) >>= cont
+    exec (GetLabelledInstrs cont) = asks (ci_labelledInstrs . e_contractInfo) >>= cont
+    exec (GetProgram cont) = asks (ci_program . e_contractInfo) >>= cont
+    exec (GetSources cont) = asks (ci_sources . e_contractInfo) >>= cont
+    exec (SetConfig conf cont) = do
+      configRef <- asks e_config
+      liftIO (writeIORef configRef conf)
+      cont
+    exec (PutStrLn' what cont) = pPrintString (unpack what) >> cont
+    exec (WriteFile' file text cont) = liftIO (createAndWriteFile file text) >> cont
+    exec (Log logger cont) = do
+      (_, vs) <- liftEither $ Logger.runImpl (Logger.interpret logger)
+      liftIO $ mapM_ print vs
+      cont
+    exec (Throw t) = throwError t
+    exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
 
 run :: Env -> GlobalL a -> IO (Either Text a)
 run env = runExceptT . flip runReaderT env . interpret

@@ -24,28 +24,28 @@ import Horus.Expr.Vars (prime)
 
 gatherNonStdFunctions :: Expr a -> Set (Some Function)
 gatherNonStdFunctions = execWriter . transform_ step
- where
-  step :: forall ty. Expr ty -> Writer (Set (Some Function)) ()
-  step (Fun name) | name `notElem` stdNames = emit (Function @ty name)
-  step _ = pure ()
+  where
+    step :: forall ty. Expr ty -> Writer (Set (Some Function)) ()
+    step (Fun name) | name `notElem` stdNames = emit (Function @ty name)
+    step _ = pure ()
 
-  emit :: Function ty -> Writer (Set (Some Function)) ()
-  emit f = tell (Set.singleton (Some f))
+    emit :: Function ty -> Writer (Set (Some Function)) ()
+    emit f = tell (Set.singleton (Some f))
 
 gatherLogicalVariables :: Expr a -> Set Text
 gatherLogicalVariables (ExistsFelt name expr) =
   Set.singleton name `Set.union` gatherLogicalVariables expr
 gatherLogicalVariables expr = Set.filter isLogical . Set.map takeName . gatherNonStdFunctions $ expr
- where
-  takeName (Some (Function name)) = name
-  isLogical name = "$" `Text.isPrefixOf` name
+  where
+    takeName (Some (Function name)) = name
+    isLogical name = "$" `Text.isPrefixOf` name
 
 suffixLogicalVariables :: Text -> Expr a -> Expr a
 suffixLogicalVariables suffix = Expr.transformId step
- where
-  step :: Expr b -> Expr b
-  step (Expr.FeltConst name) | "$" `Text.isPrefixOf` name = Expr.FeltConst (name <> suffix)
-  step e = e
+  where
+    step :: Expr b -> Expr b
+    step (Expr.FeltConst name) | "$" `Text.isPrefixOf` name = Expr.FeltConst (name <> suffix)
+    step e = e
 
 fieldToInt :: Integer -> Expr a -> Expr a
 fieldToInt fPrime e = runReader (fieldToInt' fPrime e) UCNo

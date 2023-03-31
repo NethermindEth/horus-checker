@@ -120,12 +120,11 @@ interpConst model name = do
 
 data SolverResult = Unsat | Sat (Maybe Model) | Unknown (Maybe Text) deriving (Eq)
 
-{- | The set of user-facing results for a given module or function.
-
- This is just like `SolverResult`, except that we rename the constructors to
- match more closely what a person unfamiliar with SMT solvers would expect,
- and we add the `ContradictoryPrecondition` constructor.
--}
+-- | The set of user-facing results for a given module or function.
+--
+--  This is just like `SolverResult`, except that we rename the constructors to
+--  match more closely what a person unfamiliar with SMT solvers would expect,
+--  and we add the `ContradictoryPrecondition` constructor.
 data HorusResult
   = Verified
   | Counterexample (Maybe Model)
@@ -156,37 +155,36 @@ instance Show Model where
     concatMap showAp (toList m_regs)
       <> concatMap showMem (toList m_mem)
       <> concatMap showLVar (toList m_lvars)
-   where
-    showAp (reg, value) = printf "%8s\t=\t%d\n" reg value
-    showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
-    showLVar (lvar, value) = printf "%8s\t=\t%d\n" lvar value
+    where
+      showAp (reg, value) = printf "%8s\t=\t%d\n" reg value
+      showMem (addr, value) = printf "mem[%3d]\t=\t%d\n" addr value
+      showLVar (lvar, value) = printf "%8s\t=\t%d\n" lvar value
 
-{- | Optimize the query into a list of `Goal`s, and then fold the results of
- each goal together into a single `SolverResult`.
--}
+-- | Optimize the query into a list of `Goal`s, and then fold the results of
+--  each goal together into a single `SolverResult`.
 solve :: Integer -> Text -> PreprocessorL SolverResult
 solve fPrime smtQuery = do
   optimizeQuery smtQuery >>= foldlM combineResult (Unknown Nothing)
- where
-  -- Given a `SolverResult` which is the combination of a bunch of results for
-  -- some list of `Goal`s, we compute the result of one additional `Goal` (the
-  -- second argument), and combine it with the existing results.
-  combineResult :: SolverResult -> Goal -> PreprocessorL SolverResult
-  combineResult (Sat mbModel) _ = pure (Sat mbModel)
-  combineResult Unsat subgoal = do
-    result <- computeResult subgoal
-    pure $ case result of
-      Sat mbModel -> Sat mbModel
-      _ -> Unsat
-  combineResult Unknown{} subgoal = computeResult subgoal
+  where
+    -- Given a `SolverResult` which is the combination of a bunch of results for
+    -- some list of `Goal`s, we compute the result of one additional `Goal` (the
+    -- second argument), and combine it with the existing results.
+    combineResult :: SolverResult -> Goal -> PreprocessorL SolverResult
+    combineResult (Sat mbModel) _ = pure (Sat mbModel)
+    combineResult Unsat subgoal = do
+      result <- computeResult subgoal
+      pure $ case result of
+        Sat mbModel -> Sat mbModel
+        _ -> Unsat
+    combineResult Unknown{} subgoal = computeResult subgoal
 
-  computeResult :: Goal -> PreprocessorL SolverResult
-  computeResult subgoal = do
-    result <- runSolver =<< runZ3 (goalToSExpr subgoal)
-    case result of
-      (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (processModel fPrime subgoal) mbModel
-      (SMT.Unsat, _mbCore) -> pure Unsat
-      (SMT.Unknown, mbReason) -> pure (Unknown mbReason)
+    computeResult :: Goal -> PreprocessorL SolverResult
+    computeResult subgoal = do
+      result <- runSolver =<< runZ3 (goalToSExpr subgoal)
+      case result of
+        (SMT.Sat, mbModel) -> maybe (pure (Sat Nothing)) (processModel fPrime subgoal) mbModel
+        (SMT.Unsat, _mbCore) -> pure Unsat
+        (SMT.Unknown, mbReason) -> pure (Unknown mbReason)
 
 optimizeQuery :: Text -> PreprocessorL [Goal]
 optimizeQuery smtQuery = do
@@ -234,9 +232,9 @@ z3ModelToHorusModel fPrime model =
       consts <- getConsts fPrime model
       mbLVars <- for consts (pure . parseLVar)
       pure $ fromList $ catMaybes mbLVars
- where
-  parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
-  parseRegVar (name, value) =
-    parseRegKind name <&> (,name,toSignedFelt fPrime value)
-  parseLVar :: (Text, Integer) -> Maybe (Text, Integer)
-  parseLVar (name, value) = (,value) . pack . ('$' :) . unpack <$> stripPrefix "$" name
+  where
+    parseRegVar :: (Text, Integer) -> Maybe (RegKind, Text, Integer)
+    parseRegVar (name, value) =
+      parseRegKind name <&> (,name,toSignedFelt fPrime value)
+    parseLVar :: (Text, Integer) -> Maybe (Text, Integer)
+    parseLVar (name, value) = (,value) . pack . ('$' :) . unpack <$> stripPrefix "$" name

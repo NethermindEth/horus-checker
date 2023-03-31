@@ -31,8 +31,8 @@ toSignedFelt :: Integer -> Integer -> Integer
 toSignedFelt fPrime x
   | moddedX > fPrime `div` 2 = moddedX - fPrime
   | otherwise = moddedX
- where
-  moddedX = x `mod` fPrime
+  where
+    moddedX = x `mod` fPrime
 
 whenJust :: Applicative f => Maybe a -> (a -> f ()) -> f ()
 whenJust Nothing _ = pure ()
@@ -61,9 +61,9 @@ tShow = pack . show
 
 commonPrefix :: [Text] -> Text
 commonPrefix = foldr (\x acc -> unspoon $ Text.commonPrefixes x acc) ""
- where
-  unspoon :: Maybe (Text, Text, Text) -> Text
-  unspoon = maybe "" $ \(prefix, _, _) -> prefix
+  where
+    unspoon :: Maybe (Text, Text, Text) -> Text
+    unspoon = maybe "" $ \(prefix, _, _) -> prefix
 
 enumerate :: (Enum a, Bounded a) => [a]
 enumerate = [minBound ..]

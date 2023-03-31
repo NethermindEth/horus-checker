@@ -107,25 +107,25 @@ runSingleSolver SingleSolver{..} SolverSettings{..} query = solving $ \solver ->
       pure (Just (pack (SMT.ppSExpr reason "")))
     SMT.Unsat -> pure Nothing
   pure (res, mbModelOrReason)
- where
-  solving f = withTimeout (withSolver s_name s_auxFlags f)
-  withTimeout f = do
-    mbResult <- timeout (ss_timeoutMillis * 1000) f
-    pure (fromMaybe timeoutResult mbResult)
-  timeoutResult = (SMT.Unknown, Just (s_name <> ": Time is out."))
+  where
+    solving f = withTimeout (withSolver s_name s_auxFlags f)
+    withTimeout f = do
+      mbResult <- timeout (ss_timeoutMillis * 1000) f
+      pure (fromMaybe timeoutResult mbResult)
+    timeoutResult = (SMT.Unknown, Just (s_name <> ": Time is out."))
 
 runSolver :: Solver -> SolverSettings -> Text -> IO (SMT.Result, Maybe Text)
 runSolver (MultiSolver solvers) settings query =
   foldlM combineResult (SMT.Unknown, Just "All solvers failed.") solvers
- where
-  combineResult (SMT.Unknown, mbReason) nextSolver = do
-    (nextStatus, nextMbReason) <- runSingleSolver nextSolver settings query
-    case nextStatus of
-      SMT.Unknown -> pure (SMT.Unknown, mbReason <> annotateFailure nextSolver nextMbReason)
-      _ -> pure (nextStatus, nextMbReason)
-  combineResult res _ = pure res
+  where
+    combineResult (SMT.Unknown, mbReason) nextSolver = do
+      (nextStatus, nextMbReason) <- runSingleSolver nextSolver settings query
+      case nextStatus of
+        SMT.Unknown -> pure (SMT.Unknown, mbReason <> annotateFailure nextSolver nextMbReason)
+        _ -> pure (nextStatus, nextMbReason)
+    combineResult res _ = pure res
 
-  annotateFailure solver reason = Just ("\n" <> tShow solver <> " failed with: ") <> reason
+    annotateFailure solver reason = Just ("\n" <> tShow solver <> " failed with: ") <> reason
 
 withSolver :: Text -> [Text] -> (SMT.Solver -> IO a) -> IO a
 withSolver solverName args =

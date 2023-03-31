@@ -61,7 +61,7 @@ parseRegKind t =
   fmap CallFp (Text.stripPrefix "fp@" t >>= readMaybe . unpack)
     <|> fmap ApGroup (Text.stripPrefix "ap!" t >>= readMaybe . unpack)
 
-pattern Memory :: () => (a ~ TFelt) => Expr TFelt -> Expr a
+pattern Memory :: () => a ~ TFelt => Expr TFelt -> Expr a
 pattern Memory addr <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "memory")) :*: addr
   where
     Memory = memory
@@ -85,17 +85,17 @@ parseStorageVar e = do
   guard (not (isReg name))
   guard (not (isLVar name))
   pure res
- where
-  isStd n = n `elem` stdNames || n == "memory"
-  isReg n =
-    isJust (parseRegKind n)
-      || n == "ap"
-      || n == "fp"
-      || n == "range-check-bound"
-      || n == "prime"
-  isLVar n = "$" `Text.isPrefixOf` n
+  where
+    isStd n = n `elem` stdNames || n == "memory"
+    isReg n =
+      isJust (parseRegKind n)
+        || n == "ap"
+        || n == "fp"
+        || n == "range-check-bound"
+        || n == "prime"
+    isLVar n = "$" `Text.isPrefixOf` n
 
-pattern StorageVar :: () => (a ~ TFelt) => Text -> [Expr TFelt] -> Expr a
+pattern StorageVar :: () => a ~ TFelt => Text -> [Expr TFelt] -> Expr a
 pattern StorageVar name args <- (parseStorageVar -> Just (Refl, name, args))
 
 rcBound :: Expr TFelt

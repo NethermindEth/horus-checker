@@ -31,7 +31,12 @@ import Lens.Micro (Lens', (%~), (<&>), (^.))
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl (use, (%=), (.=), (<%=))
 
-import Horus.CairoSemantics (AssertionType (PreAssertion), CairoSemanticsF (..), CairoSemanticsL, MemoryVariable (..))
+import Horus.CairoSemantics
+  ( AssertionType (PreAssertion)
+  , CairoSemanticsF (..)
+  , CairoSemanticsL
+  , MemoryVariable (..)
+  )
 import Horus.CallStack (CallStack, digestOfCallStack, pop, push, reset, stackTrace, top)
 import Horus.Command.SMT qualified as Command
 import Horus.ContractInfo (ContractInfo (..))
@@ -119,79 +124,79 @@ type Impl = ReaderT ContractInfo (ExceptT Text (State Env))
 
 interpret :: forall a. CairoSemanticsL a -> Impl a
 interpret = iterM exec
- where
-  exec :: CairoSemanticsF (Impl a) -> Impl a
-  exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
-  exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
-  exec (DeclareMem address cont) = do
-    memVars <- use (eConstraints . csMemoryVariables)
-    case List.find ((address ==) . mv_addrExpr) memVars of
-      Just MemoryVariable{..} -> cont (Expr.const mv_varName)
-      Nothing -> do
-        freshCount <- eConstraints . csNameCounter <%= (+ 1)
-        let name = "MEM!" <> tShow freshCount
-        let addrName = "ADDR!" <> tShow freshCount
-        eConstraints . csMemoryVariables %= (MemoryVariable name addrName address :)
-        cont (Expr.const name)
-  exec (DeclareLocalMem address cont) = do
-    memVars <- use (eConstraints . csMemoryVariables)
-    case List.find ((address ==) . mv_addrExpr) memVars of
-      Just mv -> cont mv
-      Nothing -> do
-        freshCount <- eConstraints . csNameCounter <%= (+ 1)
-        let name = "MEM!" <> tShow freshCount
-        let addrName = "ADDR!" <> tShow freshCount
-        cont (MemoryVariable name addrName address)
-  exec (GetApTracking label cont) = do
-    ci <- ask
-    ci_getApTracking ci label >>= cont
-  exec (GetBuiltinOffsets label builtin cont) = do
-    ci <- ask
-    ci_getBuiltinOffsets ci label builtin >>= cont
-  exec (GetCallee inst cont) = do
-    ci <- ask
-    ci_getCallee ci inst >>= cont
-  exec (GetFuncSpec name cont) = do
-    ci <- ask
-    ci_getFuncSpec ci name & cont
-  exec (GetFunPc label cont) = do
-    ci <- ask
-    ci_getFunPc ci label >>= cont
-  exec (GetInlinable cont) = do
-    ask >>= cont . ci_inlinables
-  exec (GetStackTraceDescr callstack cont) = do
-    fNames <- asks (Map.map sf_scopedName . ci_functions)
-    case callstack of
-      Nothing -> get >>= cont . digestOfCallStack fNames . (^. csCallStack) . e_constraints
-      Just stack -> cont $ digestOfCallStack fNames stack
-  exec (GetMemVars cont) = do
-    use (eConstraints . csMemoryVariables) >>= cont
-  exec (GetOracle cont) = do
-    get >>= cont . stackTrace . (^. csCallStack) . e_constraints
-  exec (IsInlinable label cont) = do
-    inlinableFs <- asks ci_inlinables
-    cont (label `elem` inlinableFs)
-  exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
-  exec (Pop cont) = eConstraints . csCallStack %= (snd . pop) >> cont
-  exec (Top cont) = do
-    get >>= cont . top . (^. csCallStack) . e_constraints
-  exec (EnableStorage cont) = eStorageEnabled .= True >> cont
-  exec (ReadStorage mbStorage name args cont) = do
-    storage <- case mbStorage of Nothing -> use eStorage; Just st -> pure st
-    cont (Storage.read storage name args)
-  exec (ResetStack cont) = eConstraints . csCallStack %= reset >> cont
-  exec (UpdateStorage newStorage cont) = do
-    storageEnabled <- use eStorageEnabled
-    unless (storageEnabled || Map.null newStorage) $
-      throwError plainSpecStorageAccessErr
-    oldStorage <- use eStorage
-    let combined = Map.unionWith (<>) newStorage oldStorage
-    eStorage .= combined >> cont
-  exec (GetStorage cont) = use eStorage >>= cont
-  exec (Throw t) = throwError t
+  where
+    exec :: CairoSemanticsF (Impl a) -> Impl a
+    exec (Assert' a assType cont) = eConstraints . csAsserts %= ((QFAss a, assType) :) >> cont
+    exec (Expect' a assType cont) = eConstraints . csExpects %= ((a, assType) :) >> cont
+    exec (DeclareMem address cont) = do
+      memVars <- use (eConstraints . csMemoryVariables)
+      case List.find ((address ==) . mv_addrExpr) memVars of
+        Just MemoryVariable{..} -> cont (Expr.const mv_varName)
+        Nothing -> do
+          freshCount <- eConstraints . csNameCounter <%= (+ 1)
+          let name = "MEM!" <> tShow freshCount
+          let addrName = "ADDR!" <> tShow freshCount
+          eConstraints . csMemoryVariables %= (MemoryVariable name addrName address :)
+          cont (Expr.const name)
+    exec (DeclareLocalMem address cont) = do
+      memVars <- use (eConstraints . csMemoryVariables)
+      case List.find ((address ==) . mv_addrExpr) memVars of
+        Just mv -> cont mv
+        Nothing -> do
+          freshCount <- eConstraints . csNameCounter <%= (+ 1)
+          let name = "MEM!" <> tShow freshCount
+          let addrName = "ADDR!" <> tShow freshCount
+          cont (MemoryVariable name addrName address)
+    exec (GetApTracking label cont) = do
+      ci <- ask
+      ci_getApTracking ci label >>= cont
+    exec (GetBuiltinOffsets label builtin cont) = do
+      ci <- ask
+      ci_getBuiltinOffsets ci label builtin >>= cont
+    exec (GetCallee inst cont) = do
+      ci <- ask
+      ci_getCallee ci inst >>= cont
+    exec (GetFuncSpec name cont) = do
+      ci <- ask
+      ci_getFuncSpec ci name & cont
+    exec (GetFunPc label cont) = do
+      ci <- ask
+      ci_getFunPc ci label >>= cont
+    exec (GetInlinable cont) = do
+      ask >>= cont . ci_inlinables
+    exec (GetStackTraceDescr callstack cont) = do
+      fNames <- asks (Map.map sf_scopedName . ci_functions)
+      case callstack of
+        Nothing -> get >>= cont . digestOfCallStack fNames . (^. csCallStack) . e_constraints
+        Just stack -> cont $ digestOfCallStack fNames stack
+    exec (GetMemVars cont) = do
+      use (eConstraints . csMemoryVariables) >>= cont
+    exec (GetOracle cont) = do
+      get >>= cont . stackTrace . (^. csCallStack) . e_constraints
+    exec (IsInlinable label cont) = do
+      inlinableFs <- asks ci_inlinables
+      cont (label `elem` inlinableFs)
+    exec (Push entry cont) = eConstraints . csCallStack %= push entry >> cont
+    exec (Pop cont) = eConstraints . csCallStack %= (snd . pop) >> cont
+    exec (Top cont) = do
+      get >>= cont . top . (^. csCallStack) . e_constraints
+    exec (EnableStorage cont) = eStorageEnabled .= True >> cont
+    exec (ReadStorage mbStorage name args cont) = do
+      storage <- case mbStorage of Nothing -> use eStorage; Just st -> pure st
+      cont (Storage.read storage name args)
+    exec (ResetStack cont) = eConstraints . csCallStack %= reset >> cont
+    exec (UpdateStorage newStorage cont) = do
+      storageEnabled <- use eStorageEnabled
+      unless (storageEnabled || Map.null newStorage) $
+        throwError plainSpecStorageAccessErr
+      oldStorage <- use eStorage
+      let combined = Map.unionWith (<>) newStorage oldStorage
+      eStorage .= combined >> cont
+    exec (GetStorage cont) = use eStorage >>= cont
+    exec (Throw t) = throwError t
 
-  plainSpecStorageAccessErr :: Text
-  plainSpecStorageAccessErr = "Storage access isn't allowed in a plain spec."
+    plainSpecStorageAccessErr :: Text
+    plainSpecStorageAccessErr = "Storage access isn't allowed in a plain spec."
 
 debugFriendlyModel :: ConstraintsState -> Text
 debugFriendlyModel ConstraintsState{..} =
@@ -204,11 +209,11 @@ debugFriendlyModel ConstraintsState{..} =
       , ["# Expect"]
       , map (pprExpr . fst) cs_expects
       ]
- where
-  memoryPairs =
-    [ mv_varName <> "=[" <> pprExpr mv_addrExpr <> "]"
-    | MemoryVariable{..} <- cs_memoryVariables
-    ]
+  where
+    memoryPairs =
+      [ mv_varName <> "=[" <> pprExpr mv_addrExpr <> "]"
+      | MemoryVariable{..} <- cs_memoryVariables
+      ]
 
 restrictMemTail :: [MemoryVariable] -> [Expr TBool]
 restrictMemTail [] = []
@@ -216,53 +221,53 @@ restrictMemTail (mv0 : rest) =
   [ addr0 .== Expr.const mv_addrName .=> mem0 .== Expr.const mv_varName
   | MemoryVariable{..} <- rest
   ]
- where
-  mem0 = Expr.const (mv_varName mv0)
-  addr0 = Expr.const (mv_addrName mv0)
+  where
+    mem0 = Expr.const (mv_varName mv0)
+    addr0 = Expr.const (mv_addrName mv0)
 
 makeModel :: Bool -> ConstraintsState -> Integer -> Text
 makeModel checkPreOnly ConstraintsState{..} fPrime =
   Text.intercalate "\n" (decls <> map (Command.assert fPrime) restrictions)
- where
-  functions =
-    toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
-  decls = map (foldSome Command.declare) functions
-  rangeRestrictions = mapMaybe (foldSome restrictRange) functions
-  memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
-  addrRestrictions =
-    [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
+  where
+    functions =
+      toList (foldMap gatherNonStdFunctions generalRestrictions <> gatherNonStdFunctions prime)
+    decls = map (foldSome Command.declare) functions
+    rangeRestrictions = mapMaybe (foldSome restrictRange) functions
+    memRestrictions = concatMap restrictMemTail (List.tails cs_memoryVariables)
+    addrRestrictions =
+      [Expr.const mv_addrName .== mv_addrExpr | MemoryVariable{..} <- cs_memoryVariables]
 
-  -- If checking @pre only, only take `PreAssertion`s, no postconditions.
-  allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . snd) cs_asserts else cs_asserts
-  allowedExpects = if checkPreOnly then [] else cs_expects
+    -- If checking @pre only, only take `PreAssertion`s, no postconditions.
+    allowedAsserts = if checkPreOnly then filter ((== PreAssertion) . snd) cs_asserts else cs_asserts
+    allowedExpects = if checkPreOnly then [] else cs_expects
 
-  generalRestrictions =
-    concat
-      [ memRestrictions
-      , addrRestrictions
-      , map (builderToAss cs_memoryVariables . fst) allowedAsserts
-      , [Expr.not (Expr.and (map fst allowedExpects)) | not (null allowedExpects)]
-      ]
-  restrictions = rangeRestrictions <> generalRestrictions
+    generalRestrictions =
+      concat
+        [ memRestrictions
+        , addrRestrictions
+        , map (builderToAss cs_memoryVariables . fst) allowedAsserts
+        , [Expr.not (Expr.and (map fst allowedExpects)) | not (null allowedExpects)]
+        ]
+    restrictions = rangeRestrictions <> generalRestrictions
 
-  restrictRange :: forall ty. Function ty -> Maybe (Expr TBool)
-  restrictRange (Function name) = case sing @ty of
-    SFelt
-      | Just value <- name `lookup` constants -> Just (ExitField (var .== fromInteger value))
-      | otherwise -> Just (0 .<= var .&& var .< prime)
-     where
-      var = Fun name
-      constants :: [(Text, Integer)]
-      constants = [(pprExpr prime, fPrime), (pprExpr rcBound, Builtin.rcBound)]
-    _ -> Nothing
+    restrictRange :: forall ty. Function ty -> Maybe (Expr TBool)
+    restrictRange (Function name) = case sing @ty of
+      SFelt
+        | Just value <- name `lookup` constants -> Just (ExitField (var .== fromInteger value))
+        | otherwise -> Just (0 .<= var .&& var .< prime)
+        where
+          var = Fun name
+          constants :: [(Text, Integer)]
+          constants = [(pprExpr prime, fPrime), (pprExpr rcBound, Builtin.rcBound)]
+      _ -> Nothing
 
 runImpl :: CallStack -> ContractInfo -> Impl a -> Either Text ConstraintsState
 runImpl initStack contractInfo m = v $> e_constraints env
- where
-  (v, env) =
-    runReaderT m contractInfo
-      & runExceptT
-      & flip runState (emptyEnv initStack)
+  where
+    (v, env) =
+      runReaderT m contractInfo
+        & runExceptT
+        & flip runState (emptyEnv initStack)
 
 run :: CallStack -> ContractInfo -> CairoSemanticsL a -> Either Text ConstraintsState
 run initStack contractInfo a =

@@ -159,11 +159,11 @@ transform_ f = transform (\x -> f x $> x)
 
 canonicalize :: Expr a -> Expr a
 canonicalize = transformId step
- where
-  step (a :+ b) = a + b
-  step (a :- b) = a - b
-  step (Negate a) = negate a
-  step a = a
+  where
+    step (a :+ b) = a + b
+    step (a :- b) = a - b
+    step (Negate a) = negate a
+    step a = a
 
 -- pattern synonyms
 
@@ -205,47 +205,47 @@ apply1 acc xs = apply acc (toList xs)
 apply1' :: SingI c => (forall a. SingI a => Expr a) -> Expr c -> [Expr b] -> Expr c
 apply1' acc whenEmpty = maybe whenEmpty (apply1 acc) . nonEmpty
 
-unfoldVariadic ::
-  forall arg res ty.
-  (Typeable arg, Typeable res) =>
-  Expr ty ->
-  Maybe (ty :~: res, Text, [Expr arg])
+unfoldVariadic
+  :: forall arg res ty
+   . (Typeable arg, Typeable res)
+  => Expr ty
+  -> Maybe (ty :~: res, Text, [Expr arg])
 unfoldVariadic e = do
   Refl <- eqT @res @ty \\ isProper e
   (name, args) <- gatherArgs [] e
   pure (Refl, name, args)
- where
-  gatherArgs :: [Expr arg] -> Expr ty' -> Maybe (Text, [Expr arg])
-  gatherArgs acc (f :*: x) = do
-    x' <- cast' @arg x
-    gatherArgs (x' : acc) f
-  gatherArgs acc (Fun name) = pure (name, acc)
-  gatherArgs _ _ = Nothing
+  where
+    gatherArgs :: [Expr arg] -> Expr ty' -> Maybe (Text, [Expr arg])
+    gatherArgs acc (f :*: x) = do
+      x' <- cast' @arg x
+      gatherArgs (x' : acc) f
+    gatherArgs acc (Fun name) = pure (name, acc)
+    gatherArgs _ _ = Nothing
 
-pattern FeltConst :: () => (a ~ TFelt) => Text -> Expr a
+pattern FeltConst :: () => a ~ TFelt => Text -> Expr a
 pattern FeltConst name <- (cast @TFelt -> CastOk (Fun name))
   where
     FeltConst = const
 
-pattern (:+) :: () => (a ~ TFelt) => Expr TFelt -> Expr TFelt -> Expr a
+pattern (:+) :: () => a ~ TFelt => Expr TFelt -> Expr TFelt -> Expr a
 pattern a :+ b <- (cast @(TFelt :-> TFelt :-> TFelt) -> CastOk (Fun "+")) :*: a :*: b
   where
     (:+) = function "+"
 
-pattern (:*) :: () => (a ~ TFelt) => Expr TFelt -> Expr TFelt -> Expr a
+pattern (:*) :: () => a ~ TFelt => Expr TFelt -> Expr TFelt -> Expr a
 pattern a :* b <- (cast @(TFelt :-> TFelt :-> TFelt) -> CastOk (Fun "*")) :*: a :*: b
   where
     (:*) = function "*"
 
-pattern (:-) :: () => (a ~ TFelt) => Expr TFelt -> Expr TFelt -> Expr a
+pattern (:-) :: () => a ~ TFelt => Expr TFelt -> Expr TFelt -> Expr a
 pattern a :- b <- (cast @(TFelt :-> TFelt :-> TFelt) -> CastOk (Fun "-")) :*: a :*: b
 
-pattern Negate :: () => (a ~ TFelt) => Expr TFelt -> Expr a
+pattern Negate :: () => a ~ TFelt => Expr TFelt -> Expr a
 pattern Negate a <- (cast @(TFelt :-> TFelt) -> CastOk (Fun "-")) :*: a
   where
     Negate = function "-"
 
-pattern And :: () => (a ~ TBool) => [Expr TBool] -> Expr a
+pattern And :: () => a ~ TBool => [Expr TBool] -> Expr a
 pattern And cs <- (unfoldVariadic @TBool @TBool -> Just (Refl, "and", cs))
   where
     And = apply1' (Fun "and") True
@@ -297,10 +297,10 @@ and xs
   | [] <- xs' = True
   | [x] <- xs' = x
   | otherwise = And xs'
- where
-  xs' = filter (/= True) (concatMap unfold xs)
-  unfold (And cs) = cs
-  unfold x = [x]
+  where
+    xs' = filter (/= True) (concatMap unfold xs)
+    unfold (And cs) = cs
+    unfold x = [x]
 
 infixr 2 .||
 (.||) :: Expr TBool -> Expr TBool -> Expr TBool

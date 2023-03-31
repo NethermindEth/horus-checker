@@ -145,10 +145,9 @@ throw t = liftF (Throw t)
 enableStorage :: CairoSemanticsL ()
 enableStorage = liftF (EnableStorage ())
 
-{- | Get an expression for the value of a storage variable with certain
- arguments given a value of type `Storage`, which represents the state of all
- storage variables during program execution at some specific point in time.
--}
+-- | Get an expression for the value of a storage variable with certain
+--  arguments given a value of type `Storage`, which represents the state of all
+--  storage variables during program execution at some specific point in time.
 readStorage :: Maybe Storage -> ScopedName -> [Expr TFelt] -> CairoSemanticsL (Expr TFelt)
 readStorage storage name args = liftF (ReadStorage storage name args id)
 
@@ -172,10 +171,10 @@ expect a = expect' =<< memoryRemoval a
 
 memoryRemoval :: Expr a -> CairoSemanticsL (Expr a)
 memoryRemoval = Expr.transform step
- where
-  step :: Expr b -> CairoSemanticsL (Expr b)
-  step (Memory x) = declareMem x
-  step e = pure e
+  where
+    step :: Expr b -> CairoSemanticsL (Expr b)
+    step (Memory x) = declareMem x
+    step e = pure e
 
 isInlinable :: ScopedFunction -> CairoSemanticsL Bool
 isInlinable f = liftF (IsInlinable f id)
@@ -201,52 +200,50 @@ top = liftF (Top id)
 storageRemoval :: Expr a -> CairoSemanticsL (Expr a)
 storageRemoval = storageRemoval' Nothing
 
-{- | Substitute a reference to a storage variable in an expression with its
- value according to `storage :: Storage`.
-
- For example, suppose we have a storage variable called `state() : felt`. If
- we reference this storage variable in the precondition for some function
- `f`, for example in `// @pre state() ==  5`, then when constructing the
- assertions to represent this constraint, we must replace the symbolic name
- `state()` in this expression with an expression for the actual value of the
- storage variable just before the function `f` is called.
-
- This substitution is what `storageRemoval'` does, and it does it with
- respect to the argument `storage :: Maybe Storage`, which represents the
- state of all storage variables during program execution at a particular
- point in time.
-
- Some better names: `resolveStorageReferences`, `resolveStorage`,
- `expandStorageExpressions`, `substituteStorage`, or `dereferenceStorage`.
--}
+-- | Substitute a reference to a storage variable in an expression with its
+--  value according to `storage :: Storage`.
+--
+--  For example, suppose we have a storage variable called `state() : felt`. If
+--  we reference this storage variable in the precondition for some function
+--  `f`, for example in `// @pre state() ==  5`, then when constructing the
+--  assertions to represent this constraint, we must replace the symbolic name
+--  `state()` in this expression with an expression for the actual value of the
+--  storage variable just before the function `f` is called.
+--
+--  This substitution is what `storageRemoval'` does, and it does it with
+--  respect to the argument `storage :: Maybe Storage`, which represents the
+--  state of all storage variables during program execution at a particular
+--  point in time.
+--
+--  Some better names: `resolveStorageReferences`, `resolveStorage`,
+--  `expandStorageExpressions`, `substituteStorage`, or `dereferenceStorage`.
 storageRemoval' :: Maybe Storage -> Expr a -> CairoSemanticsL (Expr a)
 storageRemoval' storage = Expr.transform step
- where
-  step :: Expr b -> CairoSemanticsL (Expr b)
-  step (StorageVar name args) = readStorage storage (ScopedName.fromText name) args
-  step e = pure e
+  where
+    step :: Expr b -> CairoSemanticsL (Expr b)
+    step (StorageVar name args) = readStorage storage (ScopedName.fromText name) args
+    step e = pure e
 
 substitute :: Text -> Expr TFelt -> Expr a -> Expr a
 substitute what forWhat = Expr.canonicalize . Expr.transformId step
- where
-  step :: Expr b -> Expr b
-  step (Expr.cast @TFelt -> CastOk (Expr.Fun name)) | name == what = forWhat
-  step (Expr.cast @TBool -> CastOk (Expr.ExistsFelt name expr)) = Expr.ExistsFelt name (substitute what forWhat expr)
-  step e = e
+  where
+    step :: Expr b -> Expr b
+    step (Expr.cast @TFelt -> CastOk (Expr.Fun name)) | name == what = forWhat
+    step (Expr.cast @TBool -> CastOk (Expr.ExistsFelt name expr)) = Expr.ExistsFelt name (substitute what forWhat expr)
+    step e = e
 
-{- | Prepare the expression for usage in the model.
-
-That is, deduce AP from the ApTracking data by PC and replace FP name
-with the given one.
--}
+-- | Prepare the expression for usage in the model.
+--
+-- That is, deduce AP from the ApTracking data by PC and replace FP name
+-- with the given one.
 prepare :: Label -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
 
 prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare' ap fp expr = memoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
-preparePost ::
-  Expr TFelt -> Expr TFelt -> Expr TBool -> Bool -> CairoSemanticsL (Expr TBool)
+preparePost
+  :: Expr TFelt -> Expr TFelt -> Expr TBool -> Bool -> CairoSemanticsL (Expr TBool)
 preparePost ap fp expr isOptim = do
   if isOptim
     then do
@@ -284,10 +281,9 @@ moduleEndAp mdl =
     [] -> getStackTraceDescr <&> Expr.const . ("ap!" <>)
     _ -> getAp' (Just callstack) pc where (callstack, pc) = m_lastPc mdl
 
-{- | Gather the assertions and other state (in the `ConstraintsState` contained
- in `CairoSemanticsL`) associated with a function specification that may
- contain a storage update.
--}
+-- | Gather the assertions and other state (in the `ConstraintsState` contained
+--  in `CairoSemanticsL`) associated with a function specification that may
+--  contain a storage update.
 encodeModule :: Module -> CairoSemanticsL ()
 encodeModule mdl@(Module (FuncSpec pre post storage) instrs oracle _ _ mbPreCheckedFuncWithCallStack) = do
   enableStorage
@@ -328,54 +324,54 @@ exMemoryRemoval :: Expr TBool -> CairoSemanticsL ([MemoryVariable] -> Expr TBool
 exMemoryRemoval expr = do
   (expr', localMemVars, _referencesLocals) <- unsafeMemoryRemoval expr
   pure (intro expr' localMemVars)
- where
-  exVars = gatherLogicalVariables expr
+  where
+    exVars = gatherLogicalVariables expr
 
-  restrictMemTail [] = []
-  restrictMemTail (mv0 : rest) =
-    [ addr0 .== Expr.const mv_addrName .=> mem0 .== Expr.const mv_varName
-    | MemoryVariable{..} <- rest
-    ]
-   where
-    mem0 = Expr.const (mv_varName mv0)
-    addr0 = Expr.const (mv_addrName mv0)
+    restrictMemTail [] = []
+    restrictMemTail (mv0 : rest) =
+      [ addr0 .== Expr.const mv_addrName .=> mem0 .== Expr.const mv_varName
+      | MemoryVariable{..} <- rest
+      ]
+      where
+        mem0 = Expr.const (mv_varName mv0)
+        addr0 = Expr.const (mv_addrName mv0)
 
-  intro :: Expr TBool -> [MemoryVariable] -> [MemoryVariable] -> Expr TBool
-  intro ex lmv gmv =
-    let globMemRestrictions =
-          [ addr1 .== addr2 .=> Expr.const var1 .== Expr.const var2
-          | MemoryVariable var1 _ addr1 <- lmv
-          , MemoryVariable var2 _ addr2 <- gmv
-          ]
-        locMemRestrictions = concatMap restrictMemTail (tails lmv)
-        innerExpr = Expr.and (ex : (locMemRestrictions ++ globMemRestrictions))
-        quantLmv = foldr (\mvar e -> Expr.ExistsFelt (mv_varName mvar) e) innerExpr lmv
-     in foldr (\var e -> Expr.ExistsFelt var e) quantLmv exVars
+    intro :: Expr TBool -> [MemoryVariable] -> [MemoryVariable] -> Expr TBool
+    intro ex lmv gmv =
+      let globMemRestrictions =
+            [ addr1 .== addr2 .=> Expr.const var1 .== Expr.const var2
+            | MemoryVariable var1 _ addr1 <- lmv
+            , MemoryVariable var2 _ addr2 <- gmv
+            ]
+          locMemRestrictions = concatMap restrictMemTail (tails lmv)
+          innerExpr = Expr.and (ex : (locMemRestrictions ++ globMemRestrictions))
+          quantLmv = foldr (\mvar e -> Expr.ExistsFelt (mv_varName mvar) e) innerExpr lmv
+       in foldr (\var e -> Expr.ExistsFelt var e) quantLmv exVars
 
-  unsafeMemoryRemoval :: Expr a -> CairoSemanticsL (Expr a, [MemoryVariable], Bool)
-  unsafeMemoryRemoval (Memory addr) = do
-    (addr', localMemVars, referencesLocals) <- unsafeMemoryRemoval addr
-    if referencesLocals
-      then do
-        mv <- declareLocalMem addr'
-        pure (Expr.const (mv_varName mv), mv : localMemVars, True)
-      else do
-        mv <- declareMem addr'
-        pure (mv, localMemVars, False)
-  unsafeMemoryRemoval e@Expr.Felt{} = pure (e, [], False)
-  unsafeMemoryRemoval e@Expr.True = pure (e, [], False)
-  unsafeMemoryRemoval e@Expr.False = pure (e, [], False)
-  unsafeMemoryRemoval e@(Expr.Fun name) = pure (e, [], name `Set.member` exVars)
-  unsafeMemoryRemoval (f Expr.:*: x) = do
-    (f', localMemVars1, referencesLocals1) <- unsafeMemoryRemoval f
-    (x', localMemVars2, referencesLocals2) <- unsafeMemoryRemoval x
-    pure (f' Expr.:*: x', localMemVars2 <> localMemVars1, referencesLocals1 || referencesLocals2)
-  unsafeMemoryRemoval (Expr.ExistsFelt name e) = do
-    (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
-    pure (Expr.ExistsFelt name e', localMemVars, referencesLocals)
-  unsafeMemoryRemoval (Expr.ExitField e) = do
-    (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
-    pure (Expr.ExitField e', localMemVars, referencesLocals)
+    unsafeMemoryRemoval :: Expr a -> CairoSemanticsL (Expr a, [MemoryVariable], Bool)
+    unsafeMemoryRemoval (Memory addr) = do
+      (addr', localMemVars, referencesLocals) <- unsafeMemoryRemoval addr
+      if referencesLocals
+        then do
+          mv <- declareLocalMem addr'
+          pure (Expr.const (mv_varName mv), mv : localMemVars, True)
+        else do
+          mv <- declareMem addr'
+          pure (mv, localMemVars, False)
+    unsafeMemoryRemoval e@Expr.Felt{} = pure (e, [], False)
+    unsafeMemoryRemoval e@Expr.True = pure (e, [], False)
+    unsafeMemoryRemoval e@Expr.False = pure (e, [], False)
+    unsafeMemoryRemoval e@(Expr.Fun name) = pure (e, [], name `Set.member` exVars)
+    unsafeMemoryRemoval (f Expr.:*: x) = do
+      (f', localMemVars1, referencesLocals1) <- unsafeMemoryRemoval f
+      (x', localMemVars2, referencesLocals2) <- unsafeMemoryRemoval x
+      pure (f' Expr.:*: x', localMemVars2 <> localMemVars1, referencesLocals1 || referencesLocals2)
+    unsafeMemoryRemoval (Expr.ExistsFelt name e) = do
+      (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
+      pure (Expr.ExistsFelt name e', localMemVars, referencesLocals)
+    unsafeMemoryRemoval (Expr.ExitField e) = do
+      (e', localMemVars, referencesLocals) <- unsafeMemoryRemoval e
+      pure (Expr.ExitField e', localMemVars, referencesLocals)
 
 withExecutionCtx :: CallEntry -> CairoSemanticsL b -> CairoSemanticsL b
 withExecutionCtx ctx action = do
@@ -384,28 +380,27 @@ withExecutionCtx ctx action = do
   pop
   pure res
 
-{- | Records in the `ConstraintsState` (and in particular, in `cs_asserts`
- field) the assertions corresponding with the semantics of `assert_eq` and
- `call`, and possibly returns a felt expression that represents an FP.
-
- This is only used in `encodePlainSpec`, and so is essentially a helper function.
-
- We need this information because sometimes, when we call `getFp` in
- `encodePlainSpec`, we get a value that is misleading as a result of the
- optimising modules, which interrupt execution, meaning there may be a
- missing Cairo `ret`.
-
- The return value is usually `Nothing` because most functions execute until
- the end, matching every call with a `ret`. A return value of `Just fp`
- represents the FP of the function that is on the top of the stack at the
- point when the execution is interrupted.
--}
-mkInstructionConstraints ::
-  [LabeledInst] ->
-  Maybe (CallStack, ScopedFunction) ->
-  Map (NonEmpty Label, Label) Bool ->
-  (Int, LabeledInst) ->
-  CairoSemanticsL (Maybe (Expr TFelt))
+-- | Records in the `ConstraintsState` (and in particular, in `cs_asserts`
+--  field) the assertions corresponding with the semantics of `assert_eq` and
+--  `call`, and possibly returns a felt expression that represents an FP.
+--
+--  This is only used in `encodePlainSpec`, and so is essentially a helper function.
+--
+--  We need this information because sometimes, when we call `getFp` in
+--  `encodePlainSpec`, we get a value that is misleading as a result of the
+--  optimising modules, which interrupt execution, meaning there may be a
+--  missing Cairo `ret`.
+--
+--  The return value is usually `Nothing` because most functions execute until
+--  the end, matching every call with a `ret`. A return value of `Just fp`
+--  represents the FP of the function that is on the top of the stack at the
+--  point when the execution is interrupted.
+mkInstructionConstraints
+  :: [LabeledInst]
+  -> Maybe (CallStack, ScopedFunction)
+  -> Map (NonEmpty Label, Label) Bool
+  -> (Int, LabeledInst)
+  -> CairoSemanticsL (Maybe (Expr TFelt))
 mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lInst@(pc, Instruction{..})) = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
@@ -419,17 +414,17 @@ mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lI
         Just True -> assert (dst ./= 0) $> Nothing
         Nothing -> pure Nothing
     Ret -> pop $> Nothing
- where
-  nextPc = getNextPcInlinedWithFallback instrs idx
+  where
+    nextPc = getNextPcInlinedWithFallback instrs idx
 
 -- | A particular case of mkInstructionConstraints for the instruction 'call'.
-mkCallConstraints ::
-  Label ->
-  Label ->
-  Expr TFelt ->
-  Maybe (CallStack, ScopedFunction) ->
-  ScopedFunction ->
-  CairoSemanticsL (Maybe (Expr TFelt))
+mkCallConstraints
+  :: Label
+  -> Label
+  -> Expr TFelt
+  -> Maybe (CallStack, ScopedFunction)
+  -> ScopedFunction
+  -> CairoSemanticsL (Maybe (Expr TFelt))
 mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
   calleeFp <- withExecutionCtx stackFrame getFp
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
@@ -465,24 +460,25 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
       assert preparedPre
       assert preparedPost
       pure Nothing
- where
-  lvarSuffix = "+" <> tShowLabel pc
-  calleePc = sf_pc f
-  stackFrame = (pc, calleePc)
-  -- Determine whether the current function matches the function being optimised exactly -
-  -- this necessitates comparing execution traces.
-  isModuleCheckingPre = do
-    stackDescr <- getStackTraceDescr
-    preCheckedFuncStackDescr <- getStackTraceDescr' ((^. _1) <$> mbPreCheckedFuncWithCallStack)
-    pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
-  guardWith condM val cont = do cond <- condM; if cond then val else cont
+  where
+    lvarSuffix = "+" <> tShowLabel pc
+    calleePc = sf_pc f
+    stackFrame = (pc, calleePc)
+    -- Determine whether the current function matches the function being optimised exactly -
+    -- this necessitates comparing execution traces.
+    isModuleCheckingPre = do
+      stackDescr <- getStackTraceDescr
+      preCheckedFuncStackDescr <- getStackTraceDescr' ((^. _1) <$> mbPreCheckedFuncWithCallStack)
+      pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
+    guardWith condM val cont = do cond <- condM; if cond then val else cont
 
-traverseStorage :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
+traverseStorage
+  :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
- where
-  prepareWrites = traverse prepareWrite
-  prepareWrite (args, value) = (,) <$> traverse prepareExpr args <*> prepareExpr value
-  prepareExpr e = storageRemoval e >>= preparer
+  where
+    prepareWrites = traverse prepareWrite
+    prepareWrite (args, value) = (,) <$> traverse prepareExpr args <*> prepareExpr value
+    prepareExpr e = storageRemoval e >>= preparer
 
 mkApConstraints :: Expr TFelt -> NonEmpty LabeledInst -> CairoSemanticsL ()
 mkApConstraints apEnd insts = do
@@ -507,10 +503,11 @@ mkApConstraints apEnd insts = do
   getApIncrement fp lastLInst >>= \case
     Just lastApIncrement -> assert (lastAp + lastApIncrement .== apEnd)
     Nothing -> assert (lastAp .< apEnd)
- where
-  lastLInst@(lastPc, lastInst) = NonEmpty.last insts
+  where
+    lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
-mkBuiltinConstraints :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
+mkBuiltinConstraints
+  :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
 mkBuiltinConstraints apEnd insts optimisesF =
   unless (isJust optimisesF) $ do
     fp <- getFp
@@ -524,14 +521,14 @@ mkBuiltinConstraints apEnd insts optimisesF =
             mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
         Nothing -> checkBuiltinNotRequired b (toList insts)
 
-getBuiltinContract ::
-  Expr TFelt -> Expr TFelt -> Builtin -> BuiltinOffsets -> (Expr TBool, Expr TBool)
+getBuiltinContract
+  :: Expr TFelt -> Expr TFelt -> Builtin -> BuiltinOffsets -> (Expr TBool, Expr TBool)
 getBuiltinContract fp apEnd b bo = (pre, post)
- where
-  pre = builtinAligned initialPtr b .&& finalPtr .<= builtinEnd b
-  post = initialPtr .<= finalPtr .&& builtinAligned finalPtr b
-  initialPtr = memory (fp - fromIntegral (bo_input bo))
-  finalPtr = memory (apEnd - fromIntegral (bo_output bo))
+  where
+    pre = builtinAligned initialPtr b .&& finalPtr .<= builtinEnd b
+    post = initialPtr .<= finalPtr .&& builtinAligned finalPtr b
+    initialPtr = memory (fp - fromIntegral (bo_input bo))
+    finalPtr = memory (apEnd - fromIntegral (bo_output bo))
 
 mkBuiltinConstraintsForInst :: Int -> [LabeledInst] -> Builtin -> LabeledInst -> CairoSemanticsL ()
 mkBuiltinConstraintsForInst pos instrs b inst@(pc, Instruction{..}) =
@@ -553,30 +550,30 @@ mkBuiltinConstraintsForInst pos instrs b inst@(pc, Instruction{..}) =
       -- 'ret's are not in the bytecote for functions that are not inlinable
       Ret -> mkBuiltinConstraintsForFunc True
       _ -> pure ()
- where
-  mkBuiltinConstraintsForFunc canInline = do
-    calleeFp <- getFp
-    callEntry@(_, calleePc) <- top <* pop
-    whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
-      calleeApEnd <-
-        if canInline
-          then withExecutionCtx callEntry (getAp pc)
-          else getAp (getNextPcInlinedWithFallback instrs pos)
-      let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
-      expect pre *> assert post
+  where
+    mkBuiltinConstraintsForFunc canInline = do
+      calleeFp <- getFp
+      callEntry@(_, calleePc) <- top <* pop
+      whenJustM (getBuiltinOffsets calleePc b) $ \bo -> do
+        calleeApEnd <-
+          if canInline
+            then withExecutionCtx callEntry (getAp pc)
+            else getAp (getNextPcInlinedWithFallback instrs pos)
+        let (pre, post) = getBuiltinContract calleeFp calleeApEnd b bo
+        expect pre *> assert post
 
 checkBuiltinNotRequired :: Builtin -> [LabeledInst] -> CairoSemanticsL ()
 checkBuiltinNotRequired b = traverse_ check
- where
-  check inst = whenJust (callDestination inst) $ \calleePc ->
-    whenJustM (getBuiltinOffsets calleePc b) $ \_ ->
-      throw
-        ( "The function doesn't require the '"
-            <> Builtin.name b
-            <> "' builtin, but calls a function (at PC "
-            <> tShow (unLabel calleePc)
-            <> ") that does require it"
-        )
+  where
+    check inst = whenJust (callDestination inst) $ \calleePc ->
+      whenJustM (getBuiltinOffsets calleePc b) $ \_ ->
+        throw
+          ( "The function doesn't require the '"
+              <> Builtin.name b
+              <> "' builtin, but calls a function (at PC "
+              <> tShow (unLabel calleePc)
+              <> ") that does require it"
+          )
 
 getRes :: Expr TFelt -> LabeledInst -> CairoSemanticsL (Expr TFelt)
 getRes fp (pc, Instruction{..}) = do

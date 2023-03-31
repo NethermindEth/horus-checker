@@ -22,8 +22,8 @@ data Message
 
 instance Show Message where
   show (Message s t) = "[" <> show s <> "] - " <> t'
-   where
-    t' = unpack $ filter (/= '\"') t
+    where
+      t' = unpack $ filter (/= '\"') t
 
 newtype ImplL a
   = ImplL (State (Seq Message) a)
@@ -37,11 +37,11 @@ newtype ImplL a
 runImpl :: ImplL a -> Either Text (a, [Message])
 runImpl (ImplL s) =
   return $ f (runState s mempty)
- where
-  f (x, y) = (x, toList y)
+  where
+    f (x, y) = (x, toList y)
 
 interpret :: LogL a -> ImplL a
 interpret = iterM exec . runLogL
- where
-  exec (LogF sev txt next) =
-    modify' (|> Message sev txt) >> next
+  where
+    exec (LogF sev txt next) =
+      modify' (|> Message sev txt) >> next

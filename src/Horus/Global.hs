@@ -40,9 +40,22 @@ import Horus.Expr.Util (gatherLogicalVariables)
 import Horus.FunctionAnalysis (ScopedFunction (ScopedFunction, sf_pc), isWrapper)
 import Horus.Logger qualified as L (LogL, logDebug, logError, logInfo, logWarning)
 import Horus.Module (Module (..), ModuleL, gatherModules, getModuleNameParts)
-import Horus.Preprocessor (HorusResult (..), PreprocessorL, SolverResult (..), goalListToTextList, optimizeQuery, solve)
+import Horus.Preprocessor
+  ( HorusResult (..)
+  , PreprocessorL
+  , SolverResult (..)
+  , goalListToTextList
+  , optimizeQuery
+  , solve
+  )
 import Horus.Preprocessor.Runner (PreprocessorEnv (..))
-import Horus.Preprocessor.Solvers (Solver, SolverSettings, filterMathsat, includesMathsat, isEmptySolver)
+import Horus.Preprocessor.Solvers
+  ( Solver
+  , SolverSettings
+  , filterMathsat
+  , includesMathsat
+  , isEmptySolver
+  )
 import Horus.Program (Identifiers, Program (p_prime))
 import Horus.SW.FuncSpec (FuncSpec, FuncSpec' (fs'_pre))
 import Horus.SW.Identifier (Function (..))
@@ -171,26 +184,24 @@ data SolvingInfo = SolvingInfo
   }
   deriving (Eq, Show)
 
-{- | Construct a function name from a qualified function name and a summary of
- the label(s) (usually just one).
-
- Basically, just concatenates the function name with the label(s), separated
- by a dot. But crucially, it does this safely, so that if the label is empty,
- it doesn't add a dot, and vice-versa if tghe function name is empty.
-
- This terminology comes from the `normalizedName` function in `Module.hs`.
--}
+-- | Construct a function name from a qualified function name and a summary of
+--  the label(s) (usually just one).
+--
+--  Basically, just concatenates the function name with the label(s), separated
+--  by a dot. But crucially, it does this safely, so that if the label is empty,
+--  it doesn't add a dot, and vice-versa if tghe function name is empty.
+--
+--  This terminology comes from the `normalizedName` function in `Module.hs`.
 mkLabeledFuncName :: Text -> Text -> Text
 mkLabeledFuncName qualifiedFuncName "" = qualifiedFuncName
 mkLabeledFuncName "" labelsSummary = labelsSummary
 mkLabeledFuncName qualifiedFuncName labelsSummary = qualifiedFuncName <> "." <> labelsSummary
 
-{- | Solve the constraints for a single module.
-
- Here, a module is a label-delimited section of a function (or possibly the
- whole function). In general, we have multiple modules in a function when
- that function contains multiple branches (an if-then-else, for example).
--}
+-- | Solve the constraints for a single module.
+--
+--  Here, a module is a label-delimited section of a function (or possibly the
+--  whole function). In general, we have multiple modules in a function when
+--  that function contains multiple branches (an if-then-else, for example).
 solveModule :: Module -> GlobalL SolvingInfo
 solveModule m = do
   inlinables <- getInlinables
@@ -207,16 +218,16 @@ solveModule m = do
       , si_inlinable = inlinable
       , si_preCheckingContext = m_preCheckedFuncAndCallStack m
       }
- where
-  mkResult :: Text -> GlobalL HorusResult
-  mkResult moduleName = printingErrors $ do
-    constraints <- extractConstraints m
-    outputSmtQueries moduleName constraints
-    verbosePrint m
-    verbosePrint (debugFriendlyModel constraints)
-    solveSMT constraints
-  printingErrors :: GlobalL HorusResult -> GlobalL HorusResult
-  printingErrors a = a `catchError` (\e -> pure (Timeout (Just ("Error: " <> e))))
+  where
+    mkResult :: Text -> GlobalL HorusResult
+    mkResult moduleName = printingErrors $ do
+      constraints <- extractConstraints m
+      outputSmtQueries moduleName constraints
+      verbosePrint m
+      verbosePrint (debugFriendlyModel constraints)
+      solveSMT constraints
+    printingErrors :: GlobalL HorusResult -> GlobalL HorusResult
+    printingErrors a = a `catchError` (\e -> pure (Timeout (Just ("Error: " <> e))))
 
 outputSmtQueries :: Text -> ConstraintsState -> GlobalL ()
 outputSmtQueries moduleName constraints = do
@@ -225,30 +236,31 @@ outputSmtQueries moduleName constraints = do
   Config{..} <- getConfig
   whenJust cfg_outputQueries (writeSmtFile query)
   whenJust cfg_outputOptimizedQueries (writeSmtFileOptimized query)
- where
-  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
+  where
+    memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables constraints)
 
-  writeSmtFile :: Text -> FilePath -> GlobalL ()
-  writeSmtFile query dir = do
-    writeFile' (dir </> unpack moduleName <> ".smt2") query
+    writeSmtFile :: Text -> FilePath -> GlobalL ()
+    writeSmtFile query dir = do
+      writeFile' (dir </> unpack moduleName <> ".smt2") query
 
-  getQueryList :: Text -> PreprocessorL [Text]
-  getQueryList query = do
-    queryList <- optimizeQuery query
-    goalListToTextList queryList
+    getQueryList :: Text -> PreprocessorL [Text]
+    getQueryList query = do
+      queryList <- optimizeQuery query
+      goalListToTextList queryList
 
-  writeSmtFileOptimized :: Text -> FilePath -> GlobalL ()
-  writeSmtFileOptimized query dir = do
-    Config{..} <- getConfig
-    queries <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (getQueryList query)
-    writeSmtQueries queries dir moduleName
+    writeSmtFileOptimized :: Text -> FilePath -> GlobalL ()
+    writeSmtFileOptimized query dir = do
+      Config{..} <- getConfig
+      queries <-
+        runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (getQueryList query)
+      writeSmtQueries queries dir moduleName
 
 writeSmtQueries :: [Text] -> FilePath -> Text -> GlobalL ()
 writeSmtQueries queries dir moduleName = do
   for_ (zip [1 :: Int ..] queries) writeQueryFile
- where
-  newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
-  writeQueryFile (n, q) = writeFile' (newFileName n) q
+  where
+    newFileName n = dir </> "optimized_goals_" <> unpack moduleName </> show n <> ".smt2"
+    writeQueryFile (n, q) = writeFile' (newFileName n) q
 
 removeMathSAT :: Module -> GlobalL a -> GlobalL a
 removeMathSAT m run = do
@@ -259,22 +271,24 @@ removeMathSAT m run = do
     then do
       let solver' = filterMathsat solver
       if isEmptySolver solver'
-        then throw "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
+        then
+          throw
+            "Only the MathSAT solver was used to analyze a call with a logical variable in its specification."
         else do
           setConfig conf{cfg_solver = solver'}
           result <- run
           setConfig conf
           pure result
     else run
- where
-  -- FIXME should check not just pre, but also post
-  instUsesLvars i = falseIfError $ do
-    callee <- getCallee i
-    spec <- getFuncSpec callee
-    let lvars = gatherLogicalVariables (fromMaybe Expr.True (fs'_pre spec))
-    pure (not (null lvars))
+  where
+    -- FIXME should check not just pre, but also post
+    instUsesLvars i = falseIfError $ do
+      callee <- getCallee i
+      spec <- getFuncSpec callee
+      let lvars = gatherLogicalVariables (fromMaybe Expr.True (fs'_pre spec))
+      pure (not (null lvars))
 
-  falseIfError a = a `catchError` const (pure False)
+    falseIfError a = a `catchError` const (pure False)
 
 solveSMT :: ConstraintsState -> GlobalL HorusResult
 solveSMT cs = do
@@ -283,7 +297,8 @@ solveSMT cs = do
   let query = makeModel False cs fPrime
   let preQuery = makeModel True cs fPrime
   res <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime query)
-  preRes <- runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
+  preRes <-
+    runPreprocessorL (PreprocessorEnv memVars cfg_solver cfg_solverSettings) (solve fPrime preQuery)
 
   -- Convert the `SolverResult` to a `HorusResult`.
   --
@@ -294,8 +309,8 @@ solveSMT cs = do
     (Unknown mbReason, _) -> pure $ Timeout mbReason
     (Unsat, Unsat) -> pure ContradictoryPrecondition
     (Unsat, _) -> pure Verified
- where
-  memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
+  where
+    memVars = map (\mv -> (mv_varName mv, mv_addrName mv)) (cs_memoryVariables cs)
 
 -- | Add an oracle suffix to the module name when the module name *is* the function name.
 appendMissingDefaultOracleSuffix :: SolvingInfo -> SolvingInfo
@@ -304,34 +319,33 @@ appendMissingDefaultOracleSuffix si@(SolvingInfo moduleName funcName result inli
     then SolvingInfo (moduleName <> ":::default") funcName result inlinable preCheckingContext
     else si
 
-{- |  Collapse a list of modules for the same function if they are all `Unsat`.
-
- Given a list of `SolvingInfo`s, each associated with a module, under the
- assumption that they all have the same `si_funcName`, if they are all `Unsat`,
- we collapse them into a singleton list of one `SolvingInfo`, where we
- hot-patch the `moduleName`, replacing it with the `funcName`.
-
- Otherwise, we have at least one `Sat`.
-
- We break the remaining cases into two subcases:
-  * If it is just a single module, we return the list as-is.
-  * If there are multiple modules, we add a `:::default` oracle suffix to the
-    module name that would otherwise just be `<funcName>`.
--}
+-- |  Collapse a list of modules for the same function if they are all `Unsat`.
+--
+--  Given a list of `SolvingInfo`s, each associated with a module, under the
+--  assumption that they all have the same `si_funcName`, if they are all `Unsat`,
+--  we collapse them into a singleton list of one `SolvingInfo`, where we
+--  hot-patch the `moduleName`, replacing it with the `funcName`.
+--
+--  Otherwise, we have at least one `Sat`.
+--
+--  We break the remaining cases into two subcases:
+--   * If it is just a single module, we return the list as-is.
+--   * If there are multiple modules, we add a `:::default` oracle suffix to the
+--     module name that would otherwise just be `<funcName>`.
 collapseAllUnsats :: [SolvingInfo] -> [SolvingInfo]
 collapseAllUnsats [] = []
 collapseAllUnsats infos@(SolvingInfo _ funcName result _ _ : _)
-  | all ((== Verified) . si_result) infos = [SolvingInfo funcName funcName result reportInlinable Nothing]
+  | all ((== Verified) . si_result) infos =
+      [SolvingInfo funcName funcName result reportInlinable Nothing]
   | length infos == 1 = infos
   | otherwise = map appendMissingDefaultOracleSuffix infos
- where
-  reportInlinable = all si_inlinable infos
+  where
+    reportInlinable = all si_inlinable infos
 
-{- | Return a solution of SMT queries corresponding with the contract.
-
-  For the purposes of reporting results,
-  we also remember which SMT query corresponding to a function was inlined.
--}
+-- | Return a solution of SMT queries corresponding with the contract.
+--
+--   For the purposes of reporting results,
+--   we also remember which SMT query corresponding to a function was inlined.
 solveContract :: GlobalL [SolvingInfo]
 solveContract = do
   lInstructions <- getLabelledInstructions
@@ -352,9 +366,9 @@ solveContract = do
   identifiers <- getIdentifiers
   let isUntrusted :: Module -> Bool
       isUntrusted m = labeledFuncName `notElem` trustedStdFuncs
-       where
-        (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
-        labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
+        where
+          (qualifiedFuncName, labelsSummary, _, _) = getModuleNameParts identifiers m
+          labeledFuncName = mkLabeledFuncName qualifiedFuncName labelsSummary
   infos <- for (filter isUntrusted modules) solveModule
   pure $
     ( concatMap collapseAllUnsats
@@ -362,19 +376,19 @@ solveContract = do
         . filter (not . isVerifiedIgnorable)
     )
       infos
- where
-  isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
-  isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
+  where
+    isStandardSource :: Set ScopedFunction -> ScopedFunction -> Bool
+    isStandardSource inlinables f = f `notElem` inlinables && not (isWrapper f)
 
-  sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
-  sameFuncName (SolvingInfo _ nameA _ _ _) (SolvingInfo _ nameB _ _ _) = nameA == nameB
+    sameFuncName :: SolvingInfo -> SolvingInfo -> Bool
+    sameFuncName (SolvingInfo _ nameA _ _ _) (SolvingInfo _ nameB _ _ _) = nameA == nameB
 
-  ignorableFuncPrefixes :: [Text]
-  ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
+    ignorableFuncPrefixes :: [Text]
+    ignorableFuncPrefixes = ["empty: ", "starkware.cairo.lang", "starkware.cairo.common", "starkware.starknet.common"]
 
-  isVerifiedIgnorable :: SolvingInfo -> Bool
-  isVerifiedIgnorable (SolvingInfo name _ res _ _) =
-    res == Verified && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
+    isVerifiedIgnorable :: SolvingInfo -> Bool
+    isVerifiedIgnorable (SolvingInfo name _ res _ _) =
+      res == Verified && any (`Text.isPrefixOf` name) ignorableFuncPrefixes
 
 logM :: (a -> L.LogL ()) -> a -> GlobalL ()
 logM lg v =

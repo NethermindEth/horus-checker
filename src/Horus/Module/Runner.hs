@@ -27,15 +27,15 @@ type Impl =
 
 interpret :: ModuleL a -> Impl a
 interpret = iterM exec . runModuleL
- where
-  exec :: ModuleF (Impl a) -> Impl a
-  exec (EmitModule m cont) = tell (D.singleton m) *> cont
-  exec (Visiting l action cont) = do
-    visited <- ask
-    local (Set.insert l) $
-      interpret (action (Set.member l visited)) >>= cont
-  exec (Throw t) = throwError t
-  exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
+  where
+    exec :: ModuleF (Impl a) -> Impl a
+    exec (EmitModule m cont) = tell (D.singleton m) *> cont
+    exec (Visiting l action cont) = do
+      visited <- ask
+      local (Set.insert l) $
+        interpret (action (Set.member l visited)) >>= cont
+    exec (Throw t) = throwError t
+    exec (Catch m handler cont) = catchError (interpret m) (interpret . handler) >>= cont
 
 run :: ModuleL a -> Either Text [Module]
 run m =
