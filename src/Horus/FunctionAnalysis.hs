@@ -294,8 +294,8 @@ isAuxFunc (ScopedFunction fname _) cd =
 sizeOfCall :: Int
 sizeOfCall = 2
 
-inlinableFuns ::
-  [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
+inlinableFuns
+  :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
 inlinableFuns rows prog cd =
   Map.filterWithKey
     ( \f _ ->
@@ -321,8 +321,8 @@ inlinableFuns rows prog cd =
     Map.keys . Map.filterWithKey (isAcyclic . cyclicVerts $ callgraph (Map.mapKeys sf_pc functions)) $
       Map.mapKeys sf_pc (localCycles functions)
 
-uninlinableFuns ::
-  [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
+uninlinableFuns
+  :: [LabeledInst] -> Program -> ContractDefinition -> Map.Map ScopedFunction [LabeledInst]
 uninlinableFuns rows prog cd =
   Map.difference (functionsOf rows prog) (inlinableFuns rows prog cd)
 

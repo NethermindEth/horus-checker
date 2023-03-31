@@ -242,8 +242,8 @@ prepare pc fp expr = getAp pc >>= \ap -> prepare' ap fp expr
 prepare' :: Expr TFelt -> Expr TFelt -> Expr a -> CairoSemanticsL (Expr a)
 prepare' ap fp expr = memoryRemoval (substitute "fp" fp (substitute "ap" ap expr))
 
-preparePost ::
-  Expr TFelt -> Expr TFelt -> Expr TBool -> Bool -> CairoSemanticsL (Expr TBool)
+preparePost
+  :: Expr TFelt -> Expr TFelt -> Expr TBool -> Bool -> CairoSemanticsL (Expr TBool)
 preparePost ap fp expr isOptim = do
   if isOptim
     then do
@@ -395,12 +395,12 @@ withExecutionCtx ctx action = do
 --  the end, matching every call with a `ret`. A return value of `Just fp`
 --  represents the FP of the function that is on the top of the stack at the
 --  point when the execution is interrupted.
-mkInstructionConstraints ::
-  [LabeledInst] ->
-  Maybe (CallStack, ScopedFunction) ->
-  Map (NonEmpty Label, Label) Bool ->
-  (Int, LabeledInst) ->
-  CairoSemanticsL (Maybe (Expr TFelt))
+mkInstructionConstraints
+  :: [LabeledInst]
+  -> Maybe (CallStack, ScopedFunction)
+  -> Map (NonEmpty Label, Label) Bool
+  -> (Int, LabeledInst)
+  -> CairoSemanticsL (Maybe (Expr TFelt))
 mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lInst@(pc, Instruction{..})) = do
   fp <- getFp
   dst <- prepare pc fp (memory (regToVar i_dstRegister + fromInteger i_dstOffset))
@@ -418,13 +418,13 @@ mkInstructionConstraints instrs mbPreCheckedFuncWithCallStack jnzOracle (idx, lI
   nextPc = getNextPcInlinedWithFallback instrs idx
 
 -- | A particular case of mkInstructionConstraints for the instruction 'call'.
-mkCallConstraints ::
-  Label ->
-  Label ->
-  Expr TFelt ->
-  Maybe (CallStack, ScopedFunction) ->
-  ScopedFunction ->
-  CairoSemanticsL (Maybe (Expr TFelt))
+mkCallConstraints
+  :: Label
+  -> Label
+  -> Expr TFelt
+  -> Maybe (CallStack, ScopedFunction)
+  -> ScopedFunction
+  -> CairoSemanticsL (Maybe (Expr TFelt))
 mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
   calleeFp <- withExecutionCtx stackFrame getFp
   nextAp <- prepare pc calleeFp (Vars.fp .== Vars.ap + 2)
@@ -472,8 +472,8 @@ mkCallConstraints pc nextPc fp mbPreCheckedFuncWithCallStack f = do
     pure (isJust mbPreCheckedFuncWithCallStack && stackDescr == preCheckedFuncStackDescr)
   guardWith condM val cont = do cond <- condM; if cond then val else cont
 
-traverseStorage ::
-  (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
+traverseStorage
+  :: (forall a. Expr a -> CairoSemanticsL (Expr a)) -> Storage -> CairoSemanticsL Storage
 traverseStorage preparer = traverse prepareWrites
  where
   prepareWrites = traverse prepareWrite
@@ -506,8 +506,8 @@ mkApConstraints apEnd insts = do
  where
   lastLInst@(lastPc, lastInst) = NonEmpty.last insts
 
-mkBuiltinConstraints ::
-  Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
+mkBuiltinConstraints
+  :: Expr TFelt -> NonEmpty LabeledInst -> Maybe (CallStack, ScopedFunction) -> CairoSemanticsL ()
 mkBuiltinConstraints apEnd insts optimisesF =
   unless (isJust optimisesF) $ do
     fp <- getFp
@@ -521,8 +521,8 @@ mkBuiltinConstraints apEnd insts optimisesF =
             mkBuiltinConstraintsForInst i (NonEmpty.toList insts) b inst
         Nothing -> checkBuiltinNotRequired b (toList insts)
 
-getBuiltinContract ::
-  Expr TFelt -> Expr TFelt -> Builtin -> BuiltinOffsets -> (Expr TBool, Expr TBool)
+getBuiltinContract
+  :: Expr TFelt -> Expr TFelt -> Builtin -> BuiltinOffsets -> (Expr TBool, Expr TBool)
 getBuiltinContract fp apEnd b bo = (pre, post)
  where
   pre = builtinAligned initialPtr b .&& finalPtr .<= builtinEnd b

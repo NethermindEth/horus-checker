@@ -130,8 +130,8 @@ readAllInstructions fPrime (i : is) = do
   (instr, is') <- readInstruction fPrime (i :| is)
   (instr :) <$> readAllInstructions fPrime is'
 
-readInstruction ::
-  forall m. MonadError Text m => Integer -> NonEmpty Integer -> m (Instruction, [Integer])
+readInstruction
+  :: forall m. MonadError Text m => Integer -> NonEmpty Integer -> m (Instruction, [Integer])
 readInstruction fPrime (i :| is) = do
   let flags = i `shiftR` (3 * 16)
   let dstEnc = i .&. (2 ^ n16 - 1)

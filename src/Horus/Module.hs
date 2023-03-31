@@ -250,8 +250,8 @@ emitModule m = liftF' (EmitModule m ())
 -- | Perform the action on the path where the label 'l' has been marked
 --   as visited. The `action` parameter takes a boolean argument determining
 --   whether the vertex has already been visited.
-visiting ::
-  (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
+visiting
+  :: (NonEmpty Label, Map (NonEmpty Label, Label) Bool, Vertex) -> (Bool -> ModuleL b) -> ModuleL b
 visiting vertexDesc action = liftF' (Visiting vertexDesc action id)
 
 throw :: Error -> ModuleL a
@@ -270,16 +270,16 @@ extractPlainBuilder (FuncSpec pre _ storage)
 gatherModules :: CFG -> [(Function, ScopedName, FuncSpec)] -> ModuleL ()
 gatherModules cfg = traverse_ $ \(f, _, spec) -> gatherFromSource cfg f spec
 
-visitArcs ::
-  CFG ->
-  FuncSpec ->
-  Function ->
-  CallStack ->
-  Map (NonEmpty Label, Label) Bool ->
-  [LabeledInst] ->
-  SpecBuilder ->
-  Vertex ->
-  ModuleL ()
+visitArcs
+  :: CFG
+  -> FuncSpec
+  -> Function
+  -> CallStack
+  -> Map (NonEmpty Label, Label) Bool
+  -> [LabeledInst]
+  -> SpecBuilder
+  -> Vertex
+  -> ModuleL ()
 visitArcs cfg fSpec function callstack' newOracle acc' pre v' = do
   unless (null outArcs) $
     for_ outArcs' $ \(lTo, insts, test, f') ->
@@ -313,18 +313,18 @@ visitArcs cfg fSpec function callstack' newOracle acc' pre v' = do
    form of ArcCondition and CallStack needs a bit of extra information about
    when call/ret are called, in the form of FInfo.
      -}
-visit ::
-  CFG ->
-  FuncSpec ->
-  Function ->
-  Map (NonEmpty Label, Label) Bool ->
-  CallStack ->
-  [LabeledInst] ->
-  SpecBuilder ->
-  Vertex ->
-  ArcCondition ->
-  FInfo ->
-  ModuleL ()
+visit
+  :: CFG
+  -> FuncSpec
+  -> Function
+  -> Map (NonEmpty Label, Label) Bool
+  -> CallStack
+  -> [LabeledInst]
+  -> SpecBuilder
+  -> Vertex
+  -> ArcCondition
+  -> FInfo
+  -> ModuleL ()
 visit cfg fSpec function oracle callstack acc builder v@(Vertex _ label preCheckedF) arcCond f =
   visiting (stackTrace callstack', oracle, v) $ \alreadyVisited ->
     if alreadyVisited
@@ -397,11 +397,11 @@ gatherFromSource cfg function fSpec = do
   for_ verticesAtFuPc $ \v ->
     visit cfg fSpec function Map.empty (initialWithFunc (fu_pc function)) [] SBRich v ACNone Nothing
 
-updateOracle ::
-  ArcCondition ->
-  CallStack ->
-  Map (NonEmpty Label, Label) Bool ->
-  Map (NonEmpty Label, Label) Bool
+updateOracle
+  :: ArcCondition
+  -> CallStack
+  -> Map (NonEmpty Label, Label) Bool
+  -> Map (NonEmpty Label, Label) Bool
 updateOracle ACNone _ = id
 updateOracle (ACJnz jnzPc isSat) callstack =
   Map.insert (stackTrace callstack, jnzPc) isSat

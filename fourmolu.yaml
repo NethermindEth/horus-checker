@@ -9,5 +9,5 @@ haddock-style: single-line          # '--' vs. '{-'
 newlines-between-decls: 1           # number of newlines between top-level declarations
 fixities: []                        # fixity information, see the section about fixities below.
 column-limit: 100
-function-arrows: trailing
+function-arrows: leading
 single-constraint-parens: never

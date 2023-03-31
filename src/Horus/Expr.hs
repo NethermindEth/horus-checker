@@ -205,11 +205,11 @@ apply1 acc xs = apply acc (toList xs)
 apply1' :: SingI c => (forall a. SingI a => Expr a) -> Expr c -> [Expr b] -> Expr c
 apply1' acc whenEmpty = maybe whenEmpty (apply1 acc) . nonEmpty
 
-unfoldVariadic ::
-  forall arg res ty.
-  (Typeable arg, Typeable res) =>
-  Expr ty ->
-  Maybe (ty :~: res, Text, [Expr arg])
+unfoldVariadic
+  :: forall arg res ty
+   . (Typeable arg, Typeable res)
+  => Expr ty
+  -> Maybe (ty :~: res, Text, [Expr arg])
 unfoldVariadic e = do
   Refl <- eqT @res @ty \\ isProper e
   (name, args) <- gatherArgs [] e
