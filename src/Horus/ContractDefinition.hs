@@ -17,13 +17,15 @@ import Horus.Program (Program)
 import Horus.SW.ScopedName (ScopedName)
 import Horus.SW.Std (FuncSpec (..))
 
+type Arity = Int
+type Coarity = Int
+
 data ContractDefinition = ContractDefinition
   { cd_program :: Program
   , cd_version :: String
   , cd_specs :: Map ScopedName FuncSpec
   , cd_invariants :: Map ScopedName (Expr TBool)
-  , -- The value indicates the number of arguments of the storage variable.
-    cd_storageVars :: Map ScopedName Int
+  , cd_storageVars :: Map ScopedName (Arity, Coarity)
   }
 
 cdProgram :: Lens' ContractDefinition Program

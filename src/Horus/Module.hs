@@ -39,7 +39,7 @@ import Horus.Label (moveLabel)
 import Horus.Program (Identifiers)
 import Horus.SW.FuncSpec (FuncSpec (..))
 import Horus.SW.Identifier (Function (..), getFunctionPc, getLabelPc)
-import Horus.SW.ScopedName (ScopedName (..), toText)
+import Horus.SW.ScopedName (ScopedName (..), dropMain, toText)
 
 data Module = Module
   { m_spec :: FuncSpec
@@ -68,11 +68,6 @@ labelNamesOfPc idents lblpc =
   , Just pc <- [getFunctionPc ident <|> getLabelPc ident]
   , pc == lblpc
   ]
-
--- | Remove the `__main__` prefix from top-level function names.
-dropMain :: ScopedName -> ScopedName
-dropMain (ScopedName ("__main__" : xs)) = ScopedName xs
-dropMain name = name
 
 {- | Summarize a list of labels for a function.
 

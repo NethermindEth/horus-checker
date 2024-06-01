@@ -20,5 +20,5 @@ diff "$gold_file" "$temp_file" \
      --ignore-blank-lines \
      --new-file # treat absent files as empty
 rm "$compiled_file"
-#rm "$temp_file"
+rm "$temp_file"
 rm "$base.out" -rf

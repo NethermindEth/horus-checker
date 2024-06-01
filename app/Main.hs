@@ -60,7 +60,7 @@ issuesMsg =
 compatibleHorusCompileVersionLower :: Version
 compatibleHorusCompileVersionLower = makeVersion [0, 0, 6, 8]
 compatibleHorusCompileVersionHigher :: Version
-compatibleHorusCompileVersionHigher = makeVersion [0, 0, 7]
+compatibleHorusCompileVersionHigher = makeVersion [0, 0, 8]
 
 {- | The main entrypoint of everything that happens in our monad stack.
  The contract is a 1-1 representation of the data in the compiled JSON file.

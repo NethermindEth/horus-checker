@@ -17,6 +17,9 @@ module Horus.FunctionAnalysis
   , isAuxFunc
   , scopedFOfPc
   , uncheckedScopedFOfPc
+  , functionsOf
+  , callgraph
+  , graphOfCG
   )
 where
 
@@ -25,7 +28,7 @@ import Control.Monad (liftM2, (<=<))
 import Data.Array (assocs)
 import Data.Coerce (coerce)
 import Data.Function ((&))
-import Data.Graph (Graph, Vertex, graphFromEdges', reachable)
+import Data.Graph (Graph, Vertex, graphFromEdges, reachable)
 import Data.List (foldl', sort, union)
 import Data.Map qualified as Map
   ( Map
@@ -109,8 +112,8 @@ cgMbInsertArc (CG verts arcs) (fro, to) =
     then Nothing
     else Just . CG verts $ Map.insertWith (++) fro [to] arcs
 
-graphOfCG :: CG -> (Graph, Vertex -> (Label, Label, [Label]))
-graphOfCG cg = graphFromEdges' . map named . Map.assocs $ cg_arcs cg
+graphOfCG :: CG -> (Graph, Vertex -> (Label, Label, [Label]), Label -> Maybe Vertex)
+graphOfCG cg = graphFromEdges . map named . Map.assocs $ cg_arcs cg
  where
   named (fro, tos) = (fro, fro, tos)
 
@@ -121,7 +124,7 @@ cycles g = map fst . filter (uncurry reachableSet) $ assocs g
 
 cyclicVerts :: CG -> [Label]
 cyclicVerts cg =
-  let (graph, vertToNode) = graphOfCG cg
+  let (graph, vertToNode, _) = graphOfCG cg
    in map ((\(lbl, _, _) -> lbl) . vertToNode) (cycles graph)
 
 pcToFunOfProg :: Program -> Map.Map Label ScopedFunction
@@ -276,18 +279,13 @@ isGeneratedName fname cd = fname `elem` generatedNames
 isSvarFunc :: ScopedName -> ContractDefinition -> Bool
 isSvarFunc fname cd = isGeneratedName fname cd || fname `elem` [fStorageRead, fStorageWrite]
 
-fHash2 :: ScopedName
-fHash2 = ScopedName ["starkware", "cairo", "common", "hash", "hash2"]
-
-fAssert250bit :: ScopedName
-fAssert250bit = ScopedName ["starkware", "cairo", "common", "math", "assert_250_bit"]
-
-fNormalizeAddress :: ScopedName
-fNormalizeAddress = ScopedName ["starkware", "starknet", "common", "storage", "normalize_address"]
-
 isAuxFunc :: ScopedFunction -> ContractDefinition -> Bool
 isAuxFunc (ScopedFunction fname _) cd =
   isSvarFunc fname cd || fname `elem` [fHash2, fAssert250bit, fNormalizeAddress]
+ where
+  fHash2 = ScopedName ["starkware", "cairo", "common", "hash", "hash2"]
+  fAssert250bit = ScopedName ["starkware", "cairo", "common", "math", "assert_250_bit"]
+  fNormalizeAddress = ScopedName ["starkware", "starknet", "common", "storage", "normalize_address"]
 
 sizeOfCall :: Int
 sizeOfCall = 2
