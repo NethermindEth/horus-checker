@@ -68,7 +68,7 @@ stdSpecsList =
   ,
     ( "starkware.cairo.common.math.assert_nn_le"
     , emptyFuncSpec
-        { fs_post = 0 .<= memory (fp - 4) .&& memory (fp - 4) .<= memory (fp - 3)
+        { fs_post = 0 .<= memory (fp - 4) .&& memory (fp - 4) .<= memory (fp - 3) .&& memory (fp - 3) .<= rcBound
         }
     )
   ,
