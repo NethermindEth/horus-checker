@@ -34,7 +34,7 @@ import Horus.Expr qualified as Expr
 import Horus.Expr.Std (stdNames)
 import Horus.Instruction (PointerRegister (..))
 import Horus.SW.Builtin (Builtin (..))
-import Horus.SW.Builtin qualified as Builtin (name)
+import Horus.SW.Builtin qualified as Builtin
 
 prime :: Expr TFelt
 prime = Expr.const "prime"

@@ -16,11 +16,11 @@ import Data.Foldable (for_, toList, traverse_)
 import Data.Functor (($>), (<&>))
 import Data.List (tails)
 import Data.List.NonEmpty (NonEmpty, nonEmpty)
-import Data.List.NonEmpty qualified as NonEmpty (head, last, tail, toList)
+import Data.List.NonEmpty qualified as NonEmpty
 import Data.Map (Map)
-import Data.Map qualified as Map ((!?))
+import Data.Map qualified as Map
 import Data.Maybe (fromMaybe, isJust)
-import Data.Set qualified as Set (Set, member)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Traversable (for)
 import Lens.Micro ((^.), _1)
@@ -59,12 +59,12 @@ import Horus.Label (Label (..), tShowLabel)
 import Horus.Module (Module (..), apEqualsFp, isPreChecking)
 import Horus.Program (ApTracking (..))
 import Horus.SW.Builtin (Builtin, BuiltinOffsets (..))
-import Horus.SW.Builtin qualified as Builtin (name)
+import Horus.SW.Builtin qualified as Builtin
 import Horus.SW.FuncSpec (FuncSpec (..), FuncSpec', toFuncSpec)
 import Horus.SW.ScopedName (ScopedName)
-import Horus.SW.ScopedName qualified as ScopedName (fromText)
+import Horus.SW.ScopedName qualified as ScopedName
 import Horus.SW.Storage (Storage)
-import Horus.SW.Storage qualified as Storage (equivalenceExpr)
+import Horus.SW.Storage qualified as Storage
 import Horus.Util (enumerate, safeLast, tShow, whenJust, whenJustM)
 
 data MemoryVariable = MemoryVariable

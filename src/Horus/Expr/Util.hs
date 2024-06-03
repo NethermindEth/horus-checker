@@ -13,7 +13,7 @@ import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Some (Some (..))
 import Data.Text (Text)
-import Data.Text qualified as Text (isPrefixOf)
+import Data.Text qualified as Text
 import Data.Typeable (eqT, (:~:) (Refl))
 
 import Horus.Expr (Expr (..), isProper, transform_, (.&&), (.<), (.<=))

@@ -18,10 +18,10 @@ import Control.Monad.Free.Church (F, liftF)
 import Data.Foldable (for_, traverse_)
 import Data.List.NonEmpty (NonEmpty)
 import Data.Map (Map)
-import Data.Map qualified as Map (elems, empty, insert, map, null, toList)
+import Data.Map qualified as Map
 import Data.Maybe (isJust)
 import Data.Text (Text)
-import Data.Text qualified as Text (concat, intercalate)
+import Data.Text qualified as Text
 import Lens.Micro (ix, (^.))
 import Text.Printf (printf)
 
@@ -30,7 +30,7 @@ import Horus.CFGBuild.Runner (CFG (..), verticesLabelledBy)
 import Horus.CallStack (CallStack, callerPcOfCallEntry, digestOfCallStack, initialWithFunc, pop, push, stackTrace, top)
 import Horus.ContractInfo (pcToFun)
 import Horus.Expr (Expr, Ty (..), (.&&), (.==))
-import Horus.Expr qualified as Expr (and)
+import Horus.Expr qualified as Expr
 import Horus.Expr.SMT (pprExpr)
 import Horus.Expr.Vars (ap, fp)
 import Horus.FunctionAnalysis (FInfo, FuncOp (ArcCall, ArcRet), ScopedFunction (sf_scopedName), isRetArc, sizeOfCall)

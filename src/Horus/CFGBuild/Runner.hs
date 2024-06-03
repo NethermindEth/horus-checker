@@ -13,9 +13,9 @@ import Control.Monad.Reader (ReaderT, ask, asks, runReaderT)
 import Control.Monad.State (State, get, gets, runState)
 import Data.List (union)
 import Data.Map (Map)
-import Data.Map qualified as Map (empty)
+import Data.Map qualified as Map
 import Data.Text (Text)
-import Data.Text qualified as Text (pack)
+import Data.Text qualified as Text
 import Lens.Micro (Lens', at, (&), (^.), _Just)
 import Lens.Micro.GHC ()
 import Lens.Micro.Mtl ((%=), (<%=))

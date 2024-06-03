@@ -6,10 +6,10 @@ import SimpleSMT qualified as SMT
 import Text.Printf (printf)
 
 import Horus.Expr (Expr)
-import Horus.Expr.SMT qualified as Expr (toSMT)
+import Horus.Expr.SMT qualified as Expr
 import Horus.Expr.Std (Function (..))
 import Horus.Expr.Type (Ty (..))
-import Horus.Expr.Type.SMT qualified as Ty (toSMT)
+import Horus.Expr.Type.SMT qualified as Ty
 
 declare :: forall ty. Function ty -> Text
 declare (Function name) = pack (printf "(declare-fun %s (%s) %s)" name args res)

@@ -24,10 +24,10 @@ import Data.Constraint ((\\))
 import Data.Foldable (foldl')
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map (Map)
-import Data.Map qualified as Map (empty, fromList)
+import Data.Map qualified as Map
 import Data.Some (Some (..), withSomeM)
 import Data.Text (Text, pack, unpack)
-import Data.Text qualified as Text (concat)
+import Data.Text qualified as Text
 import Data.Typeable (Typeable)
 import Lens.Micro (at, non, (&))
 import Lens.Micro.GHC ()

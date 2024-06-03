@@ -6,7 +6,7 @@ import Data.Aeson (FromJSON (..), Value, withObject, (.:))
 import Data.Aeson.Types (Parser)
 import Data.Coerce (coerce)
 import Data.Map (Map)
-import Data.Map qualified as Map (findWithDefault, toList)
+import Data.Map qualified as Map
 
 import Horus.Expr (Expr, Ty (..), (.==))
 import Horus.Expr qualified as Expr
